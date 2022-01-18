@@ -777,7 +777,7 @@ int file_write_and_wait_range(struct file *file, loff_t lstart, loff_t lend)
 	int err = 0, err2;
 	struct address_space *mapping = file->f_mapping;
 
-	if (mapping_needs_writeback(mapping)) {
+	if (mapping_needs_writeback(mapping)/* 返回该刷的页的数量 */) {
 		err = __filemap_fdatawrite_range(mapping, lstart, lend,
 						 WB_SYNC_ALL);
 		/* See comment of filemap_write_and_wait() */
@@ -2790,6 +2790,7 @@ repeat:
 		page = __page_cache_alloc(gfp);
 		if (!page)
 			return ERR_PTR(-ENOMEM);
+		// 这里面会设置page->index为相应的偏移值
 		err = add_to_page_cache_lru(page, mapping, index, gfp);
 		if (unlikely(err)) {
 			put_page(page);

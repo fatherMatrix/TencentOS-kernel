@@ -168,6 +168,9 @@ reread:
 	/* Simplest case - block found, no allocation needed */
 	if (!partial) {
 got_it:
+		/**
+ 		 * 在这里面设置buffer_head->b_bdev，->b_blocknr, ->size等 
+ 		 */
 		map_bh(bh, inode->i_sb, block_to_cpu(chain[depth-1].key));
 		/* Clean up and exit */
 		partial = chain+depth-1; /* the whole chain */

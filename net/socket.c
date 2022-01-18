@@ -608,6 +608,9 @@ struct socket *sock_alloc(void)
 	struct inode *inode;
 	struct socket *sock;
 
+	/**
+ 	 * 在socket fs中创建inode
+ 	 */ 
 	inode = new_inode_pseudo(sock_mnt->mnt_sb);
 	if (!inode)
 		return NULL;
@@ -618,6 +621,9 @@ struct socket *sock_alloc(void)
 	inode->i_mode = S_IFSOCK | S_IRWXUGO;
 	inode->i_uid = current_fsuid();
 	inode->i_gid = current_fsgid();
+	/**
+ 	 * 设置socket fs中inode的ops结构体
+ 	 */ 
 	inode->i_op = &sockfs_inode_ops;
 
 	return sock;
@@ -1384,7 +1390,7 @@ EXPORT_SYMBOL(sock_wake_async);
 
 /**
  *	__sock_create - creates a socket
- *	@net: net namespace
+ *	@net: net namespace  网络命名空间
  *	@family: protocol family (AF_INET, ...)
  *	@type: communication type (SOCK_STREAM, ...)
  *	@protocol: protocol (0, ...)
@@ -1448,6 +1454,11 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	 * requested real, full-featured networking support upon configuration.
 	 * Otherwise module support will break!
 	 */
+	/**
+ 	 * sock_register(const struct net_proto_family *)负责向net_families数组
+ 	 * 注册inet_proto_family, 其中包含了inet_create方法的指针, inet_create
+ 	 * 用户创建对应协议域的socket
+ 	 */ 
 	if (rcu_access_pointer(net_families[family]) == NULL)
 		request_module("net-pf-%d", family);
 #endif

@@ -1365,6 +1365,9 @@ struct inode *ilookup5(struct super_block *sb, unsigned long hashval,
 again:
 	inode = ilookup5_nowait(sb, hashval, test, data);
 	if (inode) {
+		/**
+ 		 * 等待inode的__I_NEW位被清除
+ 		 */ 
 		wait_on_inode(inode);
 		if (unlikely(inode_unhashed(inode))) {
 			iput(inode);

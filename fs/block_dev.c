@@ -930,6 +930,9 @@ struct block_device *bdget(dev_t dev)
 		spin_lock(&bdev_lock);
 		list_add(&bdev->bd_list, &all_bdevs);
 		spin_unlock(&bdev_lock);
+		/**
+ 		 * 在这里面会执行wake_up_bit(&inode->i_state,__I_NEW)
+ 		 */ 
 		unlock_new_inode(inode);
 	}
 	return bdev;
@@ -989,6 +992,9 @@ static struct block_device *bd_acquire(struct inode *inode)
 	if (bdev)
 		bd_forget(inode);
 
+	/**
+ 	 * 通过设备号在bdev fs中找到block_device
+ 	 */ 
 	bdev = bdget(inode->i_rdev);
 	if (bdev) {
 		spin_lock(&bdev_lock);

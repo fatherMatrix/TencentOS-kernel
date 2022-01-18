@@ -152,6 +152,7 @@ minix_dirent *minix_find_entry(struct dentry *dentry, struct page **res_page)
 {
 	const char * name = dentry->d_name.name;
 	int namelen = dentry->d_name.len;
+	// 得到父目录的inode
 	struct inode * dir = d_inode(dentry->d_parent);
 	struct super_block * sb = dir->i_sb;
 	struct minix_sb_info * sbi = minix_sb(sb);

@@ -296,6 +296,11 @@ asmlinkage __visible void __softirq_entry __do_softirq(void)
 	pending = local_softirq_pending();
 	account_irq_enter_time(current);
 
+	/* 
+ 	 * 执行软中断的时候需要修改preempt_count，标注此时正在执行软中断
+ 	 * 是否正在执行软中断看SOFTIRQ_OFFSET位
+ 	 * 是否禁止软中断看SOFTIRQ_OFFSET * 2，例如local_bh_disable()
+ 	 */ 
 	__local_bh_disable_ip(_RET_IP_, SOFTIRQ_OFFSET);
 	in_hardirq = lockdep_softirq_start();
 
@@ -303,6 +308,7 @@ restart:
 	/* Reset the pending bitmask before enabling irqs */
 	set_softirq_pending(0);
 
+	/* 软中断的主体执行过程是在打开硬件中断的情况下执行的 */
 	local_irq_enable();
 
 	h = softirq_vec;
@@ -333,6 +339,7 @@ restart:
 
 	if (__this_cpu_read(ksoftirqd) == current)
 		rcu_softirq_qs();
+	/* 当软中断执行主体执行结束后，要关闭中断，进行其他的处理 */
 	local_irq_disable();
 
 	pending = local_softirq_pending();
@@ -346,6 +353,10 @@ restart:
 
 	lockdep_softirq_end(in_hardirq);
 	account_irq_exit_time(current);
+	/* 
+ 	 * 清除preempt_count中的SOFTIRQ_OFFSET位，表示此时没有正在进行软中断
+ 	 * 的处理
+ 	 */
 	__local_bh_enable(SOFTIRQ_OFFSET);
 	WARN_ON_ONCE(in_interrupt());
 	current_restore_flags(old_flags, PF_MEMALLOC);

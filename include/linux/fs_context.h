@@ -87,6 +87,7 @@ struct fs_context {
 	const struct fs_context_operations *ops;
 	struct mutex		uapi_mutex;	/* Userspace access mutex */
 	struct file_system_type	*fs_type;
+	/* 可以用来存放文件系统自定义的options参数 */
 	void			*fs_private;	/* The filesystem's context */
 	void			*sget_key;
 	struct dentry		*root;		/* The root and superblock */

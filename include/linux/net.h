@@ -120,6 +120,7 @@ struct socket {
 
 	struct file		*file;
 	struct sock		*sk;
+	/* 操作方法, 包括bind，connect，recv_msg, send_msg等 */
 	const struct proto_ops	*ops;
 
 	struct socket_wq	wq;

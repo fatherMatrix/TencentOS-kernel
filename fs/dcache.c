@@ -1700,6 +1700,7 @@ struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 	dentry->d_iname[DNAME_INLINE_LEN-1] = 0;
 	if (unlikely(!name)) {
 		name = &slash_name;
+		/* dname指向内嵌的d_iname起始地址 */
 		dname = dentry->d_iname;
 	} else if (name->len > DNAME_INLINE_LEN-1) {
 		size_t size = offsetof(struct external_name, name[1]);
@@ -1711,6 +1712,7 @@ struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 			return NULL;
 		}
 		atomic_set(&p->u.count, 1);
+		/* dname指向kmalloc分配的external_name->name */
 		dname = p->name;
 	} else  {
 		dname = dentry->d_iname;
@@ -2217,6 +2219,10 @@ struct dentry *__d_lookup_rcu(const struct dentry *parent,
 {
 	u64 hashlen = name->hash_len;
 	const unsigned char *str = name->name;
+	/*
+ 	 * hashlen_hash()获得hashlen中低32位的hash值，
+ 	 * d_hash()通过hash值定位到dentry_hashtable中的一项
+ 	 */ 
 	struct hlist_bl_head *b = d_hash(hashlen_hash(hashlen));
 	struct hlist_bl_node *node;
 	struct dentry *dentry;
@@ -2518,6 +2524,7 @@ struct dentry *d_alloc_parallel(struct dentry *parent,
 	unsigned int hash = name->hash;
 	struct hlist_bl_head *b = in_lookup_hash(parent, hash);
 	struct hlist_bl_node *node;
+	/* 哈希表中不存在目标dentry，所以这里必须创建一个了 */
 	struct dentry *new = d_alloc(parent, name);
 	struct dentry *dentry;
 	unsigned seq, r_seq, d_seq;
@@ -2528,6 +2535,7 @@ struct dentry *d_alloc_parallel(struct dentry *parent,
 retry:
 	rcu_read_lock();
 	seq = smp_load_acquire(&parent->d_inode->i_dir_seq);
+	/* 这里为什么会有一个全局锁？*/
 	r_seq = read_seqbegin(&rename_lock);
 	dentry = __d_lookup_rcu(parent, name, &d_seq);
 	if (unlikely(dentry)) {
@@ -2611,6 +2619,7 @@ retry:
 	/* we can't take ->d_lock here; it's OK, though. */
 	new->d_flags |= DCACHE_PAR_LOOKUP;
 	new->d_wait = wq;
+	/* 在这里把新的dentry放入dentry_hashtable */
 	hlist_bl_add_head_rcu(&new->d_u.d_in_lookup_hash, b);
 	hlist_bl_unlock(b);
 	return new;

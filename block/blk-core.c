@@ -1085,7 +1085,16 @@ blk_qc_t generic_make_request(struct bio *bio)
 	 * it is non-NULL, then a make_request is active, and new requests
 	 * should be added at the tail
 	 */
+	/*
+ 	 * 如果 == NULL，则表示第一次进入generic_make_request，没出现递归；
+ 	 * 如果 != NULL，则表示处于递归状态的generic_make_request，此时应该
+ 	 * 将bio添加到链表尾部后退出
+ 	 *
+ 	 * 之所以会出现递归，是因为在LVM或者soft raid中driver可能会再次submit
+ 	 * bio
+ 	 */ 
 	if (current->bio_list) {
+		/* 添加到尾部 */
 		bio_list_add(&current->bio_list[0], bio);
 		goto out;
 	}

@@ -45,6 +45,9 @@ __wait_on_bit(struct wait_queue_head *wq_head, struct wait_bit_queue_entry *wbq_
 
 	do {
 		prepare_to_wait(wq_head, &wbq_entry->wq_entry, mode);
+		/**
+ 		 * action中会执行schedule()
+ 		 */ 
 		if (test_bit(wbq_entry->key.bit_nr, wbq_entry->key.flags))
 			ret = (*action)(&wbq_entry->key, mode);
 	} while (test_bit(wbq_entry->key.bit_nr, wbq_entry->key.flags) && !ret);
@@ -58,7 +61,15 @@ EXPORT_SYMBOL(__wait_on_bit);
 int __sched out_of_line_wait_on_bit(void *word, int bit,
 				    wait_bit_action_f *action, unsigned mode)
 {
+	/**
+ 	 * 按照某种hash确定wait_queue_head, 但是一个wait_queue_head
+ 	 * 总会对应多个不同的wait_queue_entry，所以还需要标识不同的
+ 	 * wait_queue_entry
+ 	 */ 
 	struct wait_queue_head *wq_head = bit_waitqueue(word, bit);
+	/**
+ 	 * 使用virtual address和对应的bit作为wait_entry的key
+ 	 */ 
 	DEFINE_WAIT_BIT(wq_entry, word, bit);
 
 	return __wait_on_bit(wq_head, &wq_entry, action, mode);

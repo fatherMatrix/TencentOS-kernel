@@ -123,6 +123,9 @@
 /* The inetsw table contains everything that inet_create needs to
  * build a new socket.
  */
+/* 将不同的套接字存放到全局变量inetsw链表数组中统一管理，数组中每一项
+ * 都是一个节点为inet_protosw的链表，共有SOCK_MAX项。
+ */
 static struct list_head inetsw[SOCK_MAX];
 static DEFINE_SPINLOCK(inetsw_lock);
 
@@ -249,8 +252,14 @@ static int inet_create(struct net *net, struct socket *sock, int protocol,
 		       int kern)
 {
 	struct sock *sk;
+	/* 表示一种套接字类型, 由全局链表数组inetsw统一管理 */
 	struct inet_protosw *answer;
 	struct inet_sock *inet;
+	/**
+ 	 * struct proto表示域中的一个套接字类型，比如AF_INET域中包含
+ 	 * SOCK_STREAM, SOCK_DGRAM, SOCK_RAW等套接字类型。AF_INET域
+ 	 * 的三种套接字类型定义用结构体inet_protosw来表示。
+ 	 */ 
 	struct proto *answer_prot;
 	unsigned char answer_flags;
 	int try_loading_module = 0;
@@ -258,13 +267,14 @@ static int inet_create(struct net *net, struct socket *sock, int protocol,
 
 	if (protocol < 0 || protocol >= IPPROTO_MAX)
 		return -EINVAL;
-
+	/* 设置struct socket的状态为未连接 */
 	sock->state = SS_UNCONNECTED;
 
 	/* Look for the requested type/protocol pair. */
 lookup_protocol:
 	err = -ESOCKTNOSUPPORT;
 	rcu_read_lock();
+	/* 根据socket的type找到对应的套接字类型 */
 	list_for_each_entry_rcu(answer, &inetsw[sock->type], list) {
 
 		err = 0;
@@ -311,6 +321,7 @@ lookup_protocol:
 	    !ns_capable(net->user_ns, CAP_NET_RAW))
 		goto out_rcu_unlock;
 
+	/* 初始化sock的操作方法 */
 	sock->ops = answer->ops;
 	answer_prot = answer->prot;
 	answer_flags = answer->flags;
@@ -319,6 +330,7 @@ lookup_protocol:
 	WARN_ON(!answer_prot->slab);
 
 	err = -ENOBUFS;
+	/* 分配struct sock结构体, 并对其进行一些初始化工作 */
 	sk = sk_alloc(net, PF_INET, GFP_KERNEL, answer_prot, kern);
 	if (!sk)
 		goto out;
@@ -345,6 +357,7 @@ lookup_protocol:
 
 	inet->inet_id = 0;
 
+	/* 建立struct socket和struct sock之间的关系 */
 	sock_init_data(sock, sk);
 
 	sk->sk_destruct	   = inet_sock_destruct;
@@ -369,6 +382,7 @@ lookup_protocol:
 		 */
 		inet->inet_sport = htons(inet->inet_num);
 		/* Add to protocol hash chains. */
+		/* 将struct sock sk加入protocal的哈希表 */
 		err = sk->sk_prot->hash(sk);
 		if (err) {
 			sk_common_release(sk);

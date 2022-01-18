@@ -641,6 +641,7 @@ struct fsnotify_mark_connector;
  * of the 'struct inode'
  */
 struct inode {
+
 	umode_t			i_mode;
 	unsigned short		i_opflags;
 	kuid_t			i_uid;
@@ -654,12 +655,17 @@ struct inode {
 
 	const struct inode_operations	*i_op;
 	struct super_block	*i_sb;
+	/**
+ 	 * 指向address_space对象的指针，
+ 	 * 不一定指向本inode的inode->i_data
+ 	 */
 	struct address_space	*i_mapping;
 
 #ifdef CONFIG_SECURITY
 	void			*i_security;
 #endif
 
+	/* 索引节点号 */
 	/* Stat data, not accessed from path walking */
 	unsigned long		i_ino;
 	/*
@@ -673,6 +679,7 @@ struct inode {
 		const unsigned int i_nlink;
 		unsigned int __i_nlink;
 	};
+	/* 设备标识符 */
 	dev_t			i_rdev;
 	loff_t			i_size;
 	struct timespec64	i_atime;
@@ -725,6 +732,7 @@ struct inode {
 		void (*free_inode)(struct inode *);
 	};
 	struct file_lock_context	*i_flctx;
+	/* 文件的address_space对象 */
 	struct address_space	i_data;
 	struct list_head	i_devices;
 	union {
@@ -1446,26 +1454,41 @@ struct sb_writers {
 };
 
 struct super_block {
+	/* 指向超级块链表的指针 */
 	struct list_head	s_list;		/* Keep this first */
+	/* 设备标识符 */
 	dev_t			s_dev;		/* search index; _not_ kdev_t */
+	/* 以bit为单位的块大小 */
 	unsigned char		s_blocksize_bits;
+	/* 以byte为单位的块大小 */
 	unsigned long		s_blocksize;
+	/* 文件的最长长度 */
 	loff_t			s_maxbytes;	/* Max file size */
+	/* 指向文件系统类型 */
 	struct file_system_type	*s_type;
+	/* 超级块方法 */
 	const struct super_operations	*s_op;
+	/* 磁盘限额处理方法 */
 	const struct dquot_operations	*dq_op;
+	/* 磁盘限额管理方法 */
 	const struct quotactl_ops	*s_qcop;
+	/* 网络文件系统使用的输出操作 */
 	const struct export_operations *s_export_op;
 	unsigned long		s_flags;
 	unsigned long		s_iflags;	/* internal SB_I_* flags */
 	unsigned long		s_magic;
+	/* 文件系统根目录的目录项对象 */
 	struct dentry		*s_root;
+	/* 卸载所用的信号量 */
 	struct rw_semaphore	s_umount;
+	/* 引用计数 */
 	int			s_count;
+	/* 次级引用计数 */
 	atomic_t		s_active;
 #ifdef CONFIG_SECURITY
 	void                    *s_security;
 #endif
+	/* 超级块拓展属性结构 */
 	const struct xattr_handler **s_xattr;
 #ifdef CONFIG_FS_ENCRYPTION
 	const struct fscrypt_operations	*s_cop;
@@ -1476,6 +1499,7 @@ struct super_block {
 #endif
 	struct hlist_bl_head	s_roots;	/* alternate root dentries for NFS */
 	struct list_head	s_mounts;	/* list of mounts; _not_ for fs use */
+	/* 指向块设备描述符 */
 	struct block_device	*s_bdev;
 	struct backing_dev_info *s_bdi;
 	struct mtd_info		*s_mtd;
@@ -1486,6 +1510,7 @@ struct super_block {
 	struct sb_writers	s_writers;
 
 	/*
+ 	 * 指向属于具体文件系统的超级块信息 
 	 * Keep s_fs_info, s_time_gran, s_fsnotify_mask, and
 	 * s_fsnotify_marks together for cache efficiency. They are frequently
 	 * accessed and rarely modified.

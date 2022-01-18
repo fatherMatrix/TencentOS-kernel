@@ -207,6 +207,9 @@ void inode_wait_for_writeback(struct inode *inode);
 static inline void wait_on_inode(struct inode *inode)
 {
 	might_sleep();
+	/**
+ 	 * 等待的是__I_NEW位被清除
+ 	 */ 
 	wait_on_bit(&inode->i_state, __I_NEW, TASK_UNINTERRUPTIBLE);
 }
 

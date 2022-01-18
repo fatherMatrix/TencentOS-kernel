@@ -476,6 +476,7 @@ static unsigned int find_next_fd(struct fdtable *fdt, unsigned int start)
 
 /*
  * allocate a file descriptor, mark it busy.
+ * 可分配的文件描述符范围是[start, end)
  */
 int __alloc_fd(struct files_struct *files,
 	       unsigned start, unsigned end, unsigned flags)

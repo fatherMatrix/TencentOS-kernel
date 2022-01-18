@@ -1100,6 +1100,7 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 	if (fd)
 		return fd;
 
+	/* 分配struct filename结构体，从用户态拷贝filename */
 	tmp = getname(filename);
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
@@ -1169,6 +1170,7 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 	if (force_o_largefile())
 		flags |= O_LARGEFILE;
 
+	/* AT_FDCWD是一个特殊值，用来表示在当前工作目录进行打开操作 */
 	return do_sys_open(AT_FDCWD, filename, flags, mode);
 }
 

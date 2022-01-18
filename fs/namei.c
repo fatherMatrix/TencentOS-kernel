@@ -131,6 +131,10 @@ getname_flags(const char __user *filename, int flags, int *empty)
 	char *kname;
 	int len;
 
+	/*
+ 	 * 在audit_context()->name_list链表中，查找是否有相同的filename，如果有
+ 	 * 的话，增加引用计数后直接返回
+ 	 */ 
 	result = audit_reusename(filename);
 	if (result)
 		return result;
@@ -160,6 +164,7 @@ getname_flags(const char __user *filename, int flags, int *empty)
 	 */
 	if (unlikely(len == EMBEDDED_NAME_MAX)) {
 		const size_t size = offsetof(struct filename, iname[1]);
+		/* kname此时指向上面分配的第一个struct filename */
 		kname = (char *)result;
 
 		/*
@@ -167,12 +172,15 @@ getname_flags(const char __user *filename, int flags, int *empty)
 		 * result->iname[0] is within the same object and that
 		 * kname can't be equal to result->iname, no matter what.
 		 */
+		/* 分配第二个struct filename */
 		result = kzalloc(size, GFP_KERNEL);
 		if (unlikely(!result)) {
 			__putname(kname);
 			return ERR_PTR(-ENOMEM);
 		}
+		/* 将第二个struct filename的name指向第一个struct filename */
 		result->name = kname;
+		/* 将分配的第一个struct filename完全用来存放filename */
 		len = strncpy_from_user(kname, filename, PATH_MAX);
 		if (unlikely(len < 0)) {
 			__putname(kname);
@@ -486,14 +494,18 @@ EXPORT_SYMBOL(path_put);
 
 #define EMBEDDED_LEVELS 2
 struct nameidata {
-	struct path	path;
-	struct qstr	last;
-	struct path	root;
-	struct inode	*inode; /* path.dentry.d_inode */
+	struct path	path; 			/* 已解析路径，未解析的父目录 */
+	struct qstr	last; 			/* 需要解析的文件路径分量 */
+	struct path	root; 			/* 根目录 */
+	struct inode	*inode; 		/* path.dentry.d_inode */
 	unsigned int	flags;
-	unsigned	seq, m_seq;
-	int		last_type;
-	unsigned	depth;
+	unsigned	seq, m_seq; 		/* 
+						 * 顺序锁
+						 * seq保护path.dentry->d_seq
+						 * m_seq保护mount_lock
+						 */
+	int		last_type; 		/* 下一个要解析的路径单元类型 */
+	unsigned	depth; 			/* 符号连接深度 */
 	int		total_link_count;
 	struct saved {
 		struct path link;
@@ -501,11 +513,11 @@ struct nameidata {
 		const char *name;
 		unsigned seq;
 	} *stack, internal[EMBEDDED_LEVELS];
-	struct filename	*name;
+	struct filename	*name; 			/* 指向文件路径名 */
 	struct nameidata *saved;
 	struct inode	*link_inode;
 	unsigned	root_seq;
-	int		dfd;
+	int		dfd; 			/* 基准目录对应的文件描述符 */
 } __randomize_layout;
 
 static void set_nameidata(struct nameidata *p, int dfd, struct filename *name)
@@ -602,6 +614,7 @@ static void terminate_walk(struct nameidata *nd)
 		}
 	} else {
 		nd->flags &= ~LOOKUP_RCU;
+		/* 对应path_init()中的rcu_read_lock() */
 		rcu_read_unlock();
 	}
 	nd->depth = 0;
@@ -682,6 +695,7 @@ static int unlazy_walk(struct nameidata *nd)
 		goto out;
 	if (unlikely(!legitimize_root(nd)))
 		goto out;
+	/* 这里出了rcu的临界区 */
 	rcu_read_unlock();
 	BUG_ON(nd->inode != parent->d_inode);
 	return 0;
@@ -1349,7 +1363,10 @@ static int follow_dotdot_rcu(struct nameidata *nd)
 		if (path_equal(&nd->path, &nd->root))
 			break;
 		if (nd->path.dentry != nd->path.mnt->mnt_root) {
+			/* 未跨过安装点 */
+			/* 当前所在目录 */
 			struct dentry *old = nd->path.dentry;
+			/* 所在目录的上层目录，即../ */
 			struct dentry *parent = old->d_parent;
 			unsigned seq;
 
@@ -1357,12 +1374,14 @@ static int follow_dotdot_rcu(struct nameidata *nd)
 			seq = read_seqcount_begin(&parent->d_seq);
 			if (unlikely(read_seqcount_retry(&old->d_seq, nd->seq)))
 				return -ECHILD;
+			/* 直接把当前目录path.dentry赋值为parent，即../ */
 			nd->path.dentry = parent;
 			nd->seq = seq;
 			if (unlikely(!path_connected(&nd->path)))
 				return -ECHILD;
 			break;
 		} else {
+			/* 跨越了安装点 */
 			struct mount *mnt = real_mount(nd->path.mnt);
 			struct mount *mparent = mnt->mnt_parent;
 			struct dentry *mountpoint = mnt->mnt_mountpoint;
@@ -1561,6 +1580,7 @@ static int lookup_fast(struct nameidata *nd,
 	if (nd->flags & LOOKUP_RCU) {
 		unsigned seq;
 		bool negative;
+		/* 在dentry_hashtable中查找分量 */
 		dentry = __d_lookup_rcu(parent, &nd->last, &seq);
 		if (unlikely(!dentry)) {
 			if (unlazy_walk(nd))
@@ -1661,6 +1681,7 @@ again:
 			}
 		}
 	} else {
+		/* 调用具体文件系统的lookup方法来查找 */
 		old = inode->i_op->lookup(inode, dentry, flags);
 		d_lookup_done(dentry);
 		if (unlikely(old)) {
@@ -1686,6 +1707,10 @@ static struct dentry *lookup_slow(const struct qstr *name,
 static inline int may_lookup(struct nameidata *nd)
 {
 	if (nd->flags & LOOKUP_RCU) {
+		/*
+ 		 * nd->inode指向了nd->path.dentry.d_inode，即将要解析的下一个
+ 		 * 分量所在的目录。此处是用来检查父目录的访问权限。
+ 		 */ 
 		int err = inode_permission(nd->inode, MAY_EXEC|MAY_NOT_BLOCK);
 		if (err != -ECHILD)
 			return err;
@@ -1794,10 +1819,18 @@ static int walk_component(struct nameidata *nd, int flags)
 			put_link(nd);
 		return err;
 	}
+	/*
+ 	 * 进行路径名的查找，目标存放在nd->last中，查找结果存放在inode和path中
+ 	 * 返回出来
+ 	 */ 
 	err = lookup_fast(nd, &path, &inode, &seq);
 	if (unlikely(err <= 0)) {
 		if (err < 0)
 			return err;
+		/* 
+ 		 * nd->last是将要检索的路径分量
+ 		 * nd->path.dentry是当前目录
+ 		 */ 
 		path.dentry = lookup_slow(&nd->last, nd->path.dentry,
 					  nd->flags);
 		if (IS_ERR(path.dentry))
@@ -2072,13 +2105,16 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		u64 hash_len;
 		int type;
 
+		/* 检查下一个路径分量所在父目录的访问权限 */
 		err = may_lookup(nd);
 		if (err)
 			return err;
 
+		/* hash_len高32位是路径长度，低32位是hash值 */
 		hash_len = hash_name(nd->path.dentry, name);
 
 		type = LAST_NORM;
+		/* 判断文件名是否使用了"."或者".."，并标明type */
 		if (name[0] == '.') switch (hashlen_len(hash_len)) {
 			case 2:
 				if (name[1] == '.') {
@@ -2089,11 +2125,13 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 			case 1:
 				type = LAST_DOT;
 		}
+		/* 普通文件和目录 */
 		if (likely(type == LAST_NORM)) {
 			struct dentry *parent = nd->path.dentry;
 			nd->flags &= ~LOOKUP_JUMPED;
 			if (unlikely(parent->d_flags & DCACHE_OP_HASH)) {
 				struct qstr this = { { .hash_len = hash_len }, .name = name };
+				/* 利用文件系统特定的d_hash()方法 */
 				err = parent->d_op->d_hash(parent, &this);
 				if (err < 0)
 					return err;
@@ -2106,6 +2144,10 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		nd->last.name = name;
 		nd->last_type = type;
 
+		/* 
+ 		 * 此处name要后移，指向下一个路径分量。当前路径分量已经保存
+ 		 * 在了nd->last.name中
+ 		 */
 		name += hashlen_len(hash_len);
 		if (!*name)
 			goto OK;
@@ -2118,9 +2160,11 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		} while (unlikely(*name == '/'));
 		if (unlikely(!*name)) {
 OK:
+			/* name指针指向NUL了，name解析结束 */
 			/* pathname body, done */
 			if (!nd->depth)
 				return 0;
+			/* 是符号连接 */
 			name = nd->stack[nd->depth - 1].name;
 			/* trailing symlink, done */
 			if (!name)
@@ -2135,15 +2179,18 @@ OK:
 			return err;
 
 		if (err) {
+			/* 读取符号连接的目标 */
 			const char *s = get_link(nd);
 
 			if (IS_ERR(s))
 				return PTR_ERR(s);
 			err = 0;
 			if (unlikely(!s)) {
+				/* 如果符号连接的目标是空的 */
 				/* jumped */
 				put_link(nd);
 			} else {
+				/* 符号链接的目标非空，把当前待解析路径压栈 */
 				nd->stack[nd->depth - 1].name = name;
 				name = s;
 				continue;
@@ -2162,11 +2209,13 @@ OK:
 /* must be paired with terminate_walk() */
 static const char *path_init(struct nameidata *nd, unsigned flags)
 {
+	/* nameidata->name 是个一个 struct filename * 类型 */
 	const char *s = nd->name->name;
 
 	if (!*s)
 		flags &= ~LOOKUP_RCU;
 	if (flags & LOOKUP_RCU)
+		/* 对应的rcu_read_unlock()在terminate_walk()中 */
 		rcu_read_lock();
 
 	nd->last_type = LAST_ROOT; /* if there are only slashes... */
@@ -2177,13 +2226,16 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		struct inode *inode = root->d_inode;
 		if (*s && unlikely(!d_can_lookup(root)))
 			return ERR_PTR(-ENOTDIR);
+		/* nd->path和nd->root都是struct path, 内部只有两个指针 */
 		nd->path = nd->root;
 		nd->inode = inode;
 		if (flags & LOOKUP_RCU) {
+			/* 使用RCU的情况 */
 			nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
 			nd->root_seq = nd->seq;
 			nd->m_seq = read_seqbegin(&mount_lock);
 		} else {
+			/* 使用reflock的情况 */
 			path_get(&nd->path);
 		}
 		return s;
@@ -3408,6 +3460,7 @@ finish_open_created:
 	if (error)
 		goto out;
 	BUG_ON(file->f_mode & FMODE_OPENED); /* once it's opened, it's opened */
+	/* 这里调用vfs_open()执行真正的文件打开操作 */
 	error = vfs_open(&nd->path, file);
 	if (error)
 		goto out;
@@ -3514,6 +3567,7 @@ static struct file *path_openat(struct nameidata *nd,
 	struct file *file;
 	int error;
 
+	/* 获取一个未使用的struct file结构体 */
 	file = alloc_empty_file(op->open_flag, current_cred());
 	if (IS_ERR(file))
 		return file;
@@ -3523,7 +3577,24 @@ static struct file *path_openat(struct nameidata *nd,
 	} else if (unlikely(file->f_flags & O_PATH)) {
 		error = do_o_path(nd, flags, file);
 	} else {
+		/*
+ 		 * 对struct nameidata中的各个域进行设置，包括：
+ 		 *  - path
+ 		 *  - root
+ 		 *  - inode
+ 		 *  - seq, m_seq, root_seq
+ 		 *  - etc.
+ 		 */ 
 		const char *s = path_init(nd, flags);
+		/*
+ 		 * 根据短路原理，link_path_walk()返回0才会执行do_last()。其中，
+ 		 * link_path_walk()负责解析路径分量，do_last()用来解析最后一个
+ 		 * 分量并执行打开文件的操作。
+ 		 *
+ 		 * 不过既然link_path_walk()会循环解析多个路径分量，那么这里为
+ 		 * 什么还需要循环解析呢？
+ 		 *  - do_last()有可能返回1，表示需要跟随符号连接
+ 		 */ 
 		while (!(error = link_path_walk(s, nd)) &&
 			(error = do_last(nd, file, op)) > 0) {
 			nd->flags &= ~(LOOKUP_OPEN|LOOKUP_CREATE|LOOKUP_EXCL);
@@ -3555,10 +3626,21 @@ struct file *do_filp_open(int dfd, struct filename *pathname,
 	struct file *filp;
 
 	set_nameidata(&nd, dfd, pathname);
+	/* 
+ 	 * 第一次使用rcu-walk方式搜索dentry cache。在散列表中根据{父目录，
+ 	 * 名称}查找目录的过程中，使用RCU保护散列桶的链表，使用序列号保护
+ 	 * 目录，其他处理器可以并行地修改目录。RCU查找方式速度最快。
+ 	 */
 	filp = path_openat(&nd, op, flags | LOOKUP_RCU);
+	/* 
+ 	 * 第二次使用ref-walk方式搜索dentry cache。在散列表中根据{父目录，
+ 	 * 名称}查找目录的过程中，使用RCU保护散列桶的链表，使用自旋锁保护
+ 	 * 目录，并且把目录的引用计数加1。引用查找方式速度比较慢。
+ 	 */
 	if (unlikely(filp == ERR_PTR(-ECHILD)))
 		filp = path_openat(&nd, op, flags);
 	if (unlikely(filp == ERR_PTR(-ESTALE)))
+		/* 第三次不使用dentry cache */
 		filp = path_openat(&nd, op, flags | LOOKUP_REVAL);
 	restore_nameidata();
 	return filp;

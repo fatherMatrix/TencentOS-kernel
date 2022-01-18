@@ -2253,6 +2253,10 @@ int block_read_full_page(struct page *page, get_block_t *get_block)
 			fully_mapped = 0;
 			if (iblock < lblock) {
 				WARN_ON(bh->b_size != blocksize);
+				/**
+ 				 * get_block 中设置buffer_head->b_bdev,
+ 				 * ->b_blocknr, ->b_size等
+ 				 */ 
 				err = get_block(inode, iblock, bh, 0);
 				if (err)
 					SetPageError(page);

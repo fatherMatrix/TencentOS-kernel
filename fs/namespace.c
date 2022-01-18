@@ -145,6 +145,7 @@ void mnt_release_group_id(struct mount *mnt)
 static inline void mnt_add_count(struct mount *mnt, int n)
 {
 #ifdef CONFIG_SMP
+	/* 这尼玛还能缓存？有空研究一下！*/
 	this_cpu_add(mnt->mnt_pcp->mnt_count, n);
 #else
 	preempt_disable();
@@ -3028,6 +3029,7 @@ void *copy_mount_options(const void __user * data)
 	 * the remainder of the page.
 	 */
 	/* copy_from_user cannot cross TASK_SIZE ! */
+	/* 拷贝了整个page，为什么要这么做？ */
 	size = TASK_SIZE - (unsigned long)untagged_addr(data);
 	if (size > PAGE_SIZE)
 		size = PAGE_SIZE;

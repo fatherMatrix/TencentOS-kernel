@@ -324,6 +324,7 @@ struct kiocb {
 	randomized_struct_fields_start
 
 	loff_t			ki_pos;
+	/* kio完成后的回调函数 */
 	void (*ki_complete)(struct kiocb *iocb, long ret, long ret2);
 	void			*private;
 	int			ki_flags;
@@ -655,9 +656,9 @@ struct inode {
 
 	const struct inode_operations	*i_op;
 	struct super_block	*i_sb;
-	/**
- 	 * 指向address_space对象的指针，
- 	 * 不一定指向本inode的inode->i_data
+	/*
+ 	 * 指向address_space对象的指针，不一定指向本inode的inode->i_data。
+ 	 * 有可能指向bdev文件系统中的设备文件的主inode中的address_space
  	 */
 	struct address_space	*i_mapping;
 
@@ -1507,6 +1508,7 @@ struct super_block {
 	unsigned int		s_quota_types;	/* Bitmask of supported quota types */
 	struct quota_info	s_dquot;	/* Diskquota specific options */
 
+	/* 与file_start/end_write()相关 */
 	struct sb_writers	s_writers;
 
 	/*

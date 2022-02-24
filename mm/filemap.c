@@ -3181,17 +3181,28 @@ generic_file_direct_write(struct kiocb *iocb, struct iov_iter *from)
 	loff_t		pos = iocb->ki_pos;
 	ssize_t		written;
 	size_t		write_len;
-	pgoff_t		end;
+	pgoff_t		end;	/* 以页为单位 */
 
 	write_len = iov_iter_count(from);
 	end = (pos + write_len - 1) >> PAGE_SHIFT;
 
 	if (iocb->ki_flags & IOCB_NOWAIT) {
 		/* If there are pages to writeback, return */
+		/*
+ 		 * 在IOCB_NOWAIT条件下，只要有一个page存在于当前区间，
+ 		 * 则返回-EAGAIN 
+ 		 */
 		if (filemap_range_has_page(inode->i_mapping, pos,
 					   pos + write_len - 1))
 			return -EAGAIN;
 	} else {
+		/* 
+ 		 * 里面会将page cache对应区间中存在的page通通刷下去，然后再
+ 		 * 进行本次的direct io（见下面written = mapping->a_ops->
+ 		 * direct_IO()。即落盘次数可能比direct io所写的扇区数更多？
+ 		 * 
+ 		 * 但是为什么不先在page cache中合并，然后再刷盘呢？
+ 		 */
 		written = filemap_write_and_wait_range(mapping, pos,
 							pos + write_len - 1);
 		if (written)
@@ -3387,6 +3398,7 @@ ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	ssize_t		status;
 
 	/* We can write back this queue in page reclaim */
+	/* 当前task_struct中的backing_dev_info设置为inode对应的 */
 	current->backing_dev_info = inode_to_bdi(inode);
 	err = file_remove_privs(file);
 	if (err)
@@ -3410,6 +3422,7 @@ ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 		if (written < 0 || !iov_iter_count(from) || IS_DAX(inode))
 			goto out;
 
+		/* 如果上面的direct io没有写完所有数据，则退化成buffered io？*/
 		status = generic_perform_write(file, from, pos = iocb->ki_pos);
 		/*
 		 * If generic_perform_write() returned a synchronous error
@@ -3447,6 +3460,7 @@ ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 			iocb->ki_pos += written;
 	}
 out:
+	/* 退出前重置当前task_struct中的backing_dev_info */
 	current->backing_dev_info = NULL;
 	return written ? written : err;
 }

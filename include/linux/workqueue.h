@@ -102,7 +102,9 @@ enum {
 
 struct work_struct {
 	atomic_long_t data;
+	/* 链入工人池(worker_pool->worklist)和工人(worker->scheduled) */
 	struct list_head entry;
+	/* 执行的函数体 */
 	work_func_t func;
 #ifdef CONFIG_LOCKDEP
 	struct lockdep_map lockdep_map;
@@ -496,6 +498,7 @@ extern void wq_worker_comm(char *buf, size_t size, struct task_struct *task);
 static inline bool queue_work(struct workqueue_struct *wq,
 			      struct work_struct *work)
 {
+	/* WORK_CPU_UNBOUND表示不绑定任何处理，优先选择当前处理器 */
 	return queue_work_on(WORK_CPU_UNBOUND, wq, work);
 }
 

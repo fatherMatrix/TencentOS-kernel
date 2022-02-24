@@ -154,6 +154,10 @@ static void wb_wakeup(struct bdi_writeback *wb)
 {
 	spin_lock_bh(&wb->work_lock);
 	if (test_bit(WB_registered, &wb->state))
+		/* 
+ 		 * 这个函数的作用是修改或者queue一个work，这里主要是用来
+ 		 * queue一个work
+ 		 */ 
 		mod_delayed_work(bdi_wq, &wb->dwork, 0);
 	spin_unlock_bh(&wb->work_lock);
 }

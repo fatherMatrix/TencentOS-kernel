@@ -42,9 +42,25 @@ struct rcu_node {
 	raw_spinlock_t __private lock;	/* Root rcu_node's lock protects */
 					/*  some rcu_state fields as well as */
 					/*  following. */
+	/*
+ 	 * rcu_node结构的gp_seq字段是rcu_state结构中同名字段的对应物。它们各自
+ 	 * 可能落后于rcu_state对应方1。如果给定rcu_node结构的gp_seq字段的底部两
+ 	 * 个位为零，则此rcu_node结构认为RCU为空闲。
+ 	 *
+ 	 * gp_seq在每个宽限期的开始和结束处都要更新。
+ 	 * 如何更新？为什么低两位只能包含0和1？2和3去哪儿了？
+ 	 */ 
 	unsigned long gp_seq;	/* Track rsp->rcu_gp_seq. */
+	/*
+ 	 * gp_seq_need字段记录了相应的rcu_node结构所看到的未来最远的宽限期请求。
+ 	 * 当gp_seq字段的值等于或超过->gp_seq_need字段的值时，该请求被视为已满足。
+ 	 */ 
 	unsigned long gp_seq_needed; /* Track furthest future GP request. */
 	unsigned long completedqs; /* All QSes done for this node. */
+	/*
+ 	 * qsmask字段跟踪此rcu_node结构中哪些子结构在当前正常宽限期内仍然需要报
+ 	 * 告静止状态
+ 	 */ 
 	unsigned long qsmask;	/* CPUs or groups that need to switch in */
 				/*  order for current grace period to proceed.*/
 				/*  In leaf rcu_node, each bit corresponds to */
@@ -52,15 +68,25 @@ struct rcu_node {
 				/*  bit corresponds to a child rcu_node */
 				/*  structure. */
 	unsigned long rcu_gp_init_mask;	/* Mask of offline CPUs at GP init. */
+	/* 初始化qsmask */
 	unsigned long qsmaskinit;
 				/* Per-GP initial value for qsmask. */
 				/*  Initialized from ->qsmaskinitnext at the */
 				/*  beginning of each grace period. */
 	unsigned long qsmaskinitnext;
 				/* Online CPUs for next grace period. */
+	/*
+ 	 * expmask字段跟踪此rcu_node结构中哪些子结构在当前快速宽限期内仍然需要报
+ 	 * 告静止状态。 
+ 	 *
+ 	 * 快速宽限期的概念属性与正常宽限期相同，但快速实现极端的CPU开销，以获得
+ 	 * 更低的宽限期延迟，例如，消耗数十微秒的CPU时间，将宽限期持续时间从毫秒
+ 	 * 缩短到数十微秒。
+ 	 */
 	unsigned long expmask;	/* CPUs or groups that need to check in */
 				/*  to allow the current expedited GP */
 				/*  to complete. */
+	/* 初始化expmask */
 	unsigned long expmaskinit;
 				/* Per-GP initial values for expmask. */
 				/*  Initialized from ->expmaskinitnext at the */
@@ -77,14 +103,13 @@ struct rcu_node {
 	u8	grpnum;		/* CPU/group number for next level up. */
 	u8	level;		/* root is at level 0. */
 	bool	wait_blkd_tasks;/* Necessary to wait for blocked tasks to */
-				/*  exit RCU read-side critical sections */
-				/*  before propagating offline up the */
-				/*  rcu_node tree? */
-	struct rcu_node *parent;
-	struct list_head blkd_tasks;
-				/* Tasks blocked in RCU read-side critical */
-				/*  section.  Tasks are placed at the head */
 				/*  of this list and age towards the tail. */
+	/*
+ 	 * 通过task_struct->rcu_node_entry连接task_struct，进而管理task_struct
+ 	 *
+ 	 * 列表中的task_struct按照反时间顺序(reverse time order)排列，因此，如
+ 	 * 果一个人物正在阻止当前的宽限期，则所有后续任务也必须阻止同一宽限期
+ 	 */
 	struct list_head *gp_tasks;
 				/* Pointer to the first task blocking the */
 				/*  current grace period, or NULL if there */
@@ -148,13 +173,21 @@ union rcu_noqs {
 /* Per-CPU data for read-copy update. */
 struct rcu_data {
 	/* 1) quiescent-state and grace-period handling : */
+	/* 
+ 	 * gp_seq和gp_seq_needed对应于rcu_node中的相同字段。但本数据结构的信息
+ 	 * 可能滞后于rcu_node中对应信息一步。但是，在CONFIG_NO_HZ_IDLE和
+ 	 * CONFIG_NO_HZ_FULL内核中，可能落后任意步。
+ 	 */
 	unsigned long	gp_seq;		/* Track rsp->rcu_gp_seq counter. */
 	unsigned long	gp_seq_needed;	/* Track furthest future GP request. */
+	/* 当前cpu还没有经历过静止状态 */
 	union rcu_noqs	cpu_no_qs;	/* No QSes yet for this CPU. */
 	bool		core_needs_qs;	/* Core waits for quiesc state. */
 	bool		beenonline;	/* CPU online at least once. */
+	/* 意味着gp_seq有回绕的可能 */
 	bool		gpwrap;		/* Possible ->gp_seq wrap. */
 	bool		exp_deferred_qs; /* This CPU awaiting a deferred QS? */
+	/* 对应的rcu_node */
 	struct rcu_node *mynode;	/* This CPU's leaf of hierarchy */
 	unsigned long grpmask;		/* Mask to apply to leaf qsmask. */
 	unsigned long	ticks_this_gp;	/* The number of scheduling-clock */
@@ -246,6 +279,7 @@ struct rcu_data {
 	short rcu_onl_gp_flags;		/* ->gp_flags at last online. */
 	unsigned long last_fqs_resched;	/* Time of last rcu_resched(). */
 
+	/* 对应的cpu的个数 */
 	int cpu;
 };
 
@@ -298,6 +332,12 @@ struct rcu_state {
 
 	u8	boost ____cacheline_internodealigned_in_smp;
 						/* Subject to priority boost. */
+	/* 
+ 	 * 当前宽限期序列号。低2位保存当前宽限期的状态：
+ 	 *   - 0：	表示当前未开始宽限期，是空闲的
+ 	 *   - 1：	表示当前宽限期正在进行中
+ 	 *   - others：	表示有地方出了问题
+ 	 */
 	unsigned long gp_seq;			/* Grace-period sequence #. */
 	struct task_struct *gp_kthread;		/* Task for grace periods. */
 	struct swait_queue_head gp_wq;		/* Where GP task waits. */

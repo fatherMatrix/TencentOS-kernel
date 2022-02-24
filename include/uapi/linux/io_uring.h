@@ -125,13 +125,20 @@ struct io_cqring_offsets {
  * Passed in for io_uring_setup(2). Copied back with updated info on success
  */
 struct io_uring_params {
+	/* 定义请求队列长度，2^sq_entries，调用方定义 */
 	__u32 sq_entries;
+	/* 定义完成队列长度，默认为2 * 请求队列长度 */
 	__u32 cq_entries;
+	/* 控制内核行为的标志位 */
 	__u32 flags;
+	/* poll模式下开启的内核线程绑定的cpu */
 	__u32 sq_thread_cpu;
+	/* poll模式下开启的内核线程空闲时间，之后会挂起 */
 	__u32 sq_thread_idle;
+	/* 内核当前支持的能力，内核设置 */
 	__u32 features;
 	__u32 resv[4];
+	/* 记录内核数据的结构体，调用方后续调用mmap需要用到 */
 	struct io_sqring_offsets sq_off;
 	struct io_cqring_offsets cq_off;
 };

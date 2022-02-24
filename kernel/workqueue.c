@@ -153,8 +153,9 @@ struct worker_pool {
 
 	unsigned long		watchdog_ts;	/* L: watchdog timestamp */
 
+	/* 未处理的工作(work_struct)链表，连接到work_struct->entry */
 	struct list_head	worklist;	/* L: list of pending works */
-
+	/* 工人数量 */
 	int			nr_workers;	/* L: total number of workers */
 	int			nr_idle;	/* L: currently idle workers */
 
@@ -167,6 +168,7 @@ struct worker_pool {
 						/* L: hash of busy workers */
 
 	struct worker		*manager;	/* L: purely informational */
+	/* 工人(worker)链表，连接到worker->node */
 	struct list_head	workers;	/* A: attached workers */
 	struct completion	*detach_completion; /* all workers detached */
 
@@ -197,7 +199,9 @@ struct worker_pool {
  * number of flag bits.
  */
 struct pool_workqueue {
+	/* 工人池 */
 	struct worker_pool	*pool;		/* I: the associated pool */
+	/* 所属的工作队列 */
 	struct workqueue_struct *wq;		/* I: the owning workqueue */
 	int			work_color;	/* L: current color */
 	int			flush_color;	/* L: flushing color */
@@ -275,7 +279,9 @@ struct workqueue_struct {
 
 	/* hot fields used during command issue, aligned to cacheline */
 	unsigned int		flags ____cacheline_aligned; /* WQ: WQ_* flags */
+	/* 绑定处理器的工作队列的pool_workqueue */
 	struct pool_workqueue __percpu *cpu_pwqs; /* I: per-cpu pwqs */
+	/* 不绑定处理器的工作队列的pool_workqueue */
 	struct pool_workqueue __rcu *numa_pwq_tbl[]; /* PWR: unbound pwqs indexed by node */
 };
 
@@ -836,6 +842,10 @@ static struct worker *first_idle_worker(struct worker_pool *pool)
  */
 static void wake_up_worker(struct worker_pool *pool)
 {
+	/* 
+ 	 * worker被唤醒后，在worker_thread中会自己离开idle_list, 所以此处
+ 	 * 可以无脑唤醒第一个idle_worker()
+ 	 */
 	struct worker *worker = first_idle_worker(pool);
 
 	if (likely(worker))
@@ -1519,6 +1529,10 @@ bool queue_work_on(int cpu, struct workqueue_struct *wq,
 
 	local_irq_save(flags);
 
+	/*
+ 	 * 如果工作项没有被添加过，那么给工作项设置标志位
+ 	 * WORK_STRUCT_PENDING_BIT，然后吧主要工作委托给函数__queue_work()
+ 	 */ 
 	if (!test_and_set_bit(WORK_STRUCT_PENDING_BIT, work_data_bits(work))) {
 		__queue_work(cpu, wq, work);
 		ret = true;
@@ -2379,6 +2393,7 @@ woke_up:
 		return 0;
 	}
 
+	/* 工人退出空闲状态 */
 	worker_leave_idle(worker);
 recheck:
 	/* no more worker necessary? */

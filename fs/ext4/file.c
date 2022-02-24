@@ -233,6 +233,7 @@ ext4_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 		return ext4_dax_write_iter(iocb, from);
 #endif
 
+	/* 锁住inode，可睡眠的信号量, 意味着有可能调度出去睡眠等待 */
 	if (!inode_trylock(inode)) {
 		if (iocb->ki_flags & IOCB_NOWAIT)
 			return -EAGAIN;
@@ -252,6 +253,7 @@ ext4_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	    !is_sync_kiocb(iocb) &&
 	    ext4_unaligned_aio(inode, from, iocb->ki_pos)) {
 		unaligned_aio = 1;
+		/* 内部调用了wait_event()等待inode->unwritten == 0 */
 		ext4_unwritten_wait(inode);
 	}
 
@@ -267,6 +269,7 @@ ext4_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 		}
 	}
 
+	/* 返回成功写入或截断的字节数 */
 	ret = __generic_file_write_iter(iocb, from);
 	/*
 	 * Unaligned direct AIO must be the only IO in flight. Otherwise
@@ -278,6 +281,7 @@ ext4_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	inode_unlock(inode);
 
 	if (ret > 0)
+		/* 写成功了就sync？同步什么？有空要看一下 */
 		ret = generic_write_sync(iocb, ret);
 
 	return ret;

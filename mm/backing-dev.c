@@ -682,6 +682,7 @@ struct bdi_writeback *wb_get_create(struct backing_dev_info *bdi,
 
 	might_sleep_if(gfpflags_allow_blocking(gfp));
 
+	/* 如果是顶级 */
 	if (!memcg_css->parent)
 		return &bdi->wb;
 

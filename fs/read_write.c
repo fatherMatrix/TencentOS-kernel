@@ -476,6 +476,7 @@ static ssize_t new_sync_write(struct file *filp, const char __user *buf, size_t 
 	struct iov_iter iter;
 	ssize_t ret;
 
+	/* struct kiocb保存了设备侧的位置信息，struct iov_iter保存了内存侧的位置信息 */
 	init_sync_kiocb(&kiocb, filp);
 	kiocb.ki_pos = (ppos ? *ppos : 0);
 	iov_iter_init(&iter, WRITE, &iov, 1, len);
@@ -491,6 +492,10 @@ static ssize_t __vfs_write(struct file *file, const char __user *p,
 			   size_t count, loff_t *pos)
 {
 	if (file->f_op->write)
+		/* 
+ 		 * 如果是ext4文件系统，则f_op = &ext4_file_operations，且
+ 		 * 	.write = NULL; .write_iter = ext4_file_write_iter
+ 		 */ 
 		return file->f_op->write(file, p, count, pos);
 	else if (file->f_op->write_iter)
 		return new_sync_write(file, p, count, pos);
@@ -554,6 +559,7 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 	if (!ret) {
 		if (count > MAX_RW_COUNT)
 			count =  MAX_RW_COUNT;
+		/* 会加个per cpu的读写信号量，每个cpu上都分了freeze级别 */
 		file_start_write(file);
 		ret = __vfs_write(file, buf, count, pos);
 		if (ret > 0) {
@@ -561,6 +567,7 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 			add_wchar(current, ret);
 		}
 		inc_syscw(current);
+		/* 解锁 */
 		file_end_write(file);
 	}
 
@@ -603,9 +610,11 @@ ssize_t ksys_write(unsigned int fd, const char __user *buf, size_t count)
 	ssize_t ret = -EBADF;
 
 	if (f.file) {
+		/* 对于FMODE_STREAM的文件，ppos = &file->f_pos */
 		loff_t pos, *ppos = file_ppos(f.file);
 		if (ppos) {
 			pos = *ppos;
+			/* 现在，ppos指向了局部变量pos */
 			ppos = &pos;
 		}
 		ret = vfs_write(f.file, buf, count, ppos);

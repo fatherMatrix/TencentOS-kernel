@@ -4002,6 +4002,7 @@ static int io_uring_create(unsigned entries, struct io_uring_params *p)
 		}
 	}
 
+	/* 分配struct io_ring_ctx核心结构体 */
 	ctx = io_ring_ctx_alloc(p);
 	if (!ctx) {
 		if (account_mem)
@@ -4020,6 +4021,7 @@ static int io_uring_create(unsigned entries, struct io_uring_params *p)
 		goto err;
 	}
 
+	/* 分配一个io_rings结构体 */
 	ret = io_allocate_scq_urings(ctx, p);
 	if (ret)
 		goto err;

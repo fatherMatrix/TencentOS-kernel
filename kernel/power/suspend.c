@@ -567,6 +567,7 @@ static int enter_state(suspend_state_t state)
 
 	if (!IS_ENABLED(CONFIG_SUSPEND_SKIP_SYNC)) {
 		trace_suspend_resume(TPS("sync_filesystems"), 0, true);
+		/* 同步文件系统 */
 		ksys_sync_helper();
 		trace_suspend_resume(TPS("sync_filesystems"), 0, false);
 	}

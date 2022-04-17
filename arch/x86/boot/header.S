@@ -43,8 +43,8 @@ SYSSEG		= 0x1000		/* historical load address >> 4 */
 bootsect_start:
 #ifdef CONFIG_EFI_STUB
 	# "MZ", MS-DOS header
-	.byte 0x4d
-	.byte 0x5a
+	.byte 0x4d	/* 0x4d是字符'M'的ascii码 */
+	.byte 0x5a	/* 0x5a是字符'D'的ascii码 */
 #endif
 
 	# Normalize the start address
@@ -294,7 +294,10 @@ _start:
 		# tries to generate a 3-byte jump here, which causes
 		# everything else to push off to the wrong offset.
 		.byte	0xeb		# short (2-byte) jump
-		.byte	start_of_setup-1f
+		.byte	start_of_setup-1f	# 这一行与上一行组成一个jmp指令
+						# 参数start_of_setup-1f就是1f部分的长度
+						# 这是个相对偏移
+						# 所以跳转的目的地就是start_of_setup
 1:
 
 	# Part 2 of the header, from the old setup.S
@@ -573,9 +576,11 @@ handover_offset:	.long 0			# Filled in by build.c
 	.section ".entrytext", "ax"
 start_of_setup:
 # Force %es = %ds
+# 强制将ds和es的内容设成相同的
 	movw	%ds, %ax
 	movw	%ax, %es
-	cld
+	cld			# CLD清除EFLAGS中的DF标记。当DF标记为0时，字符串
+				# 操作增加index registers
 
 # Apparently some ancient versions of LILO invoked the kernel with %ss != %ds,
 # which happened to work by accident for the old code.  Recalculate the stack
@@ -584,7 +589,7 @@ start_of_setup:
 
 	movw	%ss, %dx
 	cmpw	%ax, %dx	# %ds == %ss?
-	movw	%sp, %dx
+	movw	%sp, %dx	# mov指令不影响flag，所以下面的je取决于上面的cmp
 	je	2f		# -> assume %sp is reasonably set
 
 	# Invalid %ss, make up a new stack
@@ -603,12 +608,13 @@ start_of_setup:
 3:	movw	%ax, %ss
 	movzwl	%dx, %esp	# Clear upper half of %esp
 	sti			# Now we should have a working stack
+				# 开中断
 
 # We will have entered with %cs = %ds+0x20, normalize %cs so
 # it is on par with the other segments.
-	pushw	%ds
-	pushw	$6f
-	lretw
+	pushw	%ds		# 这三条指令用于将cs寄存器的值设置成和其
+	pushw	$6f		# 他寄存器相同的值，是一个小技巧。先把ds和6f压
+	lretw			# 栈，再使用lretw将栈中的ds弹出到cs，6f弹出到ip
 6:
 
 # Check signature at end of setup
@@ -624,7 +630,8 @@ start_of_setup:
 	rep; stosl
 
 # Jump to C code (should not return)
-	calll	main
+	calll	main		# 从这里进入C语言环境了
+				# main函数位于arch/x86/boot/main.c
 
 # Setup corrupt somehow...
 setup_bad:

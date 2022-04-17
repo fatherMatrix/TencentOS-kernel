@@ -3321,6 +3321,9 @@ int tty_register_driver(struct tty_driver *driver)
 	dev_t dev;
 	struct device *d;
 
+	/* 注册字符设备cdev对应到/dev目录 
+	 * 文件操作方法结构体是tty_fops
+	 */
 	if (!driver->major) {
 		error = alloc_chrdev_region(&dev, driver->minor_start,
 						driver->num, driver->name);

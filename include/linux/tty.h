@@ -285,7 +285,7 @@ struct tty_operations;
 struct tty_struct {
 	int	magic;
 	struct kref kref;
-	struct device *dev;
+	struct device *dev;		/* 实际的设备 */
 	struct tty_driver *driver;
 	const struct tty_operations *ops;
 	int index;

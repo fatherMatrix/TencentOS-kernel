@@ -103,6 +103,7 @@ struct audit_context {
 	int		    major;      /* syscall number */
 	struct timespec64   ctime;      /* time of syscall entry */
 	unsigned long	    argv[4];    /* syscall arguments */
+					/* 所以系统调用的参数最多只有4个？*/
 	long		    return_code;/* syscall return code */
 	u64		    prio;
 	int		    return_valid; /* return code is valid */

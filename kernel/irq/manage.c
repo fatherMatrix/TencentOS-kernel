@@ -1356,6 +1356,11 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 		 * the driver for non nested interrupt handling by the
 		 * dummy function which warns when called.
 		 */
+		/*
+		 * 如果中断是嵌套的，则将其主处理函数强行替换为如下所示
+		 * 的处理函数，此函数只做一次日志输出，中断处理在线程中
+		 * 做。所以这种情况要求必须指定thread_fn
+		 */
 		new->handler = irq_nested_primary_handler;
 	} else {
 		if (irq_settings_can_thread(desc)) {
@@ -1369,6 +1374,9 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 	 * Create a handler thread when a thread function is supplied
 	 * and the interrupt does not nest into another interrupt
 	 * thread.
+	 */
+	/*
+	 * 没有嵌套的线程化中断
 	 */
 	if (new->thread_fn && !nested) {
 		ret = setup_irq_thread(new, irq, false);
@@ -2054,6 +2062,10 @@ int request_threaded_irq(unsigned int irq, irq_handler_t handler,
 	action->name = devname;
 	action->dev_id = dev_id;
 
+	/*
+	 * 和设备的休眠相关？
+	 * 需要抽时间仔细看看
+	 */
 	retval = irq_chip_pm_get(&desc->irq_data);
 	if (retval < 0) {
 		kfree(action);

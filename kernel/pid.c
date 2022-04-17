@@ -410,6 +410,7 @@ pid_t pid_nr_ns(struct pid *pid, struct pid_namespace *ns)
 
 	if (pid && ns->level <= pid->level) {
 		upid = &pid->numbers[ns->level];
+		/* 这里还会不相等吗？*/
 		if (upid->ns == ns)
 			nr = upid->nr;
 	}

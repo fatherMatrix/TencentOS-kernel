@@ -178,9 +178,12 @@ struct irq_domain {
 #endif
 
 	/* reverse map data. The linear map gets appended to the irq_domain */
+	/* 该irq_domain支持冲断数量的最大值 */
 	irq_hw_number_t hwirq_max;
 	unsigned int revmap_direct_max_irq;
+	/* 线性映射的大小 */
 	unsigned int revmap_size;
+	/* 基数树映射的根结点 */
 	struct radix_tree_root revmap_tree;
 	struct mutex revmap_tree_mutex;
 
@@ -189,6 +192,7 @@ struct irq_domain {
 	KABI_RESERVE(3);
 	KABI_RESERVE(4);
 
+	/* 线性映射用到的查找表 */
 	unsigned int linear_revmap[];
 };
 

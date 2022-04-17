@@ -800,9 +800,13 @@ struct task_struct {
 
 	struct restart_block		restart_block;
 
-	pid_t				pid;
-	pid_t				tgid;
-
+	pid_t				pid;	/* 全局进程号，不同线程的pid也不同
+						 * gettid()返回pid 
+						 */
+	pid_t				tgid;	/* 线程组标识符，即线程组组长的pid
+						 * getpid()返回tgid
+						 */
+						
 #ifdef CONFIG_STACKPROTECTOR
 	/* Canary value for the -fstack-protector GCC feature: */
 	unsigned long			stack_canary;
@@ -824,7 +828,7 @@ struct task_struct {
 	 */
 	struct list_head		children;
 	struct list_head		sibling;
-	struct task_struct		*group_leader;
+	struct task_struct		*group_leader;	/* 指向tgid的task_struct */
 
 	/*
 	 * 'ptraced' is the list of tasks this task is using ptrace() on.
@@ -836,7 +840,8 @@ struct task_struct {
 	struct list_head		ptrace_entry;
 
 	/* PID/PID hash table linkage. */
-	struct pid			*thread_pid;
+	/* 存储除根命名空间外的其他命名空间的pid */
+	struct pid			*thread_pid;	
 	struct hlist_node		pid_links[PIDTYPE_MAX];
 	struct list_head		thread_group;
 	struct list_head		thread_node;
@@ -926,7 +931,7 @@ struct task_struct {
 	struct nsproxy			*nsproxy;
 
 	/* Signal handlers: */
-	struct signal_struct		*signal;
+	struct signal_struct		*signal;	/* 贼尼玛混乱 */
 	struct sighand_struct		*sighand;
 	sigset_t			blocked;
 	sigset_t			real_blocked;

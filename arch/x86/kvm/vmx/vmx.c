@@ -7768,6 +7768,12 @@ static __init int hardware_setup(void)
 			return r;
 	}
 
+	/* 
+	 * 为每个物理cpu分配一个vmcs结构体，并将其放到vmxarea这个per-cpu变量中。
+	 *
+	 * vmcs不是与vcpu一一对应吗？这里给每个pcpu分配一个是什么意思？
+	 * 难道是作为vcpu对应的vmcs创建时的模版？
+	 */
 	r = alloc_kvm_area();
 	if (r)
 		nested_vmx_hardware_unsetup();
@@ -8020,6 +8026,15 @@ static int __init vmx_init(void)
 	}
 #endif
 
+	/* 
+	 * 进行kvm模块的初始化
+	 * 
+	 * 值得注意的是，在进行kvm_init()及完成之后，cpu还未处于VMX模式下，因为
+	 * 在vmx_init初始化的过程中并未向cr4.vmxe写入1，也没有分配vmxon区域。这
+	 * 其实是一种惰性策略，毕竟如果加在了kvm模块，但没有创建虚拟机的需求，
+	 * 那也就没有必要让cpu进入vmx模式。
+	 * vmx模式的真正开启是在创建第一个虚拟机的时候。
+	 */
 	r = kvm_init(&vmx_x86_ops, sizeof(struct vcpu_vmx),
 		     __alignof__(struct vcpu_vmx), THIS_MODULE);
 	if (r)

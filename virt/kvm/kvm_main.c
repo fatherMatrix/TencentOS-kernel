@@ -3611,6 +3611,10 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 	if (r < 0)
 		goto put_kvm;
 
+	/* 
+	 * 在匿名文件系统中分配一个文件描述符，并将其file_operations设置为
+	 * &kvm_vm_fops，返回给用户态用于控制虚拟机
+	 */
 	file = anon_inode_getfile("kvm-vm", &kvm_vm_fops, kvm, O_RDWR);
 	if (IS_ERR(file)) {
 		put_unused_fd(r);
@@ -4415,9 +4419,11 @@ static void check_processor_compat(void *rtn)
 int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 		  struct module *module)
 {
+	/* 参数opaque是&vmx_x86_ops */
 	int r;
 	int cpu;
 
+	/* 初始化架构相关的代码 */
 	r = kvm_arch_init(opaque);
 	if (r)
 		goto out_fail;
@@ -4429,6 +4435,7 @@ int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 	 * kvm_arch_init must be called before kvm_irqfd_init to avoid creating
 	 * conflicts in case kvm is already setup for another implementation.
 	 */
+	/* 初始化irqfd相关的数据，主要是创建一个工作队列 */
 	r = kvm_irqfd_init();
 	if (r)
 		goto out_irqfd;
@@ -4438,10 +4445,12 @@ int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 		goto out_free_0;
 	}
 
+	/* 创建一些跟启动kvm密切相关的数据结构，以及一些硬件特性的初始化 */
 	r = kvm_arch_hardware_setup();
 	if (r < 0)
 		goto out_free_0a;
 
+	/* 检测所有cpu的特性是否一致 */
 	for_each_online_cpu(cpu) {
 		smp_call_function_single(cpu, check_processor_compat, &r, 1);
 		if (r < 0)
@@ -4472,10 +4481,14 @@ int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 	if (r)
 		goto out_free;
 
+	/* 对应字符设备文件/dev/kvm的file_operations */
 	kvm_chardev_ops.owner = module;
+	/* 对应创建的虚拟机对应的fd的file_operations，用于进行机器级别的操作 */
 	kvm_vm_fops.owner = module;
+	/* 创建的vcpu对应的fd的file_operations，用于修改vcpu的寄存器值 */
 	kvm_vcpu_fops.owner = module;
 
+	/* kvm_dev即对应/dev/kvm的字符设备文件 */
 	r = misc_register(&kvm_dev);
 	if (r) {
 		pr_err("kvm: misc device register failed\n");

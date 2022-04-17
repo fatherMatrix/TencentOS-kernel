@@ -7269,11 +7269,13 @@ int kvm_arch_init(void *opaque)
 		goto out;
 	}
 
+	/* 检测vmx是否支持，通过cpuid返回值判断 */
 	if (!ops->cpu_has_kvm_support()) {
 		printk(KERN_ERR "kvm: no hardware support\n");
 		r = -EOPNOTSUPP;
 		goto out;
 	}
+	/* 检测bios是否关闭了vmx，通过读取msr寄存器判断 */
 	if (ops->disabled_by_bios()) {
 		printk(KERN_ERR "kvm: disabled by bios\n");
 		r = -EOPNOTSUPP;
@@ -7300,16 +7302,19 @@ int kvm_arch_init(void *opaque)
 		goto out;
 	}
 
+	/* 分配per-cpu的变量shared_msrs */
 	shared_msrs = alloc_percpu(struct kvm_shared_msrs);
 	if (!shared_msrs) {
 		printk(KERN_ERR "kvm: failed to allocate percpu kvm_shared_msrs\n");
 		goto out_free_x86_fpu_cache;
 	}
 
+	/* 内存虚拟化初始化 */
 	r = kvm_mmu_module_init();
 	if (r)
 		goto out_free_percpu;
 
+	/* 给kvm_x86_ops赋值 */
 	kvm_x86_ops = ops;
 
 	kvm_mmu_set_mask_ptes(PT_USER_MASK, PT_ACCESSED_MASK,
@@ -9414,6 +9419,7 @@ int kvm_arch_hardware_setup(void)
 {
 	int r;
 
+	/* kvm_x86_ops == &vmx_x86_ops */
 	r = kvm_x86_ops->hardware_setup();
 	if (r != 0)
 		return r;

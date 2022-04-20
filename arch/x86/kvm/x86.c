@@ -8204,8 +8204,12 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		goto cancel_injection;
 	}
 
+	/* 禁止抢占 */
 	preempt_disable();
 
+	/* 对应vmx_prepare_switch_to_guest，用于将pCPU的状态保存到VMCS的
+	 * host state区，使得在VM_EXIT后可以恢复pCPU的状态
+	 */
 	kvm_x86_ops->prepare_guest_switch(vcpu);
 
 	/*
@@ -8213,6 +8217,7 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 	 * IPI are then delayed after guest entry, which ensures that they
 	 * result in virtual interrupt delivery.
 	 */
+	/* 关中断？ */
 	local_irq_disable();
 	vcpu->mode = IN_GUEST_MODE;
 
@@ -8275,6 +8280,7 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		vcpu->arch.switch_db_regs &= ~KVM_DEBUGREG_RELOAD;
 	}
 
+	/* 对应vmx_vcpu_run */
 	kvm_x86_ops->run(vcpu);
 
 	/*
@@ -8401,7 +8407,9 @@ static inline bool kvm_vcpu_running(struct kvm_vcpu *vcpu)
 	if (is_guest_mode(vcpu) && kvm_x86_ops->check_nested_events)
 		kvm_x86_ops->check_nested_events(vcpu);
 
+		/* 与多处理器有关的初始化顺序相关 */
 	return (vcpu->arch.mp_state == KVM_MP_STATE_RUNNABLE &&
+		/* 与虚拟机中是否存在需要访问却被宿主机swap出去的内存页相关 */
 		!vcpu->arch.apf.halted);
 }
 
@@ -8414,7 +8422,9 @@ static int vcpu_run(struct kvm_vcpu *vcpu)
 	vcpu->arch.l1tf_flush_l1d = true;
 
 	for (;;) {
+		/* 判断当前vCPU是否可以运行 */
 		if (kvm_vcpu_running(vcpu)) {
+			/* 进入虚拟机 */
 			r = vcpu_enter_guest(vcpu);
 		} else {
 			r = vcpu_block(kvm, vcpu);
@@ -8585,6 +8595,9 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *kvm_run)
 {
 	int r;
 
+	/* 对应vmx_vcpu_load，主要是设置pCPU上per-cpu的current_vmcs变量，并调用
+	 * vmptrld指令
+	 */
 	vcpu_load(vcpu);
 	kvm_sigset_activate(vcpu);
 	kvm_load_guest_fpu(vcpu);
@@ -8637,6 +8650,7 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *kvm_run)
 	if (kvm_run->immediate_exit)
 		r = -EINTR;
 	else
+		/* vCPU运行的关键部分 */
 		r = vcpu_run(vcpu);
 
 out:

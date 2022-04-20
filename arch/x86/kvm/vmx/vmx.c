@@ -1316,7 +1316,9 @@ void vmx_vcpu_load_vmcs(struct kvm_vcpu *vcpu, int cpu,
 
 	prev = per_cpu(current_vmcs, cpu);
 	if (prev != vmx->loaded_vmcs->vmcs) {
+		/* 将per-cpu(host cpu)的current_vmcs变量设置为vCPU对应的VMCS */
 		per_cpu(current_vmcs, cpu) = vmx->loaded_vmcs->vmcs;
+		/* 然后调用vmptrld汇编指令 */
 		vmcs_load(vmx->loaded_vmcs->vmcs);
 
 		/*
@@ -2556,6 +2558,7 @@ void free_loaded_vmcs(struct loaded_vmcs *loaded_vmcs)
 
 int alloc_loaded_vmcs(struct loaded_vmcs *loaded_vmcs)
 {
+	/* 分配了一个页 */
 	loaded_vmcs->vmcs = alloc_vmcs(false);
 	if (!loaded_vmcs->vmcs)
 		return -ENOMEM;
@@ -6674,6 +6677,7 @@ static void vmx_free_vcpu(struct kvm_vcpu *vcpu)
 static struct kvm_vcpu *vmx_create_vcpu(struct kvm *kvm, unsigned int id)
 {
 	int err;
+	/* 结构体vcpu_vmx表示一个vCPU */
 	struct vcpu_vmx *vmx;
 	unsigned long *msr_bitmap;
 	int cpu;
@@ -6681,6 +6685,7 @@ static struct kvm_vcpu *vmx_create_vcpu(struct kvm *kvm, unsigned int id)
 	BUILD_BUG_ON_MSG(offsetof(struct vcpu_vmx, vcpu) != 0,
 		"struct kvm_vcpu must be at offset 0 for arch usercopy region");
 
+	/* kvm_vcpu_cache是在kvm_init中初始化的 */
 	vmx = kmem_cache_zalloc(kvm_vcpu_cache, GFP_KERNEL_ACCOUNT);
 	if (!vmx)
 		return ERR_PTR(-ENOMEM);
@@ -6701,8 +6706,10 @@ static struct kvm_vcpu *vmx_create_vcpu(struct kvm *kvm, unsigned int id)
 		goto free_user_fpu;
 	}
 
+	/* 好想与pcid有关，用于减少tlb的冲刷？*/
 	vmx->vpid = allocate_vpid();
 
+	/* 初始化的是struct vcpu_vmx中的struct kvm_vcpu */
 	err = kvm_vcpu_init(&vmx->vcpu, kvm, id);
 	if (err)
 		goto free_vcpu;
@@ -6715,12 +6722,19 @@ static struct kvm_vcpu *vmx_create_vcpu(struct kvm *kvm, unsigned int id)
 	 * avoiding dealing with cases, such as enabling PML partially on vcpus
 	 * for the guest, etc.
 	 */
+	/*
+	 * 如果enable_pml，则分配pml使用的页。
+	 *
+	 * pml是page modification logging的缩写，用于在硬件层面记录虚拟机中访问
+	 * 过的页面，能够实现快速标记脏页
+	 */
 	if (enable_pml) {
 		vmx->pml_pg = alloc_page(GFP_KERNEL_ACCOUNT | __GFP_ZERO);
 		if (!vmx->pml_pg)
 			goto uninit_vcpu;
 	}
 
+	/* 分配保存虚拟机vCPU的msr寄存器的空间 */
 	vmx->guest_msrs = kmalloc(PAGE_SIZE, GFP_KERNEL_ACCOUNT);
 	BUILD_BUG_ON(ARRAY_SIZE(vmx_msr_index) * sizeof(vmx->guest_msrs[0])
 		     > PAGE_SIZE);
@@ -6728,6 +6742,7 @@ static struct kvm_vcpu *vmx_create_vcpu(struct kvm *kvm, unsigned int id)
 	if (!vmx->guest_msrs)
 		goto free_pml;
 
+	/* 分配vmx->vmcs01.vmcs，直接分配了一个page */
 	err = alloc_loaded_vmcs(&vmx->vmcs01);
 	if (err < 0)
 		goto free_msrs;

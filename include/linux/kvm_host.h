@@ -319,6 +319,7 @@ struct kvm_vcpu {
 #endif
 	bool preempted;
 	bool ready;
+	/* 体系结构相关的字段，包括常规寄存器和cr寄存器等 */
 	struct kvm_vcpu_arch arch;
 	struct dentry *debugfs_dentry;
 };

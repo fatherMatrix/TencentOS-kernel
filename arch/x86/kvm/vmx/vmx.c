@@ -2584,6 +2584,7 @@ int alloc_loaded_vmcs(struct loaded_vmcs *loaded_vmcs)
 		}
 	}
 
+	/* 将loaded_vmcs->host_state全部置为0 */
 	memset(&loaded_vmcs->host_state, 0, sizeof(struct vmcs_host_state));
 	memset(&loaded_vmcs->controls_shadow, 0,
 		sizeof(struct vmcs_controls_shadow));
@@ -6498,6 +6499,7 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 
 	if (vmx->ple_window_dirty) {
 		vmx->ple_window_dirty = false;
+		/* 前边已经执行了vmptrld，所以pCPU知道应该把数据写到哪里 */
 		vmcs_write32(PLE_WINDOW, vmx->ple_window);
 	}
 
@@ -6685,7 +6687,7 @@ static struct kvm_vcpu *vmx_create_vcpu(struct kvm *kvm, unsigned int id)
 	BUILD_BUG_ON_MSG(offsetof(struct vcpu_vmx, vcpu) != 0,
 		"struct kvm_vcpu must be at offset 0 for arch usercopy region");
 
-	/* kvm_vcpu_cache是在kvm_init中初始化的 */
+	/* kvm_vcpu_cache是在kvm_init中初始化的，这里返回的都是0 */
 	vmx = kmem_cache_zalloc(kvm_vcpu_cache, GFP_KERNEL_ACCOUNT);
 	if (!vmx)
 		return ERR_PTR(-ENOMEM);
@@ -6764,10 +6766,18 @@ static struct kvm_vcpu *vmx_create_vcpu(struct kvm *kvm, unsigned int id)
 	vmx->msr_bitmap_mode = 0;
 
 	vmx->loaded_vmcs = &vmx->vmcs01;
+	/* 获取pCPU对应的id */
 	cpu = get_cpu();
+	/* load一次VMCS */
 	vmx_vcpu_load(&vmx->vcpu, cpu);
 	vmx->vcpu.cpu = cpu;
+	/* 
+	 * 因为这是在create vcpu，应该对应于pCPU的插入或上电。vmx_vcpu_setup的
+	 * 作用就是初始化vCPU对应的VMCS的一些信息，使得创建后的vCPU第一次
+	 * vmentry后出于和pCPU上电后一样的状态
+	 */
 	vmx_vcpu_setup(vmx);
+	/* 里边调用了vmx_prepare_switch_to_host，在这里切换回host是什么意思？ */
 	vmx_vcpu_put(&vmx->vcpu);
 	put_cpu();
 	if (cpu_need_virtualize_apic_accesses(&vmx->vcpu)) {

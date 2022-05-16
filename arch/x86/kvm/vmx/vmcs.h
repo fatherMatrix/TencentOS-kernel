@@ -19,6 +19,9 @@ struct vmcs_hdr {
 struct vmcs {
 	struct vmcs_hdr hdr;
 	u32 abort;
+	/* 这是一个变长数组，根据实际需要分配足够的内存。
+	 * 这里实际上是给vmcs分配了一个page
+	 */
 	char data[0];
 };
 

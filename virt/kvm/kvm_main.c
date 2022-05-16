@@ -343,6 +343,7 @@ int kvm_vcpu_init(struct kvm_vcpu *vcpu, struct kvm *kvm, unsigned id)
 		r = -ENOMEM;
 		goto fail;
 	}
+	/* 这里分配了一个page，是用来做什么的呢？*/
 	vcpu->run = page_address(page);
 
 	kvm_vcpu_set_in_spin_loop(vcpu, false);
@@ -2839,12 +2840,14 @@ static int kvm_vm_ioctl_create_vcpu(struct kvm *kvm, u32 id)
 
 	/* Now it's all set up, let userspace reach it */
 	kvm_get_kvm(kvm);
+	/* 分配一个匿名fd，绑定kvm_vcpu_fops */
 	r = create_vcpu_fd(vcpu);
 	if (r < 0) {
 		kvm_put_kvm(kvm);
 		goto unlock_vcpu_destroy;
 	}
 
+	/* 放入kvm->vcpus的数组中，表示将vCPU插入了虚拟机 */
 	kvm->vcpus[atomic_read(&kvm->online_vcpus)] = vcpu;
 
 	/*
@@ -2915,6 +2918,7 @@ static long kvm_vcpu_ioctl(struct file *filp,
 		oldpid = rcu_access_pointer(vcpu->pid);
 		if (unlikely(oldpid != task_pid(current))) {
 			/* The thread running this VCPU changed. */
+			/* 如果vCPU在host上的线程发生了变化，则要做如下动作 */
 			struct pid *newpid;
 
 			r = kvm_arch_vcpu_run_pid_change(vcpu);
@@ -2922,6 +2926,9 @@ static long kvm_vcpu_ioctl(struct file *filp,
 				break;
 
 			newpid = get_task_pid(current, PIDTYPE_PID);
+			/* 主要是修改vcpu中的pid字段，该字段记录了vCPU线程的pid
+			 * 标识符
+			 */
 			rcu_assign_pointer(vcpu->pid, newpid);
 			if (oldpid)
 				synchronize_rcu();
@@ -4408,6 +4415,7 @@ static void kvm_sched_out(struct preempt_notifier *pn,
 		WRITE_ONCE(vcpu->preempted, true);
 		WRITE_ONCE(vcpu->ready, true);
 	}
+	/* 在此处调用了vmx_prepare_switch_to_host */
 	kvm_arch_vcpu_put(vcpu);
 }
 
@@ -4466,6 +4474,7 @@ int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 	/* A kmem cache lets us meet the alignment requirements of fx_save. */
 	if (!vcpu_align)
 		vcpu_align = __alignof__(struct kvm_vcpu);
+	/* 创建kvm_vcpu_cache，但是这里并没有指定构造函数 */
 	kvm_vcpu_cache =
 		kmem_cache_create_usercopy("kvm_vcpu", vcpu_size, vcpu_align,
 					   SLAB_ACCOUNT,

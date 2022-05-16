@@ -3591,6 +3591,7 @@ void kvm_arch_vcpu_put(struct kvm_vcpu *vcpu)
 	kvm_steal_time_set_preempted(vcpu);
 	srcu_read_unlock(&vcpu->kvm->srcu, idx);
 	pagefault_enable();
+	/* 将host_state中的内容加载回pCPU */
 	kvm_x86_ops->vcpu_put(vcpu);
 	vcpu->arch.last_host_tsc = rdtsc();
 	/*
@@ -8207,8 +8208,11 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 	/* 禁止抢占 */
 	preempt_disable();
 
-	/* 对应vmx_prepare_switch_to_guest，用于将pCPU的状态保存到VMCS的
-	 * host state区，使得在VM_EXIT后可以恢复pCPU的状态
+	/* 对应vmx_prepare_switch_to_guest，用于将pCPU的状态段寄存器状态保存到
+	 * loaded_vmcs->host_state中。
+	 *
+	 * 猜测是用来在必要的时候将这些内容全部一股脑儿保存到VMCS的host state
+	 * 区，使得在VM_EXIT后可以恢复pCPU的状态
 	 */
 	kvm_x86_ops->prepare_guest_switch(vcpu);
 
@@ -9198,6 +9202,7 @@ struct kvm_vcpu *kvm_arch_vcpu_create(struct kvm *kvm,
 		"kvm: SMP vm created on host with unstable TSC; "
 		"guest TSC will not be reliable\n");
 
+	/* 对应vmx_create_vcpu */
 	vcpu = kvm_x86_ops->vcpu_create(kvm, id);
 
 	return vcpu;
@@ -9208,6 +9213,7 @@ int kvm_arch_vcpu_setup(struct kvm_vcpu *vcpu)
 	vcpu->arch.arch_capabilities = kvm_get_arch_capabilities();
 	vcpu->arch.msr_platform_info = MSR_PLATFORM_INFO_CPUID_FAULT;
 	kvm_vcpu_mtrr_init(vcpu);
+	/* 这里又要load一次VMCS？ */
 	vcpu_load(vcpu);
 	kvm_vcpu_reset(vcpu, false);
 	kvm_init_mmu(vcpu, false);
@@ -9312,6 +9318,7 @@ void kvm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 		vcpu->arch.xcr0 = XFEATURE_MASK_FP;
 	}
 
+	/* ax等传统寄存器全部置为0 */
 	memset(vcpu->arch.regs, 0, sizeof(vcpu->arch.regs));
 	vcpu->arch.regs_avail = ~0;
 	vcpu->arch.regs_dirty = ~0;
@@ -9542,6 +9549,7 @@ int kvm_arch_vcpu_init(struct kvm_vcpu *vcpu)
 	vcpu->arch.pending_external_vector = -1;
 	vcpu->arch.preempted_in_kernel = false;
 
+	/* hyper-v？*/
 	kvm_hv_vcpu_init(vcpu);
 
 	return 0;

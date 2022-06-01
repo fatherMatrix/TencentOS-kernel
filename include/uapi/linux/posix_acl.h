@@ -25,12 +25,12 @@
 #define ACL_TYPE_DEFAULT	(0x4000)
 
 /* e_tag entry in struct posix_acl_entry */
-#define ACL_USER_OBJ		(0x01)
-#define ACL_USER		(0x02)
-#define ACL_GROUP_OBJ		(0x04)
-#define ACL_GROUP		(0x08)
-#define ACL_MASK		(0x10)
-#define ACL_OTHER		(0x20)
+#define ACL_USER_OBJ		(0x01)		// 文件属主
+#define ACL_USER		(0x02)		// 除文件属主外的其他单个用户
+#define ACL_GROUP_OBJ		(0x04)		// 文件所属用户组
+#define ACL_GROUP		(0x08)		// 其他用户组
+#define ACL_MASK		(0x10)		// 除ACL_USER_OBJ和ACL_OTHER之外的ACL表项所允许的最大权限
+#define ACL_OTHER		(0x20)		 
 
 /* permissions in the e_perm field */
 #define ACL_READ		(0x04)

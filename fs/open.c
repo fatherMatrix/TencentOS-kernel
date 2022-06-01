@@ -964,6 +964,9 @@ static inline int build_open_flags(int flags, umode_t mode, struct open_flags *o
 	 */
 	flags &= VALID_OPEN_FLAGS;
 
+	/*
+	 * 只有在涉及创建新文件时，mode参数才有意义
+	 */		
 	if (flags & (O_CREAT | __O_TMPFILE))
 		op->mode = (mode & S_IALLUGO) | S_IFREG;
 	else

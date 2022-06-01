@@ -347,11 +347,17 @@ EXPORT_SYMBOL(posix_acl_from_mode);
 int
 posix_acl_permission(struct inode *inode, const struct posix_acl *acl, int want)
 {
+	/*
+	 * 参数want是MAY_READ，MAY_WRITE等
+	 */
 	const struct posix_acl_entry *pa, *pe, *mask_obj;
 	int found = 0;
 
 	want &= MAY_READ | MAY_WRITE | MAY_EXEC | MAY_NOT_BLOCK;
 
+	/*
+	 * 找到对应的访问控制项
+	 */
 	FOREACH_ACL_ENTRY(pa, acl, pe) {
                 switch(pa->e_tag) {
                         case ACL_USER_OBJ:
@@ -390,6 +396,12 @@ posix_acl_permission(struct inode *inode, const struct posix_acl *acl, int want)
         }
 	return -EIO;
 
+	/* 
+	 * 查看是否满足ACL_MASK约束
+	 *
+	 * 如果ACL_MASK在上面的for循环中被略过了呢？难道ACL_MASK在a_entries中的
+	 * 位置有规定？
+	 */
 mask:
 	for (mask_obj = pa+1; mask_obj != pe; mask_obj++) {
 		if (mask_obj->e_tag == ACL_MASK) {
@@ -399,8 +411,7 @@ mask:
 		}
 	}
 
-check_perm:
-	if ((pa->e_perm & want) == want)
+check_perm: if ((pa->e_perm & want) == want)
 		return 0;
 	return -EACCES;
 }

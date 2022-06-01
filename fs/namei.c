@@ -267,6 +267,9 @@ void putname(struct filename *name)
 		__putname(name);
 }
 
+/*
+ * @mask: Right to check for (%MAY_READ, %MAY_WRITE, %MAY_EXEC)
+ */
 static int check_acl(struct inode *inode, int mask)
 {
 #ifdef CONFIG_FS_POSIX_ACL
@@ -305,18 +308,39 @@ static int acl_permission_check(struct inode *inode, int mask)
 	if (likely(uid_eq(current_fsuid(), inode->i_uid)))
 		mode >>= 6;
 	else {
+		/*
+		 * 当inode设置了ACL权限后，UGO权限中G部分表示ACL_MASK的权限。而
+		 * ACL_MASK权限表示ACL_USER、ACL_GROUP和ACL_OTHER权限的合集。
+		 *
+		 * 此处如果(mode & S_IRWXG) == 0，意味着ACL_USER、ACL_GROUP和
+		 * ACL_OTHER都是空白，也无需继续进行check_acl()
+		 */
 		if (IS_POSIXACL(inode) && (mode & S_IRWXG)) {
 			int error = check_acl(inode, mask);
 			if (error != -EAGAIN)
 				return error;
 		}
 
+		/* 
+		 * 只有当check_acl()返回-EAGAIN后，才会运行到这个位置。如果没有
+		 * 开启ACL，那么check_acl()直接返回-EAGAIN。
+		 */
 		if (in_group_p(inode->i_gid))
 			mode >>= 3;
 	}
 
 	/*
 	 * If the DACs are ok we don't need any capability check.
+	 *
+	 * 上面对mode的移位操作只是为了选出适合角色的3bit权限，并将其放到mode中
+	 * 的最低3bit。
+	 *
+	 * 如果mode中没有允许某个权限，那么~mode中这一位就为1。此时~mode & mask
+	 * 中这一位即为1。此时与(MAY_READ | MAY_WRITE | MAY_EXEC)位与后这一位即
+	 * 为1。
+	 *
+	 * 这种情况下，最终结果不为0。总结就是，如果mode中没有设置mask中需要的
+	 * 某种权限，那么返回值不为0。
 	 */
 	if ((mask & ~mode & (MAY_READ | MAY_WRITE | MAY_EXEC)) == 0)
 		return 0;
@@ -384,6 +408,8 @@ EXPORT_SYMBOL(generic_permission);
  * even looking at the inode->i_op values. So we keep a cache
  * flag in inode->i_opflags, that says "this has not special
  * permission function, use the fast case".
+ *
+ * @mask: Right to check for (%MAY_READ, %MAY_WRITE, %MAY_EXEC)
  */
 static inline int do_inode_permission(struct inode *inode, int mask)
 {
@@ -2219,6 +2245,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		rcu_read_lock();
 
 	nd->last_type = LAST_ROOT; /* if there are only slashes... */
+	/* 对应lookup_flag */
 	nd->flags = flags | LOOKUP_JUMPED | LOOKUP_PARENT;
 	nd->depth = 0;
 	if (flags & LOOKUP_ROOT) {
@@ -3564,6 +3591,9 @@ static int do_o_path(struct nameidata *nd, unsigned flags, struct file *file)
 static struct file *path_openat(struct nameidata *nd,
 			const struct open_flags *op, unsigned flags)
 {
+	/*
+	 * 入参中的flags为open_flags中的lookup_flag，而不是open_flag
+	 */
 	struct file *file;
 	int error;
 
@@ -3584,6 +3614,8 @@ static struct file *path_openat(struct nameidata *nd,
  		 *  - inode
  		 *  - seq, m_seq, root_seq
  		 *  - etc.
+		 *
+		 *  此处的flags为open_flags中的lookup_flag
  		 */ 
 		const char *s = path_init(nd, flags);
 		/*
@@ -3593,7 +3625,8 @@ static struct file *path_openat(struct nameidata *nd,
  		 *
  		 * 不过既然link_path_walk()会循环解析多个路径分量，那么这里为
  		 * 什么还需要循环解析呢？
- 		 *  - do_last()有可能返回1，表示需要跟随符号连接
+ 		 *  - do_last()有可能返回1，表示需要跟随符号连接。此时需要再次
+		 *    进入while循环，继续处理相关路径
  		 */ 
 		while (!(error = link_path_walk(s, nd)) &&
 			(error = do_last(nd, file, op)) > 0) {

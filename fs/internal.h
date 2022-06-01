@@ -115,8 +115,8 @@ extern bool mount_capable(struct fs_context *);
  */
 struct open_flags {
 	int open_flag;
-	umode_t mode;
-	int acc_mode;
+	umode_t mode;		// 创建新文件时使用的S_*
+	int acc_mode;		// 从open系统调用第二个参数中提取的O_RDONLY, O_WRITE, O_RDWR等
 	int intent;
 	int lookup_flags;
 };

@@ -148,6 +148,9 @@ struct file *alloc_empty_file(int flags, const struct cred *cred)
 			goto over;
 	}
 
+	/*
+	 * 此处的flags为open_flags中的open_flag
+	 */
 	f = __alloc_file(flags, cred);
 	if (!IS_ERR(f))
 		percpu_counter_inc(&nr_files);

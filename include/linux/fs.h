@@ -224,7 +224,7 @@ typedef int (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
  * Derek Atkins <warlord@MIT.EDU> 94-10-20
  */
 struct iattr {
-	unsigned int	ia_valid;
+	unsigned int	ia_valid;	/* 检验是否有权限修改其中置为1的位 */
 	umode_t		ia_mode;
 	kuid_t		ia_uid;
 	kgid_t		ia_gid;

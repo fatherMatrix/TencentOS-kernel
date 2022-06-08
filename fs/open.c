@@ -557,7 +557,18 @@ retry_deleg:
 	error = security_path_chmod(path, mode);
 	if (error)
 		goto out_unlock;
+	/*
+ 	 * 把mode中的S_IALLUGO覆盖的位 和 inode->i_mode中非S_IALLUGO覆盖的位拼
+ 	 * 接起来。
+ 	 *
+ 	 * 之所以这么做，是因为inode->i_mode中有些位不是chmod负责操作的。chmod
+ 	 * 制定的参数只是S_IALLUGO覆盖的那一段，将其与非S_IALLUGO覆盖的拼接意
+ 	 * 味着mode部分用新的，其他部分用旧的
+ 	 */
 	newattrs.ia_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
+	/*
+ 	 * ATTR_MODE代表要改变mode，ATTR_CTIME代表要改变ChangeTime
+ 	 */
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
 	error = notify_change(path->dentry, &newattrs, &delegated_inode);
 out_unlock:

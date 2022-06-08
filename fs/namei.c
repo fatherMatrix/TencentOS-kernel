@@ -1873,7 +1873,8 @@ static int walk_component(struct nameidata *nd, int flags)
  		 * nd->last是将要检索的路径分量
  		 * nd->path.dentry是当前目录
 		 *
-		 * 内部会调用文件系统特定的方法
+		 * 内部会调用文件系统特定的方法。此函数返回后，path.dentry中保
+		 * 存目标文件的dentry项指针
  		 */ 
 		path.dentry = lookup_slow(&nd->last, nd->path.dentry,
 					  nd->flags);
@@ -2208,8 +2209,13 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		} while (unlikely(*name == '/'));
 		if (unlikely(!*name)) {
 OK:
-			/* name指针指向NUL了，name解析结束 */
-			/* pathname body, done */
+			/* 
+ 			 * pathname body, done 
+ 			 *
+ 			 * name指针指向NUL了，name解析结束。
+ 			 * 但此时最后一个分量还没有被解析，即本函数只处理路径，
+ 			 * 不处理最后一个代表文件的分量
+ 			 */
 			if (!nd->depth)
 				return 0;
 			/* 是符号连接 */

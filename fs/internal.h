@@ -114,11 +114,11 @@ extern bool mount_capable(struct fs_context *);
  * open.c
  */
 struct open_flags {
-	int open_flag;
-	umode_t mode;		// 创建新文件时使用的S_*
+	int open_flag;          // open系统调用的第二个参数重非acc_mode中的其他标志位
+	umode_t mode;		// 创建新文件时使用的S_I*
 	int acc_mode;		// 从open系统调用第二个参数中提取的O_RDONLY, O_WRITE, O_RDWR等
 	int intent;
-	int lookup_flags;
+	int lookup_flags;	// 进行查找时使用的标识
 };
 extern struct file *do_filp_open(int dfd, struct filename *pathname,
 		const struct open_flags *op);

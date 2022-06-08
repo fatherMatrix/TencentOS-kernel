@@ -175,6 +175,9 @@ static void __init lsm_set_blob_sizes(struct lsm_blob_sizes *needed)
 /* Prepare LSM for initialization. */
 static void __init prepare_lsm(struct lsm_info *lsm)
 {
+	/*
+	 * 判断该lsm是否应该启动，包括配置参数检查以及与其他lsm的冲突检查
+	 */
 	int enabled = lsm_allowed(lsm);
 
 	/* Record enablement (to handle any following exclusive LSMs). */
@@ -183,6 +186,9 @@ static void __init prepare_lsm(struct lsm_info *lsm)
 	/* If enabled, do pre-initialization work. */
 	if (enabled) {
 		if ((lsm->flags & LSM_FLAG_EXCLUSIVE) && !exclusive) {
+			/*
+			 * 设置全局的独占标识
+			 */
 			exclusive = lsm;
 			init_debug("exclusive chosen: %s\n", lsm->name);
 		}
@@ -283,10 +289,21 @@ static int lsm_append(const char *new, char **result);
 static void __init ordered_lsm_init(void)
 {
 	struct lsm_info **lsm;
-
+	
+	/*
+	 * lsm是一个结构体指针数组，用于保存指向静态数据区里定义的lsm_info结构体
+	 * 指针，它会在ordered_lsm_parse中进行赋值；
+	 */
 	ordered_lsms = kcalloc(LSM_COUNT + 1, sizeof(*ordered_lsms),
 				GFP_KERNEL);
 
+	/*
+	 * chosen_lsm_order和chosen_major_lsm均保存cmdline传入的lsm相关参数，分
+	 * 别对应cmdline的"lsm="和"security="，但是"lsm="表示指定多个安全模块的
+	 * 加载顺序，"security="是指定一个补充加载的安全模块(其他模块是否需要加
+	 * 载还是CONFIG_LSM决定)。"lsm="优先级更高，如果配置了，"security="就失
+	 * 效(作为即将淘汰接口建议不再使用)。
+	 */
 	if (chosen_lsm_order) {
 		if (chosen_major_lsm) {
 			pr_info("security= is ignored because it is superseded by lsm=\n");
@@ -308,6 +325,11 @@ static void __init ordered_lsm_init(void)
 
 	/*
 	 * Create any kmem_caches needed for blobs
+	 *
+	 * 此时全局变量blob_sizes中已经统计好了所有已安装的lsm需要的安全域大小，
+	 * 所以在此处分配安全域内存空间缓存。
+	 *
+	 * 这里决定了lsm的选择安装只能在内核启动时，而添加只能在编译内核前
 	 */
 	if (blob_sizes.lbs_file)
 		lsm_file_cache = kmem_cache_create("lsm_file_cache",
@@ -329,17 +351,33 @@ static void __init ordered_lsm_init(void)
 int __init early_security_init(void)
 {
 	int i;
+	/*
+	 * security_hook_heads是一个全局变量，内核中各个安全模块都会向其注册回调
+	 */
 	struct hlist_head *list = (struct hlist_head *) &security_hook_heads;
 	struct lsm_info *lsm;
 
+	/*
+	 * 初始化security_hook_heads中所有hook点对应的hlist_head
+	 */
 	for (i = 0; i < sizeof(security_hook_heads) / sizeof(struct hlist_head);
 	     i++)
 		INIT_HLIST_HEAD(&list[i]);
 
+	/* 
+	 * __start_early_lsm_info和__end_early_lsm_info是全局变量，是在链接脚本
+	 * 中初始化的
+	 */
 	for (lsm = __start_early_lsm_info; lsm < __end_early_lsm_info; lsm++) {
 		if (!lsm->enabled)
 			lsm->enabled = &lsm_enabled_true;
+		/*
+		 * 检查是否可以启动，并设置blob_size
+		 */
 		prepare_lsm(lsm);
+		/*
+		 * 调用lsm各自自定义的init方法
+		 */
 		initialize_lsm(lsm);
 	}
 
@@ -360,6 +398,9 @@ int __init security_init(void)
 	/*
 	 * Append the names of the early LSM modules now that kmalloc() is
 	 * available
+	 *
+	 * security_early_init()中注册lsm模块时，kmalloc还不可用。此时kmalloc已
+	 * 可用，所以把security_early_init()中留下的尾巴处理好
 	 */
 	for (lsm = __start_early_lsm_info; lsm < __end_early_lsm_info; lsm++) {
 		if (lsm->enabled)

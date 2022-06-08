@@ -306,6 +306,9 @@ static int acl_permission_check(struct inode *inode, int mask)
 	unsigned int mode = inode->i_mode;
 
 	if (likely(uid_eq(current_fsuid(), inode->i_uid)))
+		/* 
+ 		 * 同一个用户，使用User的rwx标志
+ 		 */ 
 		mode >>= 6;
 	else {
 		/*
@@ -326,7 +329,15 @@ static int acl_permission_check(struct inode *inode, int mask)
 		 * 开启ACL，那么check_acl()直接返回-EAGAIN。
 		 */
 		if (in_group_p(inode->i_gid))
+			/* 
+ 			 * 同一个组，使用Group的rwx标志
+ 			 */ 
 			mode >>= 3;
+
+		/*
+ 		 * 运行到这里，说明是other，使用Other的rwx标志。
+ 		 * 此时不用做移位操作
+ 		 */ 
 	}
 
 	/*
@@ -488,6 +499,9 @@ int inode_permission(struct inode *inode, int mask)
 	if (retval)
 		return retval;
 
+	/*
+	 * LSM SELinux
+	 */
 	return security_inode_permission(inode, mask);
 }
 EXPORT_SYMBOL(inode_permission);
@@ -520,7 +534,7 @@ EXPORT_SYMBOL(path_put);
 
 #define EMBEDDED_LEVELS 2
 struct nameidata {
-	struct path	path; 			/* 已解析路径，未解析的父目录 */
+	struct path	path; 			/* 已解析路径，未解析分量的父目录 */
 	struct qstr	last; 			/* 需要解析的文件路径分量 */
 	struct path	root; 			/* 根目录 */
 	struct inode	*inode; 		/* path.dentry.d_inode */
@@ -1846,6 +1860,8 @@ static int walk_component(struct nameidata *nd, int flags)
 		return err;
 	}
 	/*
+	 * 快速查找————依赖于缓存
+	 *
  	 * 进行路径名的查找，目标存放在nd->last中，查找结果存放在inode和path中
  	 * 返回出来
  	 */ 
@@ -1856,6 +1872,8 @@ static int walk_component(struct nameidata *nd, int flags)
 		/* 
  		 * nd->last是将要检索的路径分量
  		 * nd->path.dentry是当前目录
+		 *
+		 * 内部会调用文件系统特定的方法
  		 */ 
 		path.dentry = lookup_slow(&nd->last, nd->path.dentry,
 					  nd->flags);
@@ -2153,6 +2171,10 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		}
 		/* 普通文件和目录 */
 		if (likely(type == LAST_NORM)) {
+			/*
+			 * nameidata->path中存储的是当前最新的已解析路径，
+			 * 即当前待解析路径的父目录
+			 */
 			struct dentry *parent = nd->path.dentry;
 			nd->flags &= ~LOOKUP_JUMPED;
 			if (unlikely(parent->d_flags & DCACHE_OP_HASH)) {
@@ -3483,6 +3505,9 @@ finish_open:
 		got_write = true;
 	}
 finish_open_created:
+	/*
+	 * 检查是否有打开权限
+	 */
 	error = may_open(&nd->path, acc_mode, open_flag);
 	if (error)
 		goto out;
@@ -3592,7 +3617,7 @@ static struct file *path_openat(struct nameidata *nd,
 			const struct open_flags *op, unsigned flags)
 {
 	/*
-	 * 入参中的flags为open_flags中的lookup_flag，而不是open_flag
+	 * 入参中的flags为open_flags中的lookup_flags，而不是open_flag
 	 */
 	struct file *file;
 	int error;

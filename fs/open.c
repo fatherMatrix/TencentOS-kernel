@@ -776,6 +776,9 @@ static int do_dentry_open(struct file *f,
 	if (S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode))
 		f->f_mode |= FMODE_ATOMIC_POS;
 
+	/*
+	 * file结构体中的f_op是根据inode结构体中的i_fop中得到的
+	 */
 	f->f_op = fops_get(inode->i_fop);
 	if (WARN_ON(!f->f_op)) {
 		error = -ENODEV;
@@ -1173,7 +1176,13 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 	if (force_o_largefile())
 		flags |= O_LARGEFILE;
 
-	/* AT_FDCWD是一个特殊值，用来表示在当前工作目录进行打开操作 */
+	/* 
+	 * AT_FDCWD是一个特殊值，用来表示在当前工作目录进行打开操作
+	 *
+	 * filename是文件名
+	 * flags是O_RDONLY, O_WRITE, O_RDWR, O_SYNC等
+	 * mode是S_I*，用于标识新创建文件的UGO权限
+	 */
 	return do_sys_open(AT_FDCWD, filename, flags, mode);
 }
 

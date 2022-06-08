@@ -596,6 +596,11 @@ asmlinkage __visible void __init start_kernel(void)
 	boot_cpu_init();
 	page_address_init();
 	pr_notice("%s", linux_banner);
+	/*
+	 * LSM早期初始化
+	 *
+	 * 目的是为了对下面setup_arch中的某些操作进行安全检查
+	 */
 	early_security_init();
 	setup_arch(&command_line);
 	setup_command_line(command_line);
@@ -764,6 +769,9 @@ asmlinkage __visible void __init start_kernel(void)
 	uts_ns_init();
 	buffer_init();
 	key_init();
+	/* 
+	 * LSM初始化，前边的security_early_init对应早期初始化
+	 */
 	security_init();
 	dbg_late_init();
 	vfs_caches_init();

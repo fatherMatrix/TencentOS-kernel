@@ -286,22 +286,25 @@ struct usb_descriptor_header {
 /*-------------------------------------------------------------------------*/
 
 /* USB_DT_DEVICE: Device descriptor */
+/*
+ * 描述关于USB设备的通用信息
+ */
 struct usb_device_descriptor {
-	__u8  bLength;
-	__u8  bDescriptorType;
+	__u8  bLength;			/* 描述符长度 */
+	__u8  bDescriptorType;		/* 描述符类型编号 */
 
-	__le16 bcdUSB;
-	__u8  bDeviceClass;
-	__u8  bDeviceSubClass;
-	__u8  bDeviceProtocol;
-	__u8  bMaxPacketSize0;
-	__le16 idVendor;
-	__le16 idProduct;
-	__le16 bcdDevice;
-	__u8  iManufacturer;
-	__u8  iProduct;
-	__u8  iSerialNumber;
-	__u8  bNumConfigurations;
+	__le16 bcdUSB;			/* USB版本号 */
+	__u8  bDeviceClass;		/* USB分配的设备类code */
+	__u8  bDeviceSubClass;		/* USB分配的子类code */
+	__u8  bDeviceProtocol;		/* USB分配的协议code */
+	__u8  bMaxPacketSize0;		/* endpoint0最大包大小 */
+	__le16 idVendor;		/* 厂商编号 */
+	__le16 idProduct;		/* 产品编号 */
+	__le16 bcdDevice;		/* 设备出厂编号 */
+	__u8  iManufacturer;		/* 描述厂商字符串的索引 */
+	__u8  iProduct;			/* 描述产品字符串的索引 */
+	__u8  iSerialNumber;		/* 描述设备序列号字符串的索引 */
+	__u8  bNumConfigurations;	/* 可能的配置数量 */
 } __attribute__ ((packed));
 
 #define USB_DT_DEVICE_SIZE		18
@@ -343,8 +346,8 @@ struct usb_device_descriptor {
  * descriptors.
  */
 struct usb_config_descriptor {
-	__u8  bLength;
-	__u8  bDescriptorType;
+	__u8  bLength;			/* 描述符长度 */
+	__u8  bDescriptorType;		/* 描述符类型编号 */
 
 	__le16 wTotalLength;
 	__u8  bNumInterfaces;

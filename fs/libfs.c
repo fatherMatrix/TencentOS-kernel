@@ -425,6 +425,9 @@ int simple_setattr(struct dentry *dentry, struct iattr *iattr)
 	struct inode *inode = d_inode(dentry);
 	int error;
 
+	/* 
+	 * 进行setattr的权限检查
+	 */
 	error = setattr_prepare(dentry, iattr);
 	if (error)
 		return error;

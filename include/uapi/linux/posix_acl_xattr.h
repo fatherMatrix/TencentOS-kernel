@@ -27,8 +27,24 @@
 #define ACL_UNDEFINED_ID	(-1)
 
 struct posix_acl_xattr_entry {
+	/*
+	 * 包含六种tag类型：
+	 * ACL_USER_OBJ: 相当于user的权限
+	 * ACL_USER：ACL定义的其他用户的权限
+	 * ACL_GROUP_OBJ：相当于group的权限
+	 * ACL_GROUP：是ACL定义的其他用户组的权限
+	 * ACL_MASK：定义了ACL_USER、ACL_GROUP_OBJ和ACL_GROUP的最大权限
+	 * ACL_OTHER：相当于other的权限
+	 */
 	__le16			e_tag;
+	/*
+	 * 代表权限，即rwx
+	 */
 	__le16			e_perm;
+	/*
+	 * 标识唯一的用户或用户组id。
+	 * 只有ACL_USER和ACL_GROUP有值，因为只有这两个tag定义了额外的用户权限
+	 */
 	__le32			e_id;
 };
 

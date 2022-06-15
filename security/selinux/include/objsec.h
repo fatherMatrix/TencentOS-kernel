@@ -144,6 +144,9 @@ struct bpf_security_struct {
 	u32 sid;  /*SID of bpf obj creater*/
 };
 
+/*
+ * 通过selinux_blob_sizes __lsm_ro_after_init = {初始化，可以通过grep查找
+ */
 extern struct lsm_blob_sizes selinux_blob_sizes;
 static inline struct task_security_struct *selinux_cred(const struct cred *cred)
 {

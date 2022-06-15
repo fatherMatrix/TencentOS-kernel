@@ -20,6 +20,19 @@
 
 static bool chown_ok(const struct inode *inode, kuid_t uid)
 {
+	/*
+	 * 对于改变user owner，要求满足如下其中一个条件
+	 * 1. fsuid == inode->i_uid 且 uid == inode->i_uid
+	 * 2. 具有CAP_CHOWN能力
+	 *
+	 * 条件1针对non-root进程，
+	 *     fsuid == inode->i_uid要求自己是文件的主人
+	 *     uid == inode->i_uid要求不能把别人设置成文件的主人
+	 *
+	 * 条件2针对root进程：
+	 *     root进程的cap是全满的，所以root进程可以把任意用户设置为任意文件
+	 *     的主人
+	 */
 	if (uid_eq(current_fsuid(), inode->i_uid) &&
 	    uid_eq(uid, inode->i_uid))
 		return true;

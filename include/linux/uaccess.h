@@ -137,6 +137,14 @@ extern __must_check unsigned long
 _copy_to_user(void __user *, const void *, unsigned long);
 #endif
 
+/*
+ * 要关注两个问题：
+ * 1. 虚拟地址是否处于有效的地址空间
+ * 2. 虚拟地址是否具有对应的物理页
+ *
+ * 第一个问题较为容易解决，只需对要拷贝的起始-结束地址做检查即可。
+ * 第二个问题比较复杂，现代内核使用fixup段在异常处理时解决
+ */
 static __always_inline unsigned long __must_check
 copy_from_user(void *to, const void __user *from, unsigned long n)
 {

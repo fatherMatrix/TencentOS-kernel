@@ -22,7 +22,7 @@
 extern int file_caps_enabled;
 
 typedef struct kernel_cap_struct {
-	__u32 cap[_KERNEL_CAPABILITY_U32S];
+	__u32 cap[_KERNEL_CAPABILITY_U32S];	/* 总大小对应一个64位掩码 */
 } kernel_cap_t;
 
 /* same as vfs_ns_cap_data but in cpu endian and always filled completely */

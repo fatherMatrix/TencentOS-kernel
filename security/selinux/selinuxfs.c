@@ -92,6 +92,9 @@ static int selinux_fs_info_create(struct super_block *sb)
 	fsi->last_ino = SEL_INO_NEXT - 1;
 	fsi->state = &selinux_state;
 	fsi->sb = sb;
+	/*
+	 * sb->s_fs_info是一个void *，用来指向具体文件系统的私有数据
+	 */
 	sb->s_fs_info = fsi;
 	return 0;
 }
@@ -2064,6 +2067,13 @@ static int __init init_sel_fs(void)
 		err = PTR_ERR(selinuxfs_mount);
 		selinuxfs_mount = NULL;
 	}
+	/*
+	 * 上面只是创建了这个mount结构体，并没有进行mount结构体的关联。
+	 * 所以开机后其实还是需要手动挂载
+	 *
+	 * 后面挂载时可能不再需要重新创建mount结构体，直接使用这个全局变量
+	 * selinuxfs_mount即可？怎么做到的？
+	 */
 	selinux_null.dentry = d_hash_and_lookup(selinux_null.mnt->mnt_root,
 						&null_name);
 	if (IS_ERR(selinux_null.dentry)) {

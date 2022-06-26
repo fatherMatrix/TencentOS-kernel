@@ -543,6 +543,9 @@ int simple_fill_super(struct super_block *s, unsigned long magic,
 	s->s_blocksize = PAGE_SIZE;
 	s->s_blocksize_bits = PAGE_SHIFT;
 	s->s_magic = magic;
+	/*
+	 * 超级块方法很少，不支持新建inode等
+	 */
 	s->s_op = &simple_super_operations;
 	s->s_time_gran = 1;
 

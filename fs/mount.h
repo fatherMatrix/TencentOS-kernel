@@ -25,8 +25,23 @@ struct mnt_pcp {
 };
 
 struct mountpoint {
+	/*
+	 * 散列链表节点成员，
+	 * 将mountpoint实例添加到全局散列表mountpoint_hashtable
+	 */
 	struct hlist_node m_hash;
+	/*
+	 * 指向挂载点dentry实例，
+	 * 是根文件系统中的的目录项，不是挂载文件系统的根目录项
+	 *
+	 * 那么这个字段和mount结构体中的mnt_mountpoint字段有什么
+	 * 区别？
+	 *  - 根据crash工具，确实没有区别。存储的指针地址相同
+	 */
 	struct dentry *m_dentry;
+	/*
+	 * 挂载点挂载操作的Mount实例，链表头
+	 */
 	struct hlist_head m_list;
 	int m_count;
 };
@@ -34,7 +49,12 @@ struct mountpoint {
 struct mount {
 	struct hlist_node mnt_hash;
 	struct mount *mnt_parent;
+	/* 
+	 * 挂载点对应的parent文件系统目录项，与this->mnt_mp中的m_dentry字段指向
+	 * 了相同的位置
+	 */
 	struct dentry *mnt_mountpoint;
+	/* 被mount文件系统的信息 */
 	struct vfsmount mnt;
 	union {
 		struct rcu_head mnt_rcu;
@@ -48,6 +68,11 @@ struct mount {
 #endif
 	struct list_head mnt_mounts;	/* list of children, anchored here */
 	struct list_head mnt_child;	/* and going through their mnt_child */
+	/* 
+	 * 一个文件系统（超级块）可以同时被多次挂载到不同的挂载点，每一次挂载
+	 * 都会产生一个mount结构体。同一个超级块被多次挂载产生的多个mount结构
+	 * 体通过mnt_instance字段链入sb->s_mounts链表头
+	 */
 	struct list_head mnt_instance;	/* mount instance on sb->s_mounts */
 	const char *mnt_devname;	/* Name of device e.g. /dev/dsk/hda1 */
 	struct list_head mnt_list;

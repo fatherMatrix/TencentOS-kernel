@@ -7144,6 +7144,9 @@ void selinux_complete_init(void)
 	iterate_supers(delayed_superblock_init, NULL);
 }
 
+/*
+ * FUCK: 不是说要early initialization吗？为什么不是DEFINE_EARLY_LSM(selinux)?
+ */
 /* SELinux requires early initialization in order to label
    all processes and objects when they are created. */
 DEFINE_LSM(selinux) = {

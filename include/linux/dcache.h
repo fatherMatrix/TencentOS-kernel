@@ -87,6 +87,21 @@ extern struct dentry_stat_t dentry_stat;
 
 #define d_lock	d_lockref.lock
 
+/*
+ * 每个目录项对象都有4种状态，分别为：
+ * - 空闲状态：
+ *   	目录项对象不包含有效信息，没有被VFS使用
+ *
+ * - 未使用状态：
+ *   	目录项对象当前没有被内核使用，d_lockref的值为0，d_inode仍然指向相关的索
+ *   	引节点
+ *
+ * - 正在使用状态：
+ *   	正在被使用，d_lockref的值大于0，d_inode仍然指向相关的索引节点
+ *
+ * - 负状态：
+ *   	与目录项关联的索引节点不存在，相应的磁盘索引节点已经删除
+ */
 struct dentry {
 	/* RCU lookup touched fields */
 	unsigned int d_flags;		/* protected by d_lock */

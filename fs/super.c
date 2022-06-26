@@ -533,6 +533,9 @@ retry:
 		goto retry;
 	}
 
+	/*
+	 * 这个函数的跳跃关系有点复杂
+	 */
 	s->s_fs_info = fc->s_fs_info;
 	err = set(s, fc);
 	if (err) {
@@ -546,6 +549,9 @@ retry:
 	s->s_iflags |= fc->s_iflags;
 	strlcpy(s->s_id, s->s_type->name, sizeof(s->s_id));
 	list_add_tail(&s->s_list, &super_blocks);
+	/* 
+	 * 这一步执行结束后，上边的第一个if才可能执行成功
+	 */
 	hlist_add_head(&s->s_instances, &s->s_type->fs_supers);
 	spin_unlock(&sb_lock);
 	get_filesystem(s->s_type);
@@ -616,6 +622,9 @@ retry:
 		goto retry;
 	}
 
+	/* 
+	 * 将超级块和对应的block_device结构体关联起来
+	 */
 	err = set(s, data);
 	if (err) {
 		spin_unlock(&sb_lock);
@@ -1188,6 +1197,10 @@ int vfs_get_super(struct fs_context *fc,
 		return PTR_ERR(sb);
 
 	if (!sb->s_root) {
+		/*
+		 * 如果超级块的root字段是空，说明超级块还没有被填写，此时调用对
+		 * 应的超级块填写函数
+		 */
 		err = fill_super(sb, fc);
 		if (err)
 			goto error;
@@ -1195,6 +1208,9 @@ int vfs_get_super(struct fs_context *fc,
 		sb->s_flags |= SB_ACTIVE;
 		fc->root = dget(sb->s_root);
 	} else {
+		/*
+		 * 如果超级快的root字段不为空，说明超级块已经填写好了
+		 */
 		fc->root = dget(sb->s_root);
 		if (keying == vfs_get_single_reconf_super) {
 			err = reconfigure_super(fc);
@@ -1372,6 +1388,9 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 	if (!(flags & SB_RDONLY))
 		mode |= FMODE_WRITE;
 
+	/*
+	 * 获取/dev/vdb对应的block_device结构体
+	 */
 	bdev = blkdev_get_by_path(dev_name, mode, fs_type);
 	if (IS_ERR(bdev))
 		return ERR_CAST(bdev);

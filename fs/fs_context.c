@@ -155,6 +155,9 @@ int vfs_parse_fs_param(struct fs_context *fc, struct fs_parameter *param)
 			return invalf(fc, "VFS: Non-string source");
 		if (fc->source)
 			return invalf(fc, "VFS: Multiple sources");
+		/* 
+		 * fc->source表示要被挂载的盘符，比如/dev/vdb
+		 */
 		fc->source = param->string;
 		param->string = NULL;
 		return 0;

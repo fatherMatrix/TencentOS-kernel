@@ -84,18 +84,35 @@ struct fs_parameter {
  * See Documentation/filesystems/mount_api.txt
  */
 struct fs_context {
+	/* 
+	 * 只能被file_system_type结构体中的->init_fs_context()
+	 * 回调函数设置。
+	 *
+	 * 其中的内容与具体文件系统强相关，因此需要由文件系统自
+	 * 己来进行设置
+	 */
 	const struct fs_context_operations *ops;
 	struct mutex		uapi_mutex;	/* Userspace access mutex */
 	struct file_system_type	*fs_type;
-	/* 可以用来存放文件系统自定义的options参数 */
+	/* 
+	 * 可以用来存放文件系统自定义的options参数，
+	 * this->ops->free()回调函数用来对其进行清理
+	 */
 	void			*fs_private;	/* The filesystem's context */
 	void			*sget_key;
+	/* 
+	 * 只能被this->ops->get_tree()回调函数设置，
+	 * 表示被挂载文件系统的根目录
+	 */
 	struct dentry		*root;		/* The root and superblock */
 	struct user_namespace	*user_ns;	/* The user namespace for this mount */
 	struct net		*net_ns;	/* The network namespace for this mount */
 	const struct cred	*cred;		/* The mounter's credentials */
 	struct fc_log		*log;		/* Logging buffer */
 	const char		*source;	/* The source name (eg. dev path) */
+	/* 
+	 * 用于LSM模块的安全域
+	 */
 	void			*security;	/* Linux S&M options */
 	void			*s_fs_info;	/* Proposed s_fs_info */
 	unsigned int		sb_flags;	/* Proposed superblock flags (SB_*) */
@@ -109,7 +126,13 @@ struct fs_context {
 };
 
 struct fs_context_operations {
+	/*
+	 * 用来对fc_context->fs_private字段进行清理
+	 */
 	void (*free)(struct fs_context *fc);
+	/*
+	 * 用来对fc_context->fs_private字段进行复制
+	 */
 	int (*dup)(struct fs_context *fc, struct fs_context *src_fc);
 	int (*parse_param)(struct fs_context *fc, struct fs_parameter *param);
 	int (*parse_monolithic)(struct fs_context *fc, void *data);

@@ -65,6 +65,9 @@ struct fs_context;
 #define MNT_MARKED		0x4000000
 #define MNT_UMOUNT		0x8000000
 
+/*
+ * 被mount文件系统的根目录和对应的超级块
+ */
 struct vfsmount {
 	struct dentry *mnt_root;	/* root of the mounted tree */
 	struct super_block *mnt_sb;	/* pointer to superblock */

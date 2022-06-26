@@ -1042,6 +1042,9 @@ static void __init do_basic_setup(void)
 	init_irq_proc();
 	do_ctors();
 	usermodehelper_enable();
+	/*
+	 * 调用__initcall(xxx)
+	 */
 	do_initcalls();
 }
 
@@ -1126,6 +1129,9 @@ static int __ref kernel_init(void *unused)
 	kprobe_free_init_mem();
 	ftrace_free_init_mem();
 	free_initmem();
+	/*
+	 * mark_readonly()执行结束后，__ro_after_init标识的变量就变为只读的了
+	 */
 	mark_readonly();
 
 	/*

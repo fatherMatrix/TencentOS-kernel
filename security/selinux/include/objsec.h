@@ -145,7 +145,11 @@ struct bpf_security_struct {
 };
 
 /*
+ * 初始化时定义了selinux所使用的各类型安全上下文的尺寸。
  * 通过selinux_blob_sizes __lsm_ro_after_init = {初始化，可以通过grep查找
+ *
+ * 当对应的LSM（selinux_lsm）注册完成后，保存在对应安全上下文中的偏移。这种设计
+ * 是为了可以存在多种LSM模块。
  */
 extern struct lsm_blob_sizes selinux_blob_sizes;
 static inline struct task_security_struct *selinux_cred(const struct cred *cred)

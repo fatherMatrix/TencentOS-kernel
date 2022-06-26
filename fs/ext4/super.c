@@ -6216,6 +6216,16 @@ static inline int ext3_feature_set_ok(struct super_block *sb)
 static struct file_system_type ext4_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "ext4",
+	/*
+	 * file_system_type中新增的init_fs_context字段这里没有使用？
+	 * - 在alloc_fs_context中，如果init_fs_context字段为空，则将其设置为
+	 *   legacy_init_fs_context。
+	 * - 在legacy_init_fs_context中，将fc->ops设置为了legacy_fs_context_ops
+	 * - 在legacy_fs_context_ops中，将get_tree设置为了legacy_get_tree
+	 * - legacy_get_tree是使用这里的mount回调函数实现的
+	 *
+	 * 所以->mount现在应该是处于过渡期，后面会逐渐取消，转换为fs_context。
+	 */
 	.mount		= ext4_mount,
 	.kill_sb	= kill_block_super,
 	.fs_flags	= FS_REQUIRES_DEV,

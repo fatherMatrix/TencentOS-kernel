@@ -258,6 +258,17 @@ struct obs_kernel_param {
 		__attribute__((aligned((sizeof(long)))))		\
 		= { __setup_str_##unique_id, fn, early }
 
+/*
+ * 开机阶段，当cmdline中有str字符串时，便会调用fn函数。其核心逻辑是在
+ * .init.setup段中设置struct obs_kernel_param类型的变量。变量中包含要
+ * 匹配的字符串str及匹配成功后要调用的函数fn
+ *
+ * 匹配及调用时机：
+ *   start_kernel() 
+ *      -> parse_args() 
+ *         -> unknown_bootoption() 
+ *            -> obsolete_checksetup()
+ */
 #define __setup(str, fn)						\
 	__setup_param(str, fn, fn, 0)
 

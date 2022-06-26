@@ -716,7 +716,7 @@ static bool legitimize_root(struct nameidata *nd)
  * @nd: nameidata pathwalk data
  * Returns: 0 on success, -ECHILD on failure
  *
- * unlazy_walk attempts to legitimize the current nd->path and nd->root
+ * unlazy_walk attempts to legitimize(合法化) the current nd->path and nd->root
  * for ref-walk mode.
  * Must be called from rcu-walk context.
  * Nothing should touch nameidata between unlazy_walk() failure and
@@ -1094,6 +1094,11 @@ static int may_create_in_sticky(umode_t dir_mode, kuid_t dir_uid,
 static __always_inline
 const char *get_link(struct nameidata *nd)
 {
+	/* 
+	 * 在walk_component -> step_into -> pick_link中向stack中存放的符号链接
+	 * 信息。但那个时候只是存放了stack[depth - 1]->link字段，没有解析对应
+	 * 的name字段
+	 */
 	struct saved *last = nd->stack + nd->depth - 1;
 	struct dentry *dentry = last->link.dentry;
 	struct inode *inode = nd->link_inode;
@@ -1287,7 +1292,11 @@ static int follow_managed(struct path *path, struct nameidata *nd)
 				break;
 		}
 
-		/* Transit to a mounted filesystem. */
+		/* Transit to a mounted filesystem. 
+		 *
+		 * dentry->d_flags中有DCACHE_MOUNTED表示这是一个挂载点，所以要
+		 * 自动向下跨越挂载点，走到被挂载操作系统的根目录上去
+		 */
 		if (managed & DCACHE_MOUNTED) {
 			struct vfsmount *mounted = lookup_mnt(path);
 			if (mounted) {
@@ -1400,10 +1409,21 @@ static int follow_dotdot_rcu(struct nameidata *nd)
 	struct inode *inode = nd->inode;
 
 	while (1) {
+		/*
+		 * 当前路径已经是预设根目录了，所以就直接退出，什么都不用做。
+		 * 因为已经是根目录了，再"cd .."也没什么用了
+		 */
 		if (path_equal(&nd->path, &nd->root))
 			break;
+
+		/* 
+		 * 走到这里，说明当前路径不是预设根目录
+		 */
 		if (nd->path.dentry != nd->path.mnt->mnt_root) {
-			/* 未跨过安装点 */
+			/*
+			 * 当前目录不是所在文件系统的根目录，即"cd .."未跨过安
+			 * 装点
+			 */
 			/* 当前所在目录 */
 			struct dentry *old = nd->path.dentry;
 			/* 所在目录的上层目录，即../ */
@@ -1421,23 +1441,56 @@ static int follow_dotdot_rcu(struct nameidata *nd)
 				return -ECHILD;
 			break;
 		} else {
-			/* 跨越了安装点 */
+			/* 
+			 * 跨越了安装点
+			 */
+			/* 当前文件系统的mount实例 */
 			struct mount *mnt = real_mount(nd->path.mnt);
+			/* 父文件系统的mount实例 */
 			struct mount *mparent = mnt->mnt_parent;
+			/*
+			 * 安装点对应的被覆盖文件系统的目录，即挂载点
+			 */
 			struct dentry *mountpoint = mnt->mnt_mountpoint;
 			struct inode *inode2 = mountpoint->d_inode;
 			unsigned seq = read_seqcount_begin(&mountpoint->d_seq);
 			if (unlikely(read_seqretry(&mount_lock, nd->m_seq)))
 				return -ECHILD;
+			/*
+			 * 这个判断成立的话，说明已经是根文件系统了。因为只有根
+			 * 文件系统的父mount和自己才相同
+			 */
 			if (&mparent->mnt == nd->path.mnt)
 				break;
+
+			/* 
+			 * 走到这里，说明当前文件系统不是根文件系统。
+			 *
+			 * 此时跨越安装点的操作就是取得挂载点就可以了
+			 */
 			/* we know that mountpoint was pinned */
 			nd->path.dentry = mountpoint;
+			/* type(nd->path.mnt) == vfsmount */
 			nd->path.mnt = &mparent->mnt;
 			inode = inode2;
 			nd->seq = seq;
+
+			/* 
+			 * 仅仅取得挂载点后还没完，因为"cd .."最终是要走到挂载
+			 * 点的父目录才对。
+			 * 这里不再处理，而是再次进入while循环。此时进入while
+			 * 循环中第一个大的if分支
+			 */
 		}
 	}
+	/*
+	 * 这个循环又是干什么的呢？
+	 *
+	 * 如果说我们在上边的循环中一直退出到了根文件系统上，就需要再反方向往下
+	 * 走，因为我们不能站在根文件系统上。
+	 * 之所以是个while循环，是因为有可能fs1挂载在了根文件系统上，然后fs2又
+	 * 挂载在了fs1上，然后fs3又挂载在了fs2上，然后...
+	 */
 	while (unlikely(d_mountpoint(nd->path.dentry))) {
 		struct mount *mounted;
 		mounted = __lookup_mnt(nd->path.mnt, nd->path.dentry);
@@ -1685,6 +1738,9 @@ static int lookup_fast(struct nameidata *nd,
 
 	path->mnt = mnt;
 	path->dentry = dentry;
+	/*
+	 * 向下跨越挂载点等
+	 */
 	err = follow_managed(path, nd);
 	if (likely(err > 0))
 		*inode = d_backing_inode(path->dentry);
@@ -1763,6 +1819,15 @@ static inline int may_lookup(struct nameidata *nd)
 static inline int handle_dots(struct nameidata *nd, int type)
 {
 	if (type == LAST_DOTDOT) {
+		/* 
+		 * 如果是相对目录起步，那么nd->root字段在path_init()中是没有被
+		 * 设置过的，此时要对其进行赋值。
+		 *
+		 * 之所以path_init()中对相对目录情况不设置nd->root，是出于性能
+		 * 考虑，因为有可能用不上。
+		 * 之所以这里对nd->root字段设置就是因为马上就要用到了。因为这
+		 * 里是要"cd .."了
+		 */
 		if (!nd->root.mnt)
 			set_root(nd);
 		if (nd->flags & LOOKUP_RCU) {
@@ -1805,6 +1870,9 @@ static int pick_link(struct nameidata *nd, struct path *link,
 		}
 	}
 
+	/*
+	 * depth指向的是未使用的格子
+	 */
 	last = nd->stack + nd->depth++;
 	last->link = *link;
 	clear_delayed_call(&last->done);
@@ -1855,12 +1923,20 @@ static int walk_component(struct nameidata *nd, int flags)
 	 */
 	if (unlikely(nd->last_type != LAST_NORM)) {
 		err = handle_dots(nd, nd->last_type);
+		/*
+		 * 非last component在调用walk_component时才传入WALK_MORE参数。
+		 * 因此，只有last component才有可能进入到下面的if语句。
+		 *
+		 * 这里的意思是：我们此时要处理的是"cd ."或者"cd .."，所以原来
+		 * 解析好的符号链接此时不需要了，所以要put_link()来放弃对符号
+		 * 连接的引用计数
+		 */
 		if (!(flags & WALK_MORE) && nd->depth)
 			put_link(nd);
 		return err;
 	}
 	/*
-	 * 快速查找————依赖于缓存
+	 * 快速查找————依赖于缓存。根据「父目录、名称」查找
 	 *
  	 * 进行路径名的查找，目标存放在nd->last中，查找结果存放在inode和path中
  	 * 返回出来
@@ -1882,6 +1958,17 @@ static int walk_component(struct nameidata *nd, int flags)
 			return PTR_ERR(path.dentry);
 
 		path.mnt = nd->path.mnt;
+		/*
+		 * 处理按某种方式管理的目录：
+		 * - 如果自动挂载工具autofs管理这个目录的跳转，那么调用具体文件
+		 *   系统的目录项操作集合的d_manage方法来处理；
+		 * - 如果目录是挂载点，那么在挂载描述符散列表中查找挂载的文件系
+		 *   统，然后跳转到这个文件系统的根目录；
+		 * - 如果目录是自动挂载点，那么调用函数follow_automount自动挂载
+		 *   文件系统
+		 *
+		 * 所以向下跨越挂载点是在这个函数中完成的
+		 */
 		err = follow_managed(&path, nd);
 		if (unlikely(err < 0))
 			return err;
@@ -1895,6 +1982,12 @@ static int walk_component(struct nameidata *nd, int flags)
 		inode = d_backing_inode(path.dentry);
 	}
 
+	/*
+	 * 如果目录是符号链接，那么调用step_into()来加以处理：如果符号链接的嵌
+	 * 套层次超过40，返回错误；nameidata结构体的成员stack指向一个栈，如果栈
+	 * 的最大深度是初始值2，那么把栈的最大深度扩大到40；把解析分量得到的路
+	 * 径信息保存到栈中，接下来解析符号链接的目标。
+	 */
 	return step_into(nd, &path, flags, inode, seq);
 }
 
@@ -2155,7 +2248,11 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		if (err)
 			return err;
 
-		/* hash_len高32位是路径长度，低32位是hash值 */
+		/* 
+		 * hash_len高32位是路径长度，低32位是hash值
+		 *
+		 * nd->path.dentry是当前正站在的目录，name是此目录下的一个分量
+		 */
 		hash_len = hash_name(nd->path.dentry, name);
 
 		type = LAST_NORM;
@@ -2178,9 +2275,13 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 			 */
 			struct dentry *parent = nd->path.dentry;
 			nd->flags &= ~LOOKUP_JUMPED;
+			/*
+			 * 如果文件系统定义了自己的d_hash()方法，则使用文件系统
+			 * 的d_hash()方法，得到新的hash_len，覆盖上面通用
+			 * hash_name()得到的hash_len
+			 */
 			if (unlikely(parent->d_flags & DCACHE_OP_HASH)) {
 				struct qstr this = { { .hash_len = hash_len }, .name = name };
-				/* 利用文件系统特定的d_hash()方法 */
 				err = parent->d_op->d_hash(parent, &this);
 				if (err < 0)
 					return err;
@@ -2189,6 +2290,9 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 			}
 		}
 
+		/*
+		 * 当前要解析的分量保存在nd->last中
+		 */
 		nd->last.hash_len = hash_len;
 		nd->last.name = name;
 		nd->last_type = type;
@@ -2216,9 +2320,18 @@ OK:
  			 * 但此时最后一个分量还没有被解析，即本函数只处理路径，
  			 * 不处理最后一个代表文件的分量
  			 */
+
+			/*
+			 * 此时判断是否还在处理符号链接
+			 *
+			 * 如果nd->depth == 0，表示没有要处理的符号连接，返回0
+			 */
 			if (!nd->depth)
 				return 0;
-			/* 是符号连接 */
+			/* 
+			 * 运行到这里说明有符号链接要处理，将name指向这个符号链
+			 * 接。name表示下一步要处理的路径
+			 */
 			name = nd->stack[nd->depth - 1].name;
 			/* trailing symlink, done */
 			if (!name)
@@ -2233,7 +2346,11 @@ OK:
 			return err;
 
 		if (err) {
-			/* 读取符号连接的目标 */
+			/* 
+			 * 读取符号连接的目标路径，因为在walk_component -> 
+			 * step_into -> pick_link中只存放了符号连接的dentry字段
+			 * 而没有解析其具体的name字段
+			 */
 			const char *s = get_link(nd);
 
 			if (IS_ERR(s))
@@ -2244,7 +2361,12 @@ OK:
 				/* jumped */
 				put_link(nd);
 			} else {
-				/* 符号链接的目标非空，把当前待解析路径压栈 */
+				/* 
+				 * 符号链接的目标非空，把当前【正在】【待】解析
+				 * 路径压栈。转而先去处理符号链接。
+				 *
+				 * 当符号链接处理完后，再继续处理现在保存的路径
+				 */
 				nd->stack[nd->depth - 1].name = name;
 				name = s;
 				continue;
@@ -2412,6 +2534,10 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 			s = ERR_PTR(err);
 	}
 
+	/*
+	 * link_path_walk()成功后返回0
+	 * lookup_last()返回值大于0意味着是个符号链接
+	 */
 	while (!(err = link_path_walk(s, nd))
 		&& ((err = lookup_last(nd)) > 0)) {
 		s = trailing_symlink(nd);

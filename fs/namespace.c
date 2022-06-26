@@ -948,6 +948,12 @@ struct vfsmount *vfs_create_mount(struct fs_context *fc)
 	atomic_inc(&fc->root->d_sb->s_active);
 	mnt->mnt.mnt_sb		= fc->root->d_sb;
 	mnt->mnt.mnt_root	= dget(fc->root);
+	/* 
+	 * 这是啥意思？
+	 *
+	 * 这里还没有对mount结构体进行关联，当进行关联时，会将mnt_mountpoint字
+	 * 段指向正确的位置
+	 */
 	mnt->mnt_mountpoint	= mnt->mnt.mnt_root;
 	mnt->mnt_parent		= mnt;
 
@@ -973,6 +979,12 @@ struct vfsmount *vfs_kern_mount(struct file_system_type *type,
 				int flags, const char *name,
 				void *data)
 {
+	/*
+	 * 此处的name参数表示的是要挂载的盘符，比如/dev/vdb
+	 *
+	 * TODO:
+	 * 对于selinuxfs这种特殊的"盘符"，可能在某些地方有特殊处理
+	 */
 	struct fs_context *fc;
 	struct vfsmount *mnt;
 	int ret = 0;
@@ -984,11 +996,20 @@ struct vfsmount *vfs_kern_mount(struct file_system_type *type,
 	if (IS_ERR(fc))
 		return ERR_CAST(fc);
 
+	/*
+	 * 这里设置了/dev/vdb参数
+	 *
+	 * TODO:
+	 * 哪里设置挂载目录呢？
+	 */
 	if (name)
 		ret = vfs_parse_fs_string(fc, "source",
 					  name, strlen(name));
 	if (!ret)
 		ret = parse_monolithic_mount_data(fc, data);
+	/*
+	 * 执行真正的mount生成操作。只生成，不关联
+	 */
 	if (!ret)
 		mnt = fc_mount(fc);
 	else
@@ -2735,6 +2756,9 @@ static int do_add_mount(struct mount *newmnt, struct path *path, int mnt_flags)
 		goto unlock;
 
 	newmnt->mnt.mnt_flags = mnt_flags;
+	/* 
+	 * 进行mount结构体的关联
+	 */
 	err = graft_tree(newmnt, parent, mp);
 
 unlock:
@@ -2766,12 +2790,19 @@ static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint,
 
 	up_write(&sb->s_umount);
 
+	/*
+	 * 分配并设置struct mount中的各字段
+	 */
 	mnt = vfs_create_mount(fc);
 	if (IS_ERR(mnt))
 		return PTR_ERR(mnt);
 
 	mnt_warn_timestamp_expiry(mountpoint, mnt);
 
+	/*
+	 * 将新分配并初始化的struct mount添加到当前命名空间的
+	 * mount树中
+	 */
 	error = do_add_mount(real_mount(mnt), mountpoint, mnt_flags);
 	if (error < 0)
 		mntput(mnt);
@@ -2785,6 +2816,10 @@ static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint,
 static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 			int mnt_flags, const char *name, void *data)
 {
+	/* 
+	 * 此处的name参数指的是/dev/vdb这种要挂载的设备名称，挂载点存储在path参
+	 * 数中的字段中
+	 */
 	struct file_system_type *type;
 	struct fs_context *fc;
 	const char *subtype = NULL;
@@ -2808,11 +2843,19 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 		}
 	}
 
+	/*
+	 * 分配并初始化fs_context结构体，
+	 * 主要通过file_system_type->init_fs_context()回调函数进行
+	 */
 	fc = fs_context_for_mount(type, sb_flags);
 	put_filesystem(type);
 	if (IS_ERR(fc))
 		return PTR_ERR(fc);
 
+	/*
+	 * 解析参数，
+	 * 主要通过fs_context->ops->parse_xxx()回调函数进行
+	 */
 	if (subtype)
 		err = vfs_parse_fs_string(fc, "subtype",
 					  subtype, strlen(subtype));
@@ -2820,10 +2863,20 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 		err = vfs_parse_fs_string(fc, "source", name, strlen(name));
 	if (!err)
 		err = parse_monolithic_mount_data(fc, data);
+	/*
+	 * 通过能力机制检查是否具有挂载权限
+	 */
 	if (!err && !mount_capable(fc))
 		err = -EPERM;
+	/*
+	 * 调用fs_context->ops->get_tree()设置fc->root(struct dentry)，找到了
+	 * dentry，其实就是找到了superblock(dentry->d_sb == superblock)
+	 */
 	if (!err)
 		err = vfs_get_tree(fc);
+	/*
+	 * 进行真正的mount操作
+	 */
 	if (!err)
 		err = do_new_mount_fc(fc, path, mnt_flags);
 

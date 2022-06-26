@@ -2292,6 +2292,9 @@ struct file_system_type {
 #define FS_USERNS_MOUNT		8	/* Can be mounted by userns root */
 #define FS_DISALLOW_NOTIFY_PERM	16	/* Disable fanotify permission events */
 #define FS_RENAME_DOES_D_MOVE	32768	/* FS will handle d_move() during rename() internally. */
+	/*
+	 * 用来设置fs_context->ops字段
+	 */
 	int (*init_fs_context)(struct fs_context *);
 	const struct fs_parameter_description *parameters;
 	struct dentry *(*mount) (struct file_system_type *, int,

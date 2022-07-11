@@ -107,6 +107,8 @@ static inline int current_is_kswapd(void)
  * areas somewhat tricky on machines that support multiple page sizes.
  * For 2.5 we'll probably want to move the magic to just beyond the
  * bootbits...
+ *
+ * 交换区第一页称为交换区首部，用数据结构swap_header表示
  */
 union swap_header {
 	struct {
@@ -114,9 +116,22 @@ union swap_header {
 		char magic[10];			/* SWAP-SPACE or SWAPSPACE2 */
 	} magic;
 	struct {
+		/*
+		 * 前面1024字节空闲，为引导程序预留空间。
+		 * 这种做法使得交换区可以处在磁盘的起始位置。
+		 */
 		char		bootbits[1024];	/* Space for disklabel etc. */
+		/*
+		 * 交换区的版本号
+		 */
 		__u32		version;
+		/*
+		 * 最后一页的页号
+		 */
 		__u32		last_page;
+		/*
+		 * 坏页的数量，从成员badpages的位置开始存放坏页的页号
+		 */
 		__u32		nr_badpages;
 		unsigned char	sws_uuid[16];
 		unsigned char	sws_volume[16];
@@ -147,11 +162,19 @@ struct zone;
  * from setup, they're handled identically.
  *
  * We always assume that blocks are of size PAGE_SIZE.
+ *
+ * 交换区间用来把交换区的连续槽位映射到连续的磁盘块。如果交换区是磁盘分区，因为
+ * 磁盘分区的块是连续的，所以只需要一个交换区间。如果交换区是文件，因为文件对应
+ * 的磁盘块不一定是连续的，所以对于每个连续的磁盘块范围，需要使用一个交换区间来
+ * 存储交换区的连续槽位和磁盘块范围的映射关系。
  */
 struct swap_extent {
 	struct rb_node rb_node;
 	pgoff_t start_page;
 	pgoff_t nr_pages;
+	/*
+	 * 默认认为block size是PAGE_SIZE
+	 */
 	sector_t start_block;
 };
 
@@ -232,25 +255,77 @@ struct swap_cluster_list {
 
 /*
  * The in-memory structure used to track swap areas.
+ *
+ * 内存数据结构，用于跟踪交换区
  */
 struct swap_info_struct {
+	/*
+	 * 标志位，常用的标志位如下：
+	 * - SWP_USED表示当前数组项处于试用状态
+	 * - SWP_WRITEOK表示交换区可写，禁用交换区以后交换区不可写
+	 * - SWP_BLKDEV表示交换区是块设备，即磁盘分区
+	 */
 	unsigned long	flags;		/* SWP_USED etc: see above */
+	/*
+	 * 交换区优先级
+	 */
 	signed short	prio;		/* swap priority of this type */
+	/*
+	 * 用于加入有效交换区链表，按优先级从高到低排序，头节点是
+	 * swap_active_head。
+	 * 启用交换区后交换区是有效的，禁用交换区后交换区不再是有效的
+	 */
 	struct plist_node list;		/* entry in swap_active_head */
+	/*
+	 * 交换区索引
+	 */
 	signed char	type;		/* strange name for an index */
+	/*
+	 * 交换区的最大页数，和成员pages不同的是：max不仅包括可用槽位，也包括损
+	 * 坏的或用于管理目的的槽位。硬盘出现坏块的情况很少见，索引max通常等于
+	 * pages+1
+	 */
 	unsigned int	max;		/* extent of the swap_map */
+	/*
+	 * 交换映射，指向一个数组，每字节对应交换区中的每个槽位，低6位存储每个
+	 * 槽位的使用计数，也就是共享换出页的进程的数量；高2位是标志位，
+	 * SWAP_HAS_CACHE表示页在交换缓存中。
+	 */
 	unsigned char *swap_map;	/* vmalloc'ed array of usage counts */
 	struct swap_cluster_info *cluster_info; /* cluster info. Only for SSD */
 	struct swap_cluster_list free_clusters; /* free clusters list */
 	unsigned int lowest_bit;	/* index of first free in swap_map */
 	unsigned int highest_bit;	/* index of last free in swap_map */
+	/*
+	 * 交换区可用槽位的总数
+	 */
 	unsigned int pages;		/* total of usable pages of swap */
+	/*
+	 * 交换区正在使用的页的数量
+	 */
 	unsigned int inuse_pages;	/* number of those currently in use */
+	/*
+	 * 当前聚集中下一次分配的槽位的索引
+	 */
 	unsigned int cluster_next;	/* likely index for next allocation */
+	/*
+	 * 当前聚集中可用的槽位数量
+	 */
 	unsigned int cluster_nr;	/* countdown to next cluster search */
 	struct percpu_cluster __percpu *percpu_cluster; /* per cpu's swap location */
 	struct rb_root swap_extent_root;/* root of the swap extent rbtree */
+	/*
+	 * 指向块设备。
+	 * 如果交换区是磁盘分区，bdev指向磁盘分区对应的块设备；
+	 * 如果交换区是文件，bdev指向文件所在的块设备；
+	 */
 	struct block_device *bdev;	/* swap device or bdev of swap file */
+	/*
+	 * 指向交换区关联的文件的打开实例。
+	 * 如果交换区是磁盘分区，swap_file指向磁盘分区对应的块设备文件的打开实
+	 * 例；
+	 * 如果交换区是文件，swap_file指向文件的打开实例
+	 */
 	struct file *swap_file;		/* seldom referenced */
 	unsigned int old_block_size;	/* seldom referenced */
 #ifdef CONFIG_FRONTSWAP
@@ -280,6 +355,12 @@ struct swap_info_struct {
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);
 
+	/*
+	 * 用来加入可用交换区链表，按优先级从高到低排序，头节点是
+	 * swap_avail_heads。
+	 *
+	 * 为什么是一个数组？
+	 */
 	struct plist_node avail_lists[0]; /*
 					   * entries in swap_avail_heads, one
 					   * entry per node.

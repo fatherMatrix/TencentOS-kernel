@@ -13,8 +13,17 @@
 struct swap_slots_cache {
 	bool		lock_initialized;
 	struct mutex	alloc_lock; /* protects slots, nr, cur */
+	/*
+	 * 指向交换槽位数组，数组的大小是宏SWAP_SLOTS_CACHE_SIZE，即64
+	 */
 	swp_entry_t	*slots;
+	/*
+	 * 空闲槽位的数量
+	 */
 	int		nr;
+	/*
+	 * 当前已分配的槽位数量，也是下次分配的数组索引
+	 */
 	int		cur;
 	spinlock_t	free_lock;  /* protects slots_ret, n_ret */
 	swp_entry_t	*slots_ret;

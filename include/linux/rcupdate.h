@@ -40,6 +40,9 @@ void rcu_barrier_tasks(void);
 void synchronize_rcu(void);
 
 #ifdef CONFIG_PREEMPT_RCU
+/* 
+ * 如果定义的是可抢占RCU，则有另外的实现
+ */
 
 void __rcu_read_lock(void);
 void __rcu_read_unlock(void);
@@ -53,6 +56,9 @@ void __rcu_read_unlock(void);
 #define rcu_preempt_depth() (current->rcu_read_lock_nesting)
 
 #else /* #ifdef CONFIG_PREEMPT_RCU */
+/*
+ * 如果不是可抢占RCU，则只需要关闭或打开抢占即可
+ */
 
 static inline void __rcu_read_lock(void)
 {
@@ -597,7 +603,9 @@ do {									      \
 static __always_inline void rcu_read_lock(void)
 {
 	__rcu_read_lock();
+	/* 代码静态检查相关 */
 	__acquire(RCU);
+	/* rcu debug相关 */
 	rcu_lock_acquire(&rcu_lock_map);
 	RCU_LOCKDEP_WARN(!rcu_is_watching(),
 			 "rcu_read_lock() used illegally while idle");
@@ -650,8 +658,10 @@ static inline void rcu_read_unlock(void)
 {
 	RCU_LOCKDEP_WARN(!rcu_is_watching(),
 			 "rcu_read_unlock() used illegally while idle");
+	/* 代码稀疏检查相关 */
 	__release(RCU);
 	__rcu_read_unlock();
+	/* rcu debug相关 */
 	rcu_lock_release(&rcu_lock_map); /* Keep acq info for rls diags. */
 }
 

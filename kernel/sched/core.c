@@ -4111,7 +4111,13 @@ static void __sched notrace __schedule(bool preempt)
 	if (sched_feat(HRTICK))
 		hrtick_clear(rq);
 
+	/*
+	 * 在哪里打开中断的呢？
+	 */
 	local_irq_disable();
+	/*
+	 * 告知RCU进程切换事件的发生，方便非抢占RCU观察其静止事件
+	 */
 	rcu_note_context_switch(preempt);
 
 	/*
@@ -4144,6 +4150,9 @@ static void __sched notrace __schedule(bool preempt)
 		switch_count = &prev->nvcsw;
 	}
 
+	/*
+	 * 选择下一个要调度的task
+	 */
 	next = pick_next_task(rq, prev, &rf);
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
@@ -4173,7 +4182,11 @@ static void __sched notrace __schedule(bool preempt)
 
 		trace_sched_switch(preempt, prev, next);
 
-		/* Also unlocks the rq: */
+		/* 
+		 * Also unlocks the rq:
+		 *
+		 * 魔法开始的地方... 
+		 */
 		rq = context_switch(rq, prev, next, &rf);
 	} else {
 		rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);

@@ -37,8 +37,11 @@ struct rcu_exp_work {
 
 /*
  * Definition for node within the RCU grace-period-detection hierarchy.
+ *
+ * rcu_node用来描述一个处理器分组的RCU状态
  */
 struct rcu_node {
+	/* 保护本rcu_node的自旋锁 */
 	raw_spinlock_t __private lock;	/* Root rcu_node's lock protects */
 					/*  some rcu_state fields as well as */
 					/*  following. */
@@ -49,6 +52,7 @@ struct rcu_node {
  	 *
  	 * gp_seq在每个宽限期的开始和结束处都要更新。
  	 * 如何更新？为什么低两位只能包含0和1？2和3去哪儿了？
+	 * 2和3表示出现了错误!
  	 */ 
 	unsigned long gp_seq;	/* Track rsp->rcu_gp_seq. */
 	/*
@@ -68,11 +72,14 @@ struct rcu_node {
 				/*  bit corresponds to a child rcu_node */
 				/*  structure. */
 	unsigned long rcu_gp_init_mask;	/* Mask of offline CPUs at GP init. */
-	/* 初始化qsmask */
+	/* 初始化qsmask。是每个正常宽限期开始的时候静止状态位图的初始值 */
 	unsigned long qsmaskinit;
 				/* Per-GP initial value for qsmask. */
 				/*  Initialized from ->qsmaskinitnext at the */
 				/*  beginning of each grace period. */
+	/* 
+	 * 下一个正常宽限期开始的时候静止状态位图的初始值，和处理器热插拔相关 
+	 */
 	unsigned long qsmaskinitnext;
 				/* Online CPUs for next grace period. */
 	/*
@@ -170,7 +177,11 @@ union rcu_noqs {
 	u16 s; /* Set of bits, aggregate OR here. */
 };
 
-/* Per-CPU data for read-copy update. */
+/* 
+ * Per-CPU data for read-copy update. 
+ * 
+ * rcu_data描述一个处理器的RCU状态
+ */
 struct rcu_data {
 	/* 1) quiescent-state and grace-period handling : */
 	/* 
@@ -320,12 +331,17 @@ do {									\
  * by ->level[2]).  The number of levels is determined by the number of
  * CPUs and by CONFIG_RCU_FANOUT.  Small systems will have a "hierarchy"
  * consisting of a single rcu_node.
+ *
+ * 描述rcu的全局状态
  */
 struct rcu_state {
+	/* 定义了rcu tree中所有的rcu node */
 	struct rcu_node node[NUM_RCU_NODES];	/* Hierarchy. */
+	/* 保存每个层级中的第一个rcu node的指针 */
 	struct rcu_node *level[RCU_NUM_LVLS + 1];
 						/* Hierarchy levels (+1 to */
 						/*  shut bogus gcc warning) */
+	/* 处理器数量 */
 	int ncpus;				/* # CPUs seen so far. */
 
 	/* The following fields are guarded by the root rcu_node's lock. */
@@ -339,9 +355,13 @@ struct rcu_state {
  	 *   - others：	表示有地方出了问题
  	 */
 	unsigned long gp_seq;			/* Grace-period sequence #. */
+	/* 宽限期线程 */
 	struct task_struct *gp_kthread;		/* Task for grace periods. */
+	/* 宽限期线程的等待队列 */
 	struct swait_queue_head gp_wq;		/* Where GP task waits. */
+	/* 向宽限期线程传递的指令 */
 	short gp_flags;				/* Commands for GP task. */
+	/* 宽限期线程的睡眠状态 */
 	short gp_state;				/* GP kthread sleep state. */
 	unsigned long gp_wake_time;		/* Last GP kthread wake. */
 	unsigned long gp_wake_seq;		/* ->gp_seq at ^^^. */

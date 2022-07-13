@@ -881,11 +881,17 @@ static inline void path_to_nameidata(const struct path *path,
 					struct nameidata *nd)
 {
 	if (!(nd->flags & LOOKUP_RCU)) {
+		/*
+		 * 在这里释放了原来所站目录的引用计数
+		 */
 		dput(nd->path.dentry);
 		if (nd->path.mnt != path->mnt)
 			mntput(nd->path.mnt);
 	}
 	nd->path.mnt = path->mnt;
+	/*
+	 * 迈入新的引用计数
+	 */
 	nd->path.dentry = path->dentry;
 }
 
@@ -1736,6 +1742,9 @@ static int lookup_fast(struct nameidata *nd,
 		return -ENOENT;
 	}
 
+	/*
+	 * 这个path是调用者自己的局部变量，不是nd.path。所以这里并没有覆盖父目录
+	 */
 	path->mnt = mnt;
 	path->dentry = dentry;
 	/*
@@ -2249,7 +2258,8 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 			return err;
 
 		/* 
-		 * hash_len高32位是路径长度，低32位是hash值
+		 * hash_len高32位是路径长度，低32位是hash值。用于在dentry哈希表
+		 * 中搜索dentry
 		 *
 		 * nd->path.dentry是当前正站在的目录，name是此目录下的一个分量
 		 */
@@ -2345,6 +2355,9 @@ OK:
 		if (err < 0)
 			return err;
 
+		/* 
+		 * 是符号连接
+		 */
 		if (err) {
 			/* 
 			 * 读取符号连接的目标路径，因为在walk_component -> 
@@ -2412,7 +2425,11 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			nd->root_seq = nd->seq;
 			nd->m_seq = read_seqbegin(&mount_lock);
 		} else {
-			/* 使用reflock的情况 */
+			/* 
+			 * 使用reflock的情况
+			 *
+			 * 在terminate_walk()中调用了path_put()
+			 */
 			path_get(&nd->path);
 		}
 		return s;
@@ -2553,6 +2570,9 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 		nd->path.mnt = NULL;
 		nd->path.dentry = NULL;
 	}
+	/*
+	 * 内部调用了path_put()，对英语path_init()中的path_get()
+	 */
 	terminate_walk(nd);
 	return err;
 }
@@ -2655,6 +2675,9 @@ struct dentry *kern_path_locked(const char *name, struct path *path)
 
 int kern_path(const char *name, unsigned int flags, struct path *path)
 {
+	/*
+	 * 此时path中的vfsmount和dentry都是加了引用计数的
+	 */
 	return filename_lookup(AT_FDCWD, getname_kernel(name),
 			       flags, path, NULL);
 }

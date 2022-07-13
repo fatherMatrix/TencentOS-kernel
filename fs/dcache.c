@@ -2377,6 +2377,9 @@ struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 		if (dentry->d_name.hash != hash)
 			continue;
 
+		/*
+		 * 自旋锁加锁
+		 */
 		spin_lock(&dentry->d_lock);
 		if (dentry->d_parent != parent)
 			goto next;
@@ -2386,11 +2389,17 @@ struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 		if (!d_same_name(dentry, parent, name))
 			goto next;
 
+		/*
+		 * 增加引用计数
+		 */
 		dentry->d_lockref.count++;
 		found = dentry;
 		spin_unlock(&dentry->d_lock);
 		break;
 next:
+		/*
+		 * 自旋锁解锁
+		 */
 		spin_unlock(&dentry->d_lock);
  	}
  	rcu_read_unlock();

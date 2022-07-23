@@ -703,9 +703,22 @@ struct inode {
 	unsigned long		dirtied_when;	/* jiffies of first dirtying */
 	unsigned long		dirtied_time_when;
 
+	/*
+	 * 链接到全局索引节点哈希表inode_hashtable，用于inode的快速查找
+	 *
+	 * 哈希键通过superblock和索引节点号计算
+	 */
 	struct hlist_node	i_hash;
+	/*
+	 * 链接到bdi_writeback的b_io链表，等待BDI回写
+	 *
+	 * 说明此inode是dirty的
+	 */
 	struct list_head	i_io_list;	/* backing dev IO list */
 #ifdef CONFIG_CGROUP_WRITEBACK
+	/*
+	 * inode所在设备对应的bdi，用于inode的回写
+	 */
 	struct bdi_writeback	*i_wb;		/* the associated cgroup wb */
 
 	/* foreign inode detection, see wbc_detach_inode() */
@@ -713,10 +726,22 @@ struct inode {
 	u16			i_wb_frn_avg_time;
 	u16			i_wb_frn_history;
 #endif
+	/*
+	 * 链接到superblock的s_inode_lru链表
+	 */
 	struct list_head	i_lru;		/* inode LRU list */
+	/*
+	 * 链接到superblock的s_inodes上
+	 */
 	struct list_head	i_sb_list;
+	/*
+	 * 链接到superblock的s_inodes_wb上，用于回写统计
+	 */
 	struct list_head	i_wb_list;	/* backing dev writeback list */
 	union {
+		/*
+		 * 所有引用该inode的dentry将形成一个链表
+		 */
 		struct hlist_head	i_dentry;
 		struct rcu_head		i_rcu;
 	};
@@ -1582,6 +1607,9 @@ struct super_block {
 	 * There is no need to put them into separate cachelines.
 	 */
 	struct list_lru		s_dentry_lru;
+	/*
+	 * i_count == 0且干净的inode链表
+	 */
 	struct list_lru		s_inode_lru;
 	struct rcu_head		rcu;
 	struct work_struct	destroy_work;
@@ -1595,6 +1623,11 @@ struct super_block {
 
 	/* s_inode_list_lock protects s_inodes */
 	spinlock_t		s_inode_list_lock ____cacheline_aligned_in_smp;
+	/*
+	 * 属于本superblock的所有inode都链接到这里
+	 *
+	 * inode->i_sb_list与此字段对应
+	 */
 	struct list_head	s_inodes;	/* all inodes */
 
 	spinlock_t		s_inode_wblist_lock;

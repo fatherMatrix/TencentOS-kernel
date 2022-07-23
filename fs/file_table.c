@@ -256,6 +256,9 @@ struct file *alloc_file_clone(struct file *base, int flags,
  */
 static void __fput(struct file *file)
 {
+	/*
+	 * 此处dentry->d_lockref不是0，所以可以保证安全
+	 */
 	struct dentry *dentry = file->f_path.dentry;
 	struct vfsmount *mnt = file->f_path.mnt;
 	struct inode *inode = file->f_inode;
@@ -293,9 +296,16 @@ static void __fput(struct file *file)
 		put_write_access(inode);
 		__mnt_drop_write(mnt);
 	}
+	/*
+	 * 此处减dentry->d_lockref引用计数
+	 */
 	dput(dentry);
 	if (unlikely(mode & FMODE_NEED_UNMOUNT))
 		dissolve_on_fput(mnt);
+	/*
+	 * 减少vfsmount的引用计数？
+	 * 因为path-walk时调用了path_get()导致vfsmount引用计数也处于+1状态？
+	 */
 	mntput(mnt);
 out:
 	file_free(file);
@@ -339,6 +349,9 @@ void fput_many(struct file *file, unsigned int refs)
 	if (atomic_long_sub_and_test(refs, &file->f_count)) {
 		struct task_struct *task = current;
 
+		/*
+		 * 两种方案，都是延后执行的策略
+		 */
 		if (likely(!in_interrupt() && !(task->flags & PF_KTHREAD))) {
 			init_task_work(&file->f_u.fu_rcuhead, ____fput);
 			if (!task_work_add(task, &file->f_u.fu_rcuhead, true))
@@ -357,6 +370,9 @@ void fput_many(struct file *file, unsigned int refs)
 
 void fput(struct file *file)
 {
+	/*
+	 * 最终调用到__fput
+	 */
 	fput_many(file, 1);
 }
 

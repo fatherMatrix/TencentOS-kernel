@@ -111,6 +111,10 @@ static inline unsigned __read_seqcount_begin(const seqcount_t *s)
 
 repeat:
 	ret = READ_ONCE(s->sequence);
+	/*
+	 * 当s->sequence为奇数时，说明有写者正在写临界区内，获取到的值肯定是旧
+	 * 值。此时返回是没有意义的，在此等待写者退出
+	 */
 	if (unlikely(ret & 1)) {
 		cpu_relax();
 		goto repeat;

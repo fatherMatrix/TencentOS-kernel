@@ -54,6 +54,9 @@ extern void __f_unlock_pos(struct file *);
 
 static inline struct fd __to_fd(unsigned long v)
 {
+	/* 
+	 * v的低3位代表flag，其余高位代表file结构体
+	 */
 	return (struct fd){(struct file *)(v & ~3),v & 3};
 }
 

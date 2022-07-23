@@ -56,6 +56,9 @@
 
 static unsigned int i_hash_mask __read_mostly;
 static unsigned int i_hash_shift __read_mostly;
+/*
+ * 哈希键为superblock和inode_no
+ */
 static struct hlist_head *inode_hashtable __read_mostly;
 static __cacheline_aligned_in_smp DEFINE_SPINLOCK(inode_hash_lock);
 
@@ -568,6 +571,8 @@ static void evict(struct inode *inode)
 	 * does not start destroying it while writeback is still running. Since
 	 * the inode has I_FREEING set, flusher thread won't start new work on
 	 * the inode.  We just have to wait for running writeback to finish.
+	 *
+	 * 既然决定要删除了？还在这里等他写完，是不是没有什么意义？
 	 */
 	inode_wait_for_writeback(inode);
 
@@ -1194,11 +1199,23 @@ again:
 		struct inode *old;
 
 		spin_lock(&inode_hash_lock);
-		/* We released the lock, so.. */
+		/* 
+		 * We released the lock, so.. 
+		 *
+		 * alloc_inode()执行的过程中，有可能其他内核路径也执行了
+		 * alloc_inode()，并向inode_hashtable中插入了另一个inode，所以
+		 * 此处要进行一次检查。
+		 */
 		old = find_inode_fast(sb, head, ino);
 		if (!old) {
+			/* 运行到这里，说明没有其他inode被创建，我们创建的inode
+			 * 要被插入到inode_hashtable中。
+			 */
 			inode->i_ino = ino;
 			spin_lock(&inode->i_lock);
+			/*
+			 * 对于新创建的inode，设置其标志的I_NEW位
+			 */
 			inode->i_state = I_NEW;
 			hlist_add_head(&inode->i_hash, head);
 			spin_unlock(&inode->i_lock);
@@ -1221,6 +1238,9 @@ again:
 		if (IS_ERR(old))
 			return NULL;
 		inode = old;
+		/*
+		 * 等待inode的I_NEW位被清除
+		 */
 		wait_on_inode(inode);
 		if (unlikely(inode_unhashed(inode))) {
 			iput(inode);
@@ -1546,9 +1566,17 @@ static void iput_final(struct inode *inode)
 
 	WARN_ON(inode->i_state & I_NEW);
 
+	/*
+	 * 调用文件系统超级块的drop_inode()方法。
+	 *
+	 * drop_inode()主要是用来判断是否应该evict本inode
+	 */
 	if (op->drop_inode)
 		drop = op->drop_inode(inode);
 	else
+		/* 
+		 * 如果i_nlink == 0或者unhashed，返回1
+		 */
 		drop = generic_drop_inode(inode);
 
 	if (!drop && (sb->s_flags & SB_ACTIVE)) {
@@ -1560,6 +1588,9 @@ static void iput_final(struct inode *inode)
 	if (!drop) {
 		inode->i_state |= I_WILL_FREE;
 		spin_unlock(&inode->i_lock);
+		/*
+		 * 回写
+		 */
 		write_inode_now(inode, 1);
 		spin_lock(&inode->i_lock);
 		WARN_ON(inode->i_state & I_NEW);
@@ -1589,11 +1620,22 @@ void iput(struct inode *inode)
 		return;
 	BUG_ON(inode->i_state & I_CLEAR);
 retry:
+	/*
+	 * 只有当inode->i_count减为0时，才会进入if内部
+	 */
 	if (atomic_dec_and_lock(&inode->i_count, &inode->i_lock)) {
+		/*
+		 * 只有当inode->i_nlink不为0时，即没有被删除，需要刷回磁盘时进
+		 * 入下面的if
+		 */
 		if (inode->i_nlink && (inode->i_state & I_DIRTY_TIME)) {
 			atomic_inc(&inode->i_count);
 			spin_unlock(&inode->i_lock);
 			trace_writeback_lazytime_iput(inode);
+			/*
+			 * 调用了ext4_dirty_inode()，生成了jbd2日志，唤醒了对应
+			 * 的回写线程
+			 */
 			mark_inode_dirty_sync(inode);
 			goto retry;
 		}

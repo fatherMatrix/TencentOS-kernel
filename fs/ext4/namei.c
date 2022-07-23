@@ -1687,6 +1687,7 @@ static struct dentry *ext4_lookup(struct inode *dir, struct dentry *dentry, unsi
 		return ERR_CAST(bh);
 	inode = NULL;
 	if (bh) {
+		/* 找到对应的索引节点号 */
 		__u32 ino = le32_to_cpu(de->inode);
 		brelse(bh);
 		if (!ext4_valid_inum(dir->i_sb, ino)) {
@@ -1698,6 +1699,10 @@ static struct dentry *ext4_lookup(struct inode *dir, struct dentry *dentry, unsi
 					 dentry);
 			return ERR_PTR(-EFSCORRUPTED);
 		}
+		/*
+		 * 1. 在icache中查找已存在的inode
+		 * 2. 若icache中不能存在inode，则去磁盘上找
+		 */
 		inode = ext4_iget(dir->i_sb, ino, EXT4_IGET_NORMAL);
 		if (inode == ERR_PTR(-ESTALE)) {
 			EXT4_ERROR_INODE(dir,
@@ -2593,6 +2598,11 @@ static int ext4_add_nondir(handle_t *handle,
 static int ext4_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 		       bool excl)
 {
+	/*
+	 * 因为这里是创建新的inode，所以在磁盘上并没有对应的inode节点。
+	 *
+	 * 因此这里仅执行有限的几个初始化即可
+	 */
 	handle_t *handle;
 	struct inode *inode;
 	int err, credits, retries = 0;
@@ -2604,11 +2614,20 @@ static int ext4_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 	credits = (EXT4_DATA_TRANS_BLOCKS(dir->i_sb) +
 		   EXT4_INDEX_EXTRA_TRANS_BLOCKS + 3);
 retry:
+	/* 
+	 * 第一个初始化，里面调用了alloc_inode，将inode（包括具体文件系统的
+	 * inode字段都进行了傻瓜初始化
+	 *
+	 * ext_new_inode -> alloc_inode -> inode_init_always
+	 */
 	inode = ext4_new_inode_start_handle(dir, mode, &dentry->d_name, 0,
 					    NULL, EXT4_HT_DIR, credits);
 	handle = ext4_journal_current_handle();
 	err = PTR_ERR(inode);
 	if (!IS_ERR(inode)) {
+		/*
+		 * 第二个初始化，设置inode相关的操作结构体
+		 */
 		inode->i_op = &ext4_file_inode_operations;
 		inode->i_fop = &ext4_file_operations;
 		ext4_set_aops(inode);
@@ -2780,6 +2799,9 @@ static int ext4_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 	credits = (EXT4_DATA_TRANS_BLOCKS(dir->i_sb) +
 		   EXT4_INDEX_EXTRA_TRANS_BLOCKS + 3);
 retry:
+	/*
+	 * 调用ext4文件系统的alloc_inode回调函数，创建新的inode
+	 */
 	inode = ext4_new_inode_start_handle(dir, S_IFDIR | mode,
 					    &dentry->d_name,
 					    0, NULL, EXT4_HT_DIR, credits);

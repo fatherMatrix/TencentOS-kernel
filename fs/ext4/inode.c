@@ -4848,7 +4848,13 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 			  unsigned int line)
 {
 	struct ext4_iloc iloc;
+	/*
+	 * 磁盘上的ext4 inode
+	 */
 	struct ext4_inode *raw_inode;
+	/*
+	 * 内存中的ext4 inode
+	 */
 	struct ext4_inode_info *ei;
 	struct inode *inode;
 	journal_t *journal = EXT4_SB(sb)->s_journal;
@@ -4871,6 +4877,11 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 		return ERR_PTR(-EFSCORRUPTED);
 	}
 
+	/*
+	 * 这里返回的inode是通过alloc_inode新分配的，并没有填充信息
+	 *
+	 * 其中inode的state中置位了I_NEW，当inode中的信息填充完成后清除
+	 */
 	inode = iget_locked(sb, ino);
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
@@ -4880,6 +4891,9 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 	ei = EXT4_I(inode);
 	iloc.bh = NULL;
 
+	/*
+	 * 从磁盘上读取ext4_inode的数据，填充到ext4_inode_info中
+	 */
 	ret = __ext4_get_inode_loc(inode, &iloc, 0);
 	if (ret < 0)
 		goto bad_inode;
@@ -5144,6 +5158,11 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 				 "casefold flag without casefold feature");
 	brelse(iloc.bh);
 
+	/*
+	 * ext4_inode_info中的数据已经填充完成
+	 *
+	 * 清除inode的I_NEW标志，唤醒其他等待的内核路径
+	 */
 	unlock_new_inode(inode);
 	return inode;
 

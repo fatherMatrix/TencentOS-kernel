@@ -645,6 +645,18 @@ static void terminate_walk(struct nameidata *nd)
 	drop_links(nd);
 	if (!(nd->flags & LOOKUP_RCU)) {
 		int i;
+		/*
+		 * 这里对应ref-walk模式，分两种上下文环境：
+		 *
+		 * 如果是从kern_path() -> path_lookupat()调用进来，那么正常情况
+		 * 下，path里都是NULL了（在调用前进行了移动语义）。此时返回给
+		 * kern_path()调用者的dentry和vfsmount还是处于引用计数增加的状
+		 * 态
+		 *
+		 * 如果是从path_openat()调用进来，那么正常情况下，path里保存了
+		 * 要返回的dentry（在调用前没有进行移动语义）。此时返回给调用者
+		 * 的dentry和vfsmount时处于引用计数减少过后的状态
+		 */
 		path_put(&nd->path);
 		for (i = 0; i < nd->depth; i++)
 			path_put(&nd->stack[i].link);
@@ -653,6 +665,19 @@ static void terminate_walk(struct nameidata *nd)
 			nd->flags &= ~LOOKUP_ROOT_GRABBED;
 		}
 	} else {
+		/*
+		 * 这里对应rcu-walk模式，分两种上下文环境：
+		 *
+		 * 如果是从kern_path() -> path_lookupat()调用进来，那么在调用本
+		 * 函数前，path_lookupat()是调用了complete_walk()的，其中会对
+		 * rcu-walk得到的path进行path_get()操作。此时返回给kern_path()
+		 * 调用者的dentry和vfsmount是处于引用计数增加状态的
+		 *
+		 * 如果是从do_filp_open() -> path_openat()调用进来，那么在调用
+		 * 本函数前，经过do_last() -> complete_walk()执行了path_get()操
+		 * 作，因此返回给do_filp_open()调用者的dentry和vfsmount也是处于
+		 * 引用计数增加状态的
+		 */
 		nd->flags &= ~LOOKUP_RCU;
 		/* 对应path_init()中的rcu_read_lock() */
 		rcu_read_unlock();
@@ -671,6 +696,9 @@ static bool legitimize_path(struct nameidata *nd,
 		path->dentry = NULL;
 		return false;
 	}
+	/* 
+	 * 增加引用计数，因为要切换到ref-walk模式了
+	 */
 	if (unlikely(!lockref_get_not_dead(&path->dentry->d_lockref))) {
 		path->dentry = NULL;
 		return false;
@@ -728,6 +756,9 @@ static int unlazy_walk(struct nameidata *nd)
 
 	BUG_ON(!(nd->flags & LOOKUP_RCU));
 
+	/*
+	 * 取消LOOKUP_RCU标记，表示切换到ref-walk模式
+	 */
 	nd->flags &= ~LOOKUP_RCU;
 	if (unlikely(!legitimize_links(nd)))
 		goto out1;
@@ -832,6 +863,14 @@ static int complete_walk(struct nameidata *nd)
 	if (nd->flags & LOOKUP_RCU) {
 		if (!(nd->flags & LOOKUP_ROOT))
 			nd->root.mnt = NULL;
+		/*
+		 * 草，对于rcu-walk模式，在这里最后增加了一次引用计数。
+		 * 目的是和ref-walk返回的dentry进行语义上的对齐，因为ref-walk是
+		 * 增加了引用计数的
+		 *
+		 * 所以，可以得出结论：通过path_lookup()或path_openat()返回的
+		 * dentry都是增加了引用计数的!
+		 */
 		if (unlikely(unlazy_walk(nd)))
 			return -ECHILD;
 	}
@@ -890,7 +929,7 @@ static inline void path_to_nameidata(const struct path *path,
 	}
 	nd->path.mnt = path->mnt;
 	/*
-	 * 迈入新的引用计数
+	 * 迈入新的目录
 	 */
 	nd->path.dentry = path->dentry;
 }
@@ -1304,6 +1343,9 @@ static int follow_managed(struct path *path, struct nameidata *nd)
 		 * 自动向下跨越挂载点，走到被挂载操作系统的根目录上去
 		 */
 		if (managed & DCACHE_MOUNTED) {
+			/*
+			 * 增加了vfsmount的引用计数的
+			 */
 			struct vfsmount *mounted = lookup_mnt(path);
 			if (mounted) {
 				dput(path->dentry);
@@ -1682,6 +1724,12 @@ static int lookup_fast(struct nameidata *nd,
 		/* 在dentry_hashtable中查找分量 */
 		dentry = __d_lookup_rcu(parent, &nd->last, &seq);
 		if (unlikely(!dentry)) {
+			/*
+			 * 如果哈希表查找失败了，则要切换到ref-walk模式
+			 *
+			 * 内部对当前已经解析好的dentry加了引用计数（因为正站在
+			 * 的dentry的引用计数+1是ref-walk的要求）
+			 */
 			if (unlazy_walk(nd))
 				return -ECHILD;
 			return 0;
@@ -1720,12 +1768,19 @@ static int lookup_fast(struct nameidata *nd,
 			if (likely(__follow_mount_rcu(nd, path, inode, seqp)))
 				return 1;
 		}
+		/* 
+		 * 上面的快速查找出问题了，要切换到ref-walk模式再尝试了。
+		 * 增加引用计数，与上面的unlazy_walk()只会执行成功一个
+		 */
 		if (unlazy_child(nd, dentry, seq))
 			return -ECHILD;
 		if (unlikely(status == -ECHILD))
 			/* we'd been told to redo it in non-rcu mode */
 			status = d_revalidate(dentry, nd->flags);
 	} else {
+		/* 
+		 * 这里是一种ref-walk
+		 */
 		dentry = __d_lookup(parent, &nd->last);
 		if (unlikely(!dentry))
 			return 0;
@@ -1769,10 +1824,16 @@ static struct dentry *__lookup_slow(const struct qstr *name,
 	if (unlikely(IS_DEADDIR(inode)))
 		return ERR_PTR(-ENOENT);
 again:
+	/*
+	 * 要创建dentry了
+	 */
 	dentry = d_alloc_parallel(dir, name, &wq);
 	if (IS_ERR(dentry))
 		return dentry;
 	if (unlikely(!d_in_lookup(dentry))) {
+		/*
+		 * 这里是什么情况呢？其他线程已经完成了lookup？锁呢？
+		 */
 		if (!(flags & LOOKUP_NO_REVAL)) {
 			int error = d_revalidate(dentry, flags);
 			if (unlikely(error <= 0)) {
@@ -1786,7 +1847,13 @@ again:
 			}
 		}
 	} else {
-		/* 调用具体文件系统的lookup方法来查找 */
+		/* 
+		 * 调用具体文件系统的lookup方法来查找
+		 *
+		 * 根据Documentation/filesystems/vfs.txt中的要求，此回调函数内
+		 * 1. 必须调用d_add()将inode与dentry建立联系
+		 * 2. 必须对inode->i_count加一
+		 */
 		old = inode->i_op->lookup(inode, dentry, flags);
 		d_lookup_done(dentry);
 		if (unlikely(old)) {
@@ -1949,6 +2016,8 @@ static int walk_component(struct nameidata *nd, int flags)
 	 *
  	 * 进行路径名的查找，目标存放在nd->last中，查找结果存放在inode和path中
  	 * 返回出来
+	 *
+	 * 对于ref-walk，是增加了引用计数的
  	 */ 
 	err = lookup_fast(nd, &path, &inode, &seq);
 	if (unlikely(err <= 0)) {
@@ -2439,6 +2508,9 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	nd->path.mnt = NULL;
 	nd->path.dentry = NULL;
 
+	/*
+	 * 为什么是mount_lock？这个全局锁是用来干嘛的？
+	 */
 	nd->m_seq = read_seqbegin(&mount_lock);
 	if (*s == '/') {
 		set_root(nd);
@@ -2457,6 +2529,10 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 				nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
 			} while (read_seqcount_retry(&fs->seq, seq));
 		} else {
+			/* 
+			 * 获取fs->pwd(struct path)，并对其进行path_get()，
+			 * 因为这是ref-walk，所以要增加引用计数。
+			 */
 			get_fs_pwd(current->fs, &nd->path);
 			nd->inode = nd->path.dentry->d_inode;
 		}
@@ -2481,6 +2557,9 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			nd->inode = nd->path.dentry->d_inode;
 			nd->seq = read_seqcount_begin(&nd->path.dentry->d_seq);
 		} else {
+			/*
+			 * ref-walk模式，要对dentry引用计数+1
+			 */
 			path_get(&nd->path);
 			nd->inode = nd->path.dentry->d_inode;
 		}
@@ -2539,9 +2618,18 @@ static int handle_lookup_down(struct nameidata *nd)
 	return 0;
 }
 
-/* Returns 0 and nd will be valid on success; Retuns error, otherwise. */
+/* 
+ * Returns 0 and nd will be valid on success; Retuns error, otherwise.
+ *
+ * 本函数要和path_openat()对比着看，path的引用计数部分非常微妙
+ */
 static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path)
 {
+	/* 
+	 * 如果是rcu-walk模式，在path_init()中就进行了rcu_read_lock()
+	 *
+	 * 如果是ref-walk模式，在path_init()中就进行了path_get()
+	 */
 	const char *s = path_init(nd, flags);
 	int err;
 
@@ -2556,10 +2644,19 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 	 * lookup_last()返回值大于0意味着是个符号链接
 	 */
 	while (!(err = link_path_walk(s, nd))
+		/*
+		 * ref-walk模式下是增加了引用计数的
+		 *
+		 * rcu-walk模式下没有增加引用计数
+		 */
 		&& ((err = lookup_last(nd)) > 0)) {
 		s = trailing_symlink(nd);
 	}
 	if (!err)
+		/* 
+		 * 在这里对rcu-walk模式得到的结果进行了引用计数增加，目的是对齐
+		 * ref-walk模式返回的结果
+		 */
 		err = complete_walk(nd);
 
 	if (!err && nd->flags & LOOKUP_DIRECTORY)
@@ -2571,7 +2668,10 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 		nd->path.dentry = NULL;
 	}
 	/*
-	 * 内部调用了path_put()，对英语path_init()中的path_get()
+	 * 内部调用了path_put()，对应path_init()中的path_get()
+	 *
+	 * 但此时nd->path中的值都已经被赋值为NULL了， 所以这里是没有真正减小引
+	 * 用计数的
 	 */
 	terminate_walk(nd);
 	return err;
@@ -3408,7 +3508,10 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 		dentry = NULL;
 	}
 	if (dentry->d_inode) {
-		/* Cached positive dentry: will open in f_op->open */
+		/* Cached positive dentry: will open in f_op->open 
+		 *
+		 * 说明已经有对应的inode了
+		 */
 		goto out_no_open;
 	}
 
@@ -3457,6 +3560,9 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 
 no_open:
 	if (d_in_lookup(dentry)) {
+		/*
+		 * 文件系统的查找inode操作
+		 */
 		struct dentry *res = dir_inode->i_op->lookup(dir_inode, dentry,
 							     nd->flags);
 		d_lookup_done(dentry);
@@ -3478,6 +3584,10 @@ no_open:
 			error = -EACCES;
 			goto out_dput;
 		}
+		/*
+		 * 文件系统的创建inode操作
+		 * 创建新的inode
+		 */
 		error = dir_inode->i_op->create(dir_inode, dentry, mode,
 						open_flag & O_EXCL);
 		if (error)
@@ -3527,9 +3637,19 @@ static int do_last(struct nameidata *nd,
 	}
 
 	if (!(open_flag & O_CREAT)) {
+		/*
+		 * 正常的open过程，即文件已存在，不需要CREAT
+		 */
 		if (nd->last.name[nd->last.len])
 			nd->flags |= LOOKUP_FOLLOW | LOOKUP_DIRECTORY;
-		/* we _can_ be in RCU mode here */
+		/* 
+		 * we _can_ be in RCU mode here
+		 *
+		 * 内部通过对path增加了一次引用计数
+		 *
+		 * 这里只有lookup_fast吗？如果内存的哈希表中没有呢？不需要通过
+		 * lookup_slow去磁盘上查找吗？
+		 */
 		error = lookup_fast(nd, &path, &inode, &seq);
 		if (likely(error > 0))
 			goto finish_lookup;
@@ -3570,6 +3690,9 @@ static int do_last(struct nameidata *nd,
 		inode_lock(dir->d_inode);
 	else
 		inode_lock_shared(dir->d_inode);
+	/*
+	 * 查找对应的inode，如果没有就创建一个新的
+	 */
 	error = lookup_open(nd, &path, file, op, got_write);
 	if (open_flag & O_CREAT)
 		inode_unlock(dir->d_inode);
@@ -3768,6 +3891,9 @@ static int do_o_path(struct nameidata *nd, unsigned flags, struct file *file)
 	return error;
 }
 
+/*
+ * 本函数要和path_lookupat()对比着看，path的引用计数部分很微妙
+ */
 static struct file *path_openat(struct nameidata *nd,
 			const struct open_flags *op, unsigned flags)
 {
@@ -3809,6 +3935,9 @@ static struct file *path_openat(struct nameidata *nd,
 		 *    进入while循环，继续处理相关路径
  		 */ 
 		while (!(error = link_path_walk(s, nd)) &&
+			/*
+			 * path_lookupat()中这里调用的是lookup_last()
+			 */
 			(error = do_last(nd, file, op)) > 0) {
 			nd->flags &= ~(LOOKUP_OPEN|LOOKUP_CREATE|LOOKUP_EXCL);
 			s = trailing_symlink(nd);
@@ -4324,6 +4453,12 @@ long do_unlinkat(int dfd, struct filename *name)
 	struct inode *delegated_inode = NULL;
 	unsigned int lookup_flags = 0;
 retry:
+	/*
+	 * 返回要删除文件的父目录的name
+	 *
+	 * path中保存已经解析完成的文件路径，在这里就是待删除文件的父目录
+	 * last中保存未解析的文件路径，在这里就是要删除的文件
+	 */
 	name = filename_parentat(dfd, name, lookup_flags, &path, &last, &type);
 	if (IS_ERR(name))
 		return PTR_ERR(name);
@@ -4337,21 +4472,36 @@ retry:
 		goto exit1;
 retry_deleg:
 	inode_lock_nested(path.dentry->d_inode, I_MUTEX_PARENT);
+	/*
+	 * 查找待删除文件的dentry，返回时引用计数已经加一
+	 */
 	dentry = __lookup_hash(&last, path.dentry, lookup_flags);
 	error = PTR_ERR(dentry);
 	if (!IS_ERR(dentry)) {
 		/* Why not before? Because we want correct error value */
 		if (last.name[last.len])
 			goto slashes;
+		/*
+		 * 待删除文件的inode
+		 */
 		inode = dentry->d_inode;
 		if (d_is_negative(dentry))
 			goto slashes;
+		/*
+		 * 待删除文件inode引用计数加一
+		 */
 		ihold(inode);
 		error = security_path_unlink(&path, dentry);
 		if (error)
 			goto exit2;
+		/*
+		 * unlink
+		 */
 		error = vfs_unlink(path.dentry->d_inode, dentry, &delegated_inode);
 exit2:
+		/*
+		 * 减少待删除文件的dentry引用计数
+		 */
 		dput(dentry);
 	}
 	inode_unlock(path.dentry->d_inode);

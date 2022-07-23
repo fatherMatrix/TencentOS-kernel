@@ -72,6 +72,9 @@ void ext4_end_bitmap_read(struct buffer_head *bh, int uptodate)
 		set_buffer_uptodate(bh);
 		set_bitmap_uptodate(bh);
 	}
+	/*
+	 * 操作bh的BH_Lock位，唤醒wait_on_buffer
+	 */
 	unlock_buffer(bh);
 	put_bh(bh);
 }
@@ -191,6 +194,10 @@ ext4_read_inode_bitmap(struct super_block *sb, ext4_group_t block_group)
 	bh->b_end_io = ext4_end_bitmap_read;
 	get_bh(bh);
 	submit_bh(REQ_OP_READ, REQ_META | REQ_PRIO, bh);
+	/*
+	 * 等bh的BH_Lock位，即等待ext4_end_bitmap_read回调函数(bh->b_end_io)的执
+	 * 行
+	 */
 	wait_on_buffer(bh);
 	if (!buffer_uptodate(bh)) {
 		put_bh(bh);
@@ -751,6 +758,10 @@ struct inode *__ext4_new_inode(handle_t *handle, struct inode *dir,
 	struct inode *inode;
 	struct ext4_group_desc *gdp = NULL;
 	struct ext4_inode_info *ei;
+	/*
+	 * ext4_sb_info是内存中的ext4 superblock
+	 * ext4_super_block是磁盘上的ext4 superblock
+	 */
 	struct ext4_sb_info *sbi;
 	int ret2, err;
 	struct inode *ret;
@@ -824,6 +835,9 @@ struct inode *__ext4_new_inode(handle_t *handle, struct inode *dir,
 
 	ngroups = ext4_get_groups_count(sb);
 	trace_ext4_request_inode(dir, mode);
+	/*
+	 * 分配新的ext4_inode，并返回其中内嵌的vfs inode
+	 */
 	inode = new_inode(sb);
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
@@ -835,8 +849,7 @@ struct inode *__ext4_new_inode(handle_t *handle, struct inode *dir,
 	 * transaction
 	 */
 	if (owner) {
-		inode->i_mode = mode;
-		i_uid_write(inode, owner[0]);
+		inode->i_mode = mode; i_uid_write(inode, owner[0]);
 		i_gid_write(inode, owner[1]);
 	} else if (test_opt(sb, GRPID)) {
 		inode->i_mode = mode;
@@ -900,6 +913,9 @@ got_group:
 			goto next_group;
 
 		brelse(inode_bitmap_bh);
+		/*
+		 * 读取inode bitmap
+		 */
 		inode_bitmap_bh = ext4_read_inode_bitmap(sb, group);
 		/* Skip groups with suspicious inode tables */
 		if (EXT4_MB_GRP_IBITMAP_CORRUPT(grp) ||
@@ -909,6 +925,9 @@ got_group:
 		}
 
 repeat_in_this_group:
+		/*
+		 * 查找空闲索引节点号
+		 */
 		ret2 = find_inode_bit(sb, group, inode_bitmap_bh, &ino);
 		if (!ret2)
 			goto next_group;

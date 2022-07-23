@@ -624,6 +624,9 @@ int __close_fd(struct files_struct *files, unsigned fd)
 	struct file *file;
 	struct fdtable *fdt;
 
+	/*
+	 * 此处对file结构体加了锁
+	 */
 	spin_lock(&files->file_lock);
 	fdt = files_fdtable(files);
 	if (fd >= fdt->max_fds)
@@ -633,10 +636,19 @@ int __close_fd(struct files_struct *files, unsigned fd)
 		goto out_unlock;
 	rcu_assign_pointer(fdt->fd[fd], NULL);
 	__put_unused_fd(files, fd);
+	/*
+	 * 此处对file结构体放了锁
+	 */
 	spin_unlock(&files->file_lock);
+	/*
+	 * 此时fdt->fd[fd]已经置为NULL了，但此时filp_close()失败了怎么办？
+	 */
 	return filp_close(file, files);
 
 out_unlock:
+	/*
+	 * 此处对file结构体放了锁
+	 */
 	spin_unlock(&files->file_lock);
 	return -EBADF;
 }

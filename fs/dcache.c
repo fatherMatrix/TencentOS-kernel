@@ -96,6 +96,9 @@ EXPORT_SYMBOL(slash_name);
 
 static unsigned int d_hash_shift __read_mostly;
 
+/*
+ * 哈希键默认是由parent_dentry指针和last_name计算出来的
+ */
 static struct hlist_bl_head *dentry_hashtable __read_mostly;
 
 static inline struct hlist_bl_head *d_hash(unsigned int hash)
@@ -368,6 +371,9 @@ static void dentry_unlink_inode(struct dentry * dentry)
 	spin_unlock(&inode->i_lock);
 	if (!inode->i_nlink)
 		fsnotify_inoderemove(inode);
+	/*
+	 * 减少对应inode的引用计数
+	 */
 	if (dentry->d_op && dentry->d_op->d_iput)
 		dentry->d_op->d_iput(dentry, inode);
 	else
@@ -2322,6 +2328,12 @@ struct dentry *d_lookup(const struct dentry *parent, const struct qstr *name)
 		dentry = __d_lookup(parent, name);
 		if (dentry)
 			break;
+
+		/*
+		 * ref-lock用来预防查找过程中被改名了。
+		 *
+		 * 这是个全局锁哇!!!
+		 */
 	} while (read_seqretry(&rename_lock, seq));
 	return dentry;
 }
@@ -2390,7 +2402,10 @@ struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 			goto next;
 
 		/*
-		 * 增加引用计数
+		 * 增加dentry的引用计数，并没有增加关联inode的引用计数
+		 *
+		 * 因为这里是ref-walk，所以才需要增加引用计数。对于rcu-walk是没
+		 * 有增加引用计数的
 		 */
 		dentry->d_lockref.count++;
 		found = dentry;

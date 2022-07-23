@@ -1278,6 +1278,9 @@ int filp_close(struct file *filp, fl_owner_t id)
 			notify_gpu(NULL, GPU_CLOSE, current->pid);
 	}
 out:
+	/*
+	 * 减少file结构体的引用计数
+	 */
 	fput(filp);
 	return retval;
 }

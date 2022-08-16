@@ -2487,6 +2487,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			return ERR_PTR(-ENOTDIR);
 		/* nd->path和nd->root都是struct path, 内部只有两个指针 */
 		nd->path = nd->root;
+		/* 当前所站在dentry的inode */
 		nd->inode = inode;
 		if (flags & LOOKUP_RCU) {
 			/* 使用RCU的情况 */
@@ -3963,11 +3964,18 @@ static struct file *path_openat(struct nameidata *nd,
 struct file *do_filp_open(int dfd, struct filename *pathname,
 		const struct open_flags *op)
 {
+	/*
+	 * 参数dfd表示起始目录
+	 */
 	struct nameidata nd;
 	int flags = op->lookup_flags;
 	struct file *filp;
 
+	/*
+	 * 设置name、dfd、stack等字段
+	 */
 	set_nameidata(&nd, dfd, pathname);
+
 	/* 
  	 * 第一次使用rcu-walk方式搜索dentry cache。在散列表中根据{父目录，
  	 * 名称}查找目录的过程中，使用RCU保护散列桶的链表，使用序列号保护
@@ -3984,6 +3992,10 @@ struct file *do_filp_open(int dfd, struct filename *pathname,
 	if (unlikely(filp == ERR_PTR(-ESTALE)))
 		/* 第三次不使用dentry cache */
 		filp = path_openat(&nd, op, flags | LOOKUP_REVAL);
+
+	/*
+	 * 恢复stack等
+	 */
 	restore_nameidata();
 	return filp;
 }

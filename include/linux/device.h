@@ -114,13 +114,22 @@ extern void bus_remove_file(struct bus_type *, struct bus_attribute *);
  * private data.
  */
 struct bus_type {
+	/*
+	 * 总线名称，如"pci"、"ldd"
+	 */
 	const char		*name;
 	const char		*dev_name;
+	/*
+	 * 默认的父设备
+	 */
 	struct device		*dev_root;
 	const struct attribute_group **bus_groups;
 	const struct attribute_group **dev_groups;
 	const struct attribute_group **drv_groups;
 
+	/*
+	 * 用于判断挂在总线上的设备和驱动是否匹配
+	 */
 	int (*match)(struct device *dev, struct device_driver *drv);
 	int (*uevent)(struct device *dev, struct kobj_uevent_env *env);
 	int (*probe)(struct device *dev);
@@ -141,6 +150,11 @@ struct bus_type {
 
 	const struct iommu_ops *iommu_ops;
 
+	/*
+	 * 用于管理bus上的设备和驱动的数据结构
+	 * - 设备链表
+	 * - 驱动链表
+	 */
 	struct subsys_private *p;
 	struct lock_class_key lock_key;
 
@@ -572,11 +586,18 @@ int subsys_virtual_register(struct bus_type *subsys,
  * connected or how they work.
  */
 struct class {
+	/*
+	 * 每个类都需要一个唯一的名字，它将显示在/sys/class中
+	 */
 	const char		*name;
 	struct module		*owner;
 
 	const struct attribute_group	**class_groups;
 	const struct attribute_group	**dev_groups;
+	/*
+	 * 代表本class的kobject
+	 * 但是为什么不是嵌入的呢？
+	 */
 	struct kobject			*dev_kobj;
 
 	int (*dev_uevent)(struct device *dev, struct kobj_uevent_env *env);

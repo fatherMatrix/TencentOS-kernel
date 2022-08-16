@@ -587,6 +587,9 @@ int kvm_pic_init(struct kvm *kvm)
 	struct kvm_pic *s;
 	int ret;
 
+	/*
+	 * 创建kvm_pic结构体
+	 */
 	s = kzalloc(sizeof(struct kvm_pic), GFP_KERNEL_ACCOUNT);
 	if (!s)
 		return -ENOMEM;
@@ -599,6 +602,8 @@ int kvm_pic_init(struct kvm *kvm)
 
 	/*
 	 * Initialize PIO device
+	 *
+	 * 在KVM_PIO_BUS上创建3个设备
 	 */
 	kvm_iodevice_init(&s->dev_master, &picdev_master_ops);
 	kvm_iodevice_init(&s->dev_slave, &picdev_slave_ops);

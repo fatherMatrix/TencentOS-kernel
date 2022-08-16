@@ -63,13 +63,39 @@ enum kobject_action {
 	KOBJ_MAX
 };
 
+/*
+ * kobject是组成设备模型的基本结构。最初它只被理解为一个简单的引用计数，但是随
+ * 着时间的推移，它的任务越来越多，因此也有了许多成员。现在kobject结构所能处理
+ * 的任务以及它所支持的代码包括：
+ *
+ * - 对象的引用计数
+ *
+ * - sysfs表述
+ *   o sysfs中的每个目录，都对应着一个kobject结构体。
+ *   o 每个kobject都输出一个或者多个属性，对应sysfs目录中的文件
+ *
+ * - 数据结构关联
+ * - 热插拔事件处理
+ *
+ * 对kobject的使用主要在于把高级对象连接到设备模型上，方式为kobject嵌入到更高级
+ * 的数据结构中。可以将kobject看作是最顶层的基类，其他类都是它的派生产物。
+ */
 struct kobject {
 	const char		*name;
+	/*
+	 * 链接入kset内部的链表
+	 */
 	struct list_head	entry;
 	struct kobject		*parent;
 	struct kset		*kset;
 	struct kobj_type	*ktype;
+	/*
+	 * 在sysfs中的dentry
+	 */
 	struct kernfs_node	*sd; /* sysfs directory entry */
+	/*
+	 * 引用计数
+	 */
 	struct kref		kref;
 #ifdef CONFIG_DEBUG_KOBJECT_RELEASE
 	struct delayed_work	release;
@@ -141,6 +167,9 @@ static inline bool kobject_has_children(struct kobject *kobj)
 }
 
 struct kobj_type {
+	/*
+	 * 当kobject引用计数变为0时，此函数指针用于销毁kobject
+	 */
 	void (*release)(struct kobject *kobj);
 	const struct sysfs_ops *sysfs_ops;
 	struct attribute **default_attrs;	/* use default_groups instead */
@@ -160,6 +189,9 @@ struct kobj_uevent_env {
 	int buflen;
 };
 
+/*
+ * 用于热插拔？
+ */
 struct kset_uevent_ops {
 	int (* const filter)(struct kset *kset, struct kobject *kobj);
 	const char *(* const name)(struct kset *kset, struct kobject *kobj);

@@ -87,6 +87,9 @@ struct attribute_group {
 					      struct attribute *, int);
 	umode_t			(*is_bin_visible)(struct kobject *,
 						  struct bin_attribute *, int);
+	/*
+	 * 最后一个元素为NULL，因此不需要len字段
+	 */
 	struct attribute	**attrs;
 	struct bin_attribute	**bin_attrs;
 };

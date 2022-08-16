@@ -481,9 +481,23 @@ struct address_space {
 	 */
 struct request_queue;
 
+/*
+ * 代表一个块设备对象，如整个硬盘或特定分区。
+ * - 如果该结构代表一个分区，则其成员bd_part指向设备的分区结构
+ * - 如果该结构代表设备，则成员bd_disk指向设备的通用硬盘结构gendisk
+ */
 struct block_device {
+	/*
+	 * 设备号
+	 */
 	dev_t			bd_dev;  /* not a kdev_t - it's a search key */
+	/*
+	 * 打开用户统计
+	 */
 	int			bd_openers;
+	/*
+	 * 对应的块设备文件inode
+	 */
 	struct inode *		bd_inode;	/* will die */
 	struct super_block *	bd_super;
 	struct mutex		bd_mutex;	/* open/close mutex */
@@ -494,14 +508,26 @@ struct block_device {
 #ifdef CONFIG_SYSFS
 	struct list_head	bd_holder_disks;
 #endif
+	/*
+	 * 用于分区指向整个磁盘？
+	 */
 	struct block_device *	bd_contains;
 	unsigned		bd_block_size;
+	/*
+	 * 分区号？
+	 */
 	u8			bd_partno;
 	struct hd_struct *	bd_part;
 	/* number of times partitions within this device have been opened. */
 	unsigned		bd_part_count;
 	int			bd_invalidated;
+	/* 
+	 * 指向对应的磁盘
+	 */
 	struct gendisk *	bd_disk;
+	/*
+	 * 请求队列
+	 */
 	struct request_queue *  bd_queue;
 	struct backing_dev_info *bd_bdi;
 	struct list_head	bd_list;

@@ -632,6 +632,9 @@ asmlinkage __visible void __init start_kernel(void)
 	setup_mbuf();
 	vfs_caches_init_early();
 	sort_main_extable();
+	/*
+	 * 中断初始化
+	 */
 	trap_init();
 	mm_init();
 

@@ -706,9 +706,20 @@ static inline void bio_inc_remaining(struct bio *bio)
 #define BIO_POOL_SIZE 2
 
 struct bio_set {
+	/*
+	 * slab，用于分配bio
+	 */
 	struct kmem_cache *bio_slab;
+	/*
+	 * 干嘛的？
+	 */
 	unsigned int front_pad;
 
+	/* 
+	 * bio_pool和bvec_pool分别为分配bio和bio_vec的mempool池，在分配bio和
+	 * bio_vec时默认是从SLAB分配，但设置mempool池时会提前分配一定数量的内存
+	 * 对象, 当内存不足无法从SLAB分配时会从mempool池中分配。
+	 */
 	mempool_t bio_pool;
 	mempool_t bvec_pool;
 #if defined(CONFIG_BLK_DEV_INTEGRITY)

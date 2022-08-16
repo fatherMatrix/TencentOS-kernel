@@ -74,6 +74,9 @@ struct idt_bits {
 			p	: 1;
 } __attribute__((packed));
 
+/*
+ * 中断描述符
+ */
 struct gate_struct {
 	u16		offset_low;
 	u16		segment;

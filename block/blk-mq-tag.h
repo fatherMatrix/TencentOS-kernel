@@ -6,13 +6,32 @@
 
 /*
  * Tag address space map.
+ *
+ * 用于tag空间管理。tags中包含了对request及payload的分配, page_list就是用于链接
+ * 分配出的page; blk_mq_tags与硬队列blk_mq_hw_ctx一一对应，它管理了硬队列的
+ * tag bitmap和request，其中每一个tag bit代表了一个request
  */
 struct blk_mq_tags {
+	/*
+	 * tag和保留tag的数量。
+	 *
+	 * 一般情况下tag数量等于最大队列深度（QD），保留tag数量为0。
+	 */
 	unsigned int nr_tags;
 	unsigned int nr_reserved_tags;
 
+	/*
+	 * 活跃队列数量。
+	 *
+	 * blk-mq中一个tag set可以是多个request queue共享的（tag set是对应硬件
+	 * 队列的，每个硬件队列可以对应多个软件队列），记录当前活跃队列数量是为
+	 * 了均匀分配tag到每个request queue
+	 */
 	atomic_t active_queues;
 
+	/*
+	 * tag和保留tag的位图
+	 */
 	struct sbitmap_queue bitmap_tags;
 	struct sbitmap_queue breserved_tags;
 

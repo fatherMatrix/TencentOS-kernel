@@ -83,6 +83,10 @@ struct blk_mq_hw_ctx {
 };
 
 struct blk_mq_queue_map {
+	/*
+	 * 用于保存软硬队列的映射关系。
+	 * 数组下标为cpu编号（软件队列），数组元素为cpu编号对应的硬件队列
+	 */
 	unsigned int *mq_map;
 	unsigned int nr_queues;
 	unsigned int queue_offset;
@@ -102,19 +106,61 @@ struct blk_mq_tag_set {
 	 * that the driver wishes to support. There are no restrictions
 	 * on maps being of the same size, and it's perfectly legal to
 	 * share maps between types.
+	 *
+	 * 
+	 * 软件队列ctx到硬件队列hctx的映射表。
+	 *
+	 * blk-mq中将一个或者多个软件队列映射到一个硬件队列。一个器件可能支持多
+	 * 种类型的硬件队列。
 	 */
 	struct blk_mq_queue_map	map[HCTX_MAX_TYPES];
+	/*
+	 * 映射表的数量，值域为[1, HCTX_MAX_TYPES]
+	 */
 	unsigned int		nr_maps;	/* nr entries in map[] */
+	/*
+	 * 块设备驱动的mq操作集合，用于抽象块设备驱动的行为。例如scsi-mq中的实
+	 * 现是scsi_mq_ops和scsi_mq_ops_no_commit
+	 */
 	const struct blk_mq_ops	*ops;
+	/*
+	 * 块设备硬件队列的数量，目前多数块设备是1，nvme可能超过1
+	 */
 	unsigned int		nr_hw_queues;	/* nr hw queues across maps */
+	/*
+	 * 块设备硬件队列的深度，等于硬件tag数量，例如UFS一般是32
+	 */
 	unsigned int		queue_depth;	/* max hw supported */
+	/*
+	 * 块设备保留tag的数量
+	 */
 	unsigned int		reserved_tags;
+	/*
+	 * 块设备驱动为每个request分配的额外空间大小，一般是用于存放设备驱动的
+	 * payload数据。例如在scsi中，用于存放scsi_cmnd, sg_list等数据
+	 */
 	unsigned int		cmd_size;	/* per-request extra data */
+	/*
+	 * 块设备连接的NUMA节点，分配request内存时会使用，用于避免远端内存访问
+	 */
 	int			numa_node;
+	/*
+	 * 请求处理的超时时间，单位时jiffies，例如UFS默认是30s
+	 */
 	unsigned int		timeout;
 	unsigned int		flags;		/* BLK_MQ_F_* */
+	/*
+	 * 块设备驱动私有数据，例如scsi中存放的是scsi_host
+	 */
 	void			*driver_data;
 
+	/*
+	 * 块设备mq tag数组
+	 *
+	 * 每个硬队列一个blk_mq_tags结构体,保存在tags[hctx_idx]中。每个
+	 * blk_mq_tags是通过sbitmap_queue来描述，每个bit代表一个tag, 对应一个
+	 * request
+	 */
 	struct blk_mq_tags	**tags;
 
 	struct mutex		tag_list_lock;

@@ -386,6 +386,9 @@ int register_blkdev(unsigned int major, const char *name)
 		goto out;
 	}
 
+	/*
+	 * 分配一个blk_major_name结构体，链入major_names[index]哈希链表
+	 */
 	p = kmalloc(sizeof(struct blk_major_name), GFP_KERNEL);
 	if (p == NULL) {
 		ret = -ENOMEM;
@@ -648,6 +651,11 @@ static void register_disk(struct device *parent, struct gendisk *disk,
 	if (!get_capacity(disk))
 		goto exit;
 
+	/*
+	 * 得到gendisk的某个分区对应的block_device
+	 *
+	 * 没有直接的指针，必须通过设备号在bdev中查找
+	 */
 	bdev = bdget_disk(disk, 0);
 	if (!bdev)
 		goto exit;
@@ -715,6 +723,11 @@ static void __device_add_disk(struct device *parent, struct gendisk *disk,
 
 	disk->flags |= GENHD_FL_UP;
 
+	/*
+	 * 给part0分配一个dev_t
+	 *
+	 * 其他的分区呢？
+	 */
 	retval = blk_alloc_devt(&disk->part0, &devt);
 	if (retval) {
 		WARN_ON(1);
@@ -737,6 +750,9 @@ static void __device_add_disk(struct device *parent, struct gendisk *disk,
 
 		/* Register BDI before referencing it from bdev */
 		disk_to_dev(disk)->devt = devt;
+		/*
+		 * 注册对应的bdi
+		 */
 		ret = bdi_register_owner(disk->queue->backing_dev_info,
 						disk_to_dev(disk));
 		WARN_ON(ret);
@@ -868,6 +884,19 @@ static ssize_t disk_badblocks_store(struct device *dev,
  *
  * This function gets the structure containing partitioning
  * information for the given device @devt.
+ *
+ *
+ * 所以block_device与gendisk、hd_sturct是解耦开的。之间没有直接的指针连接，需要
+ * 使用辅助函数查找。
+ * !!! block_device中明明有bd_disk字段哇？
+ * bd_disk只能找到gendisk，无法确定block_device对应的partno <-------+
+ * !!! block_device中明明有bd_partno字段哇？                        |
+ *                                                                  |
+ * 使用bdget查找gendisk的某个hd_struct对应的block_device            |
+ * 使用get_gendisk查找某个block_device对应的gendisk和hd_struct      |
+ * 但这是为什么呢？ ------------------------------------------------+
+ *
+ * 最后结论：正是通过这个函数得到gendisk和partno，然后填充到block_device中！
  */
 struct gendisk *get_gendisk(dev_t devt, int *partno)
 {

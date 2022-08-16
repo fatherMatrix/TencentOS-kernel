@@ -25,6 +25,9 @@
 
 #include "internal.h"
 
+/*
+ * 所有的cdev都挂到这里，所有的bdev都挂到bdev_map
+ */
 static struct kobj_map *cdev_map;
 
 static DEFINE_MUTEX(chrdevs_lock);

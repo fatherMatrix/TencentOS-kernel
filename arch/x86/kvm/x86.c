@@ -4951,16 +4951,25 @@ set_identity_unlock:
 		if (kvm->created_vcpus)
 			goto create_irqchip_unlock;
 
+		/*
+		 * 创建PIC
+		 */
 		r = kvm_pic_init(kvm);
 		if (r)
 			goto create_irqchip_unlock;
 
+		/*
+		 * 创建IO APIC
+		 */
 		r = kvm_ioapic_init(kvm);
 		if (r) {
 			kvm_pic_destroy(kvm);
 			goto create_irqchip_unlock;
 		}
 
+		/*
+		 * 设置默认中断路由
+		 */
 		r = kvm_setup_default_irq_routing(kvm);
 		if (r) {
 			kvm_ioapic_destroy(kvm);
@@ -8167,6 +8176,9 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 			goto out;
 		}
 
+		/*
+		 * 进行中断注入
+		 */
 		if (inject_pending_event(vcpu) != 0)
 			req_immediate_exit = true;
 		else {
@@ -9509,6 +9521,9 @@ int kvm_arch_vcpu_init(struct kvm_vcpu *vcpu)
 
 	kvm_set_tsc_khz(vcpu, max_tsc_khz);
 
+	/*
+	 * 创建vcpu对应的MMU
+	 */
 	r = kvm_mmu_create(vcpu);
 	if (r < 0)
 		goto fail_free_pio_data;
@@ -9801,6 +9816,9 @@ int kvm_arch_create_memslot(struct kvm *kvm, struct kvm_memory_slot *slot,
 		int lpages;
 		int level = i + 1;
 
+		/*
+		 * 得到所需要页面的个数
+		 */
 		lpages = gfn_to_index(slot->base_gfn + npages - 1,
 				      slot->base_gfn, level) + 1;
 

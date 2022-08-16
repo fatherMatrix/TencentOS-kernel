@@ -1169,6 +1169,9 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 
 	fd = get_unused_fd_flags(flags);
 	if (fd >= 0) {
+		/*
+		 * 返回新打开的文件所关联的file结构体
+		 */
 		struct file *f = do_filp_open(dfd, tmp, &op);
 		if (IS_ERR(f)) {
 			put_unused_fd(fd);

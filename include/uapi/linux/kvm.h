@@ -93,13 +93,19 @@ struct kvm_memory_region {
 	__u64 memory_size; /* bytes */
 };
 
-/* for KVM_SET_USER_MEMORY_REGION */
+/*
+ * for KVM_SET_USER_MEMORY_REGION
+ *
+ * 表示虚拟机的一段物理内存
+ */
 struct kvm_userspace_memory_region {
-	__u32 slot;
-	__u32 flags;
-	__u64 guest_phys_addr;
-	__u64 memory_size; /* bytes */
-	__u64 userspace_addr; /* start of the userspace allocated memory */
+	__u32 slot;		/* ID号，包括AddressSpace的ID和本身的ID */
+	__u32 flags;		/* 该段内存的属性 */
+	__u64 guest_phys_addr;	/* 表示虚拟机的物理内存地址 */
+	__u64 memory_size; 	/* bytes，表示内存尺寸 */
+	__u64 userspace_addr; 	/* start of the userspace allocated memory，
+				   表示QEMU用户态进程中分配的虚拟机地址
+				 */
 };
 
 /*

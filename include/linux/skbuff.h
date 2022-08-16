@@ -703,6 +703,9 @@ struct sk_buff {
 	};
 
 	union {
+		/*
+		 * 套接字结构体
+		 */
 		struct sock		*sk;
 		int			ip_defrag_offset;
 	};
@@ -730,7 +733,17 @@ struct sk_buff {
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
 	unsigned long		 _nfct;
 #endif
+	/*
+	 * 缓冲区中数据区块的大小。此长度包括主要缓冲区（head指向）的数据以及一
+	 * 些fragment的数据。
+	 *
+	 * len会把报头算进来。当缓冲区从一个网络分层移往下一个网络分层时，其值就
+	 * 会发生变化。
+	 */
 	unsigned int		len,
+	/*
+	 * 仅计算fragment中的数据大小
+	 */
 				data_len;
 	__u16			mac_len,
 				hdr_len;
@@ -879,7 +892,13 @@ struct sk_buff {
 	sk_buff_data_t		end;
 	unsigned char		*head,
 				*data;
+	/*
+	 * len + sizeof(sk_buff)
+	 */
 	unsigned int		truesize;
+	/*
+	 * 引用计数
+	 */
 	refcount_t		users;
 
 #ifdef CONFIG_SKB_EXTENSIONS

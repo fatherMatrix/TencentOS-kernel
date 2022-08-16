@@ -2374,6 +2374,9 @@ static int __init init_kprobes(void)
 		raw_spin_lock_init(&(kretprobe_table_locks[i].lock));
 	}
 
+	/*
+	 * __start_kprobe_blacklist和__stop_kprobe_blacklist在链接脚本中
+	 */
 	err = populate_kprobe_blacklist(__start_kprobe_blacklist,
 					__stop_kprobe_blacklist);
 	if (err) {

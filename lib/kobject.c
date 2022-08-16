@@ -213,11 +213,17 @@ static void kobject_init_internal(struct kobject *kobj)
 {
 	if (!kobj)
 		return;
+	/*
+	 * 将引用计数设置为1
+	 */
 	kref_init(&kobj->kref);
 	INIT_LIST_HEAD(&kobj->entry);
 	kobj->state_in_sysfs = 0;
 	kobj->state_add_uevent_sent = 0;
 	kobj->state_remove_uevent_sent = 0;
+	/*
+	 * 初始化状态设置为1
+	 */
 	kobj->state_initialized = 1;
 }
 
@@ -243,6 +249,9 @@ static int kobject_add_internal(struct kobject *kobj)
 	if (kobj->kset) {
 		if (!parent)
 			parent = kobject_get(&kobj->kset->kobj);
+		/*
+		 * 通过kobj->entry字段，链接入kset->kset->list链表
+		 */
 		kobj_kset_join(kobj);
 		kobj->parent = parent;
 	}

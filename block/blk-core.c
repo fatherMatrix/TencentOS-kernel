@@ -1068,6 +1068,8 @@ blk_qc_t generic_make_request(struct bio *bio)
 	 * bio_list_on_stack[1] contains bios that were submitted before
 	 * the current make_request_fn, but that haven't been processed
 	 * yet.
+	 *
+	 * 0是当前的，1是以前的
 	 */
 	struct bio_list bio_list_on_stack[2];
 	blk_qc_t ret = BLK_QC_T_NONE;

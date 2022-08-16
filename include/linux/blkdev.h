@@ -416,12 +416,18 @@ struct request_queue {
 	const struct blk_mq_ops	*mq_ops;
 
 	/* sw queues */
+	/*
+	 * per-cpu的软件队列
+	 */
 	struct blk_mq_ctx __percpu	*queue_ctx;
 	unsigned int		nr_queues;
 
 	unsigned int		queue_depth;
 
 	/* hw dispatch queues */
+	/*
+	 * 硬件队列
+	 */
 	struct blk_mq_hw_ctx	**queue_hw_ctx;
 	unsigned int		nr_hw_queues;
 
@@ -1704,17 +1710,33 @@ static inline struct bio_vec *rq_integrity_vec(struct request *rq)
 #endif /* CONFIG_BLK_DEV_INTEGRITY */
 
 struct block_device_operations {
+	/* 
+	 * 打开块设备 
+	 */
 	int (*open) (struct block_device *, fmode_t);
+	/*
+	 * 关闭块设备
+	 */
 	void (*release) (struct gendisk *, fmode_t);
 	int (*rw_page)(struct block_device *, sector_t, struct page *, unsigned int);
 	int (*ioctl) (struct block_device *, fmode_t, unsigned, unsigned long);
 	int (*compat_ioctl) (struct block_device *, fmode_t, unsigned, unsigned long);
+	/*
+	 * 用于检查驱动器中的介质是否已经改变
+	 */
 	unsigned int (*check_events) (struct gendisk *disk,
 				      unsigned int clearing);
 	/* ->media_changed() is DEPRECATED, use ->check_events() instead */
 	int (*media_changed) (struct gendisk *);
 	void (*unlock_native_capacity) (struct gendisk *);
+	/*
+	 * 用来响应一个介质改变
+	 */
 	int (*revalidate_disk) (struct gendisk *);
+	/*
+	 * 根据驱动器的几何信息填充一个hd_geometry结构体，hd_geometry结构体包含
+	 * 磁头、扇区、柱面等信息
+	 */
 	int (*getgeo)(struct block_device *, struct hd_geometry *);
 	/* this callback is with swap_lock and sometimes page table lock held */
 	void (*swap_slot_free_notify) (struct block_device *, unsigned long);

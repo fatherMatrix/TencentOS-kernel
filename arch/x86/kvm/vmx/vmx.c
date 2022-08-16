@@ -4388,6 +4388,9 @@ static void vmx_inject_irq(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
 	uint32_t intr;
+	/*
+	 * 获取中断向量号
+	 */
 	int irq = vcpu->arch.interrupt.nr;
 
 	trace_kvm_inj_virq(irq);
@@ -4407,6 +4410,9 @@ static void vmx_inject_irq(struct kvm_vcpu *vcpu)
 			     vmx->vcpu.arch.event_exit_inst_len);
 	} else
 		intr |= INTR_TYPE_EXT_INTR;
+	/*
+	 * 将32位的intr变量写入VM-entry interruption-information区域
+	 */
 	vmcs_write32(VM_ENTRY_INTR_INFO_FIELD, intr);
 
 	vmx_clear_hlt(vcpu);
@@ -5203,6 +5209,10 @@ static int handle_ept_violation(struct kvm_vcpu *vcpu)
 	       PFERR_GUEST_FINAL_MASK : PFERR_GUEST_PAGE_MASK;
 
 	vcpu->arch.exit_qualification = exit_qualification;
+	/*
+	 * 内部会调用kvm_mmu的page_fault回调函数tdp_page_fault，tdp_page_fault
+	 * 是EPT缺页处理的核心函数
+	 */
 	return kvm_mmu_page_fault(vcpu, gpa, error_code, NULL, 0);
 }
 

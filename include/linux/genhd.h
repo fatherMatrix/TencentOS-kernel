@@ -127,6 +127,9 @@ struct hd_struct {
 #endif
 	unsigned long stamp;
 #ifdef	CONFIG_SMP
+	/* 
+	 * 统计数据
+	 */
 	struct disk_stats __percpu *dkstats;
 #else
 	struct disk_stats dkstats;
@@ -195,6 +198,9 @@ struct gendisk {
 	 * don't use directly.  Use disk_devt() and disk_max_parts().
 	 */
 	int major;			/* major number of driver */
+	/*
+	 * 第一个分区的从设备号
+	 */
 	int first_minor;
 	int minors;                     /* maximum number of minors, =1 for
                                          * disks that can't be partitioned. */
@@ -209,16 +215,42 @@ struct gendisk {
 	 * Protected with matching bdev lock but stat and other
 	 * non-critical accesses use RCU.  Always access through
 	 * helpers.
+	 *
+	 * disk_part_tbl结构体中保存的是hd_struct数组，用于表示分区
 	 */
 	struct disk_part_tbl __rcu *part_tbl;
+	/*
+	 * 代表vda本身的hd_struct直接嵌入到gendisk结构体中，用于性能优化。
+	 * 在part_tbl中的hd_struct指针数组中，第0项就是指向了&part0
+	 *
+	 * 如果vda有两个分区vda1、vda2，那么part_tbl中有三个元素：
+	 * +-------+-------+-------+
+	 * |  vda  |  vda1 |  vda2 |
+	 * +-------+-------+-------+
+	 *
+	 * 其中vda1.__dev.parent = &vda.__dev
+	 *     vda2.__dev.parent = &vda.__dev
+	 *
+	 * hd_struct中包含一个kobject
+	 */
 	struct hd_struct part0;
 
+	/*
+	 * 指向此块设备对应的各种操作
+	 */
 	const struct block_device_operations *fops;
+	/*
+	 * 磁盘的请求队列，其内部也是有一个kobject
+	 */
 	struct request_queue *queue;
 	void *private_data;
 
 	int flags;
 	struct rw_semaphore lookup_sem;
+	/*
+	 * sysfs中的slaves文件夹
+	 * - find /sys -name "slaves" -print
+	 */
 	struct kobject *slave_dir;
 
 	struct timer_rand_state *random;
@@ -240,6 +272,9 @@ struct gendisk {
 static inline struct gendisk *part_to_disk(struct hd_struct *part)
 {
 	if (likely(part)) {
+		/*
+		 * 只有part0才是嵌入到gendisk中的
+		 */
 		if (part->partno)
 			return dev_to_disk(part_to_dev(part)->parent);
 		else
@@ -690,6 +725,10 @@ extern ssize_t part_fail_store(struct device *dev,
 	__disk;								\
 })
 
+/*
+ * minors参数是这个磁盘使用的次设备号的数量，一般也就是磁盘分区的数量，此后
+ * minors参数不能被修改
+ */
 #define alloc_disk(minors) alloc_disk_node(minors, NUMA_NO_NODE)
 
 static inline int hd_ref_init(struct hd_struct *part)

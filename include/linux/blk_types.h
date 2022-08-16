@@ -190,8 +190,14 @@ struct bio {
 
 	atomic_t		__bi_cnt;	/* pin count */
 
+	/*
+	 * 有可能指向内嵌的bi_inline_vecs，有可能指向额外分配的
+	 */
 	struct bio_vec		*bi_io_vec;	/* the actual vec list */
 
+	/*
+	 * 指向bio的mempool
+	 */
 	struct bio_set		*bi_pool;
 
 	KABI_RESERVE(1);
@@ -201,6 +207,8 @@ struct bio {
 	 * We can inline a number of vecs at the end of the bio, to avoid
 	 * double allocations for a small number of bio_vecs. This member
 	 * MUST obviously be kept at the very end of the bio.
+	 *
+	 * 内置的bio_vec，用于性能优化
 	 */
 	struct bio_vec		bi_inline_vecs[0];
 };

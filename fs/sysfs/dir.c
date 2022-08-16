@@ -56,6 +56,9 @@ int sysfs_create_dir_ns(struct kobject *kobj, const void *ns)
 
 	kobject_get_ownership(kobj, &uid, &gid);
 
+	/*
+	 * 创建新的kernfs_node，并将其private字段设置为kobject
+	 */
 	kn = kernfs_create_dir_ns(parent, kobject_name(kobj),
 				  S_IRWXU | S_IRUGO | S_IXUGO, uid, gid,
 				  kobj, ns);

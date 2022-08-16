@@ -748,6 +748,9 @@ static struct kvm *kvm_create_vm(unsigned long type)
 		goto out_err;
 
 	mutex_lock(&kvm_lock);
+	/*
+	 * 所有的虚拟机都挂到vm_list链表上
+	 */
 	list_add(&kvm->vm_list, &vm_list);
 	mutex_unlock(&kvm_lock);
 
@@ -1002,6 +1005,9 @@ int __kvm_set_memory_region(struct kvm *kvm,
 	int as_id, id;
 	enum kvm_mr_change change;
 
+	/*
+	 * 检查mem的flag字段是否合法
+	 */
 	r = check_memory_region_flags(mem);
 	if (r)
 		goto out;
@@ -1028,6 +1034,9 @@ int __kvm_set_memory_region(struct kvm *kvm,
 		goto out;
 
 	slot = id_to_memslot(__kvm_memslots(kvm, as_id), id);
+	/*
+	 * 转换以page为单位
+	 */
 	base_gfn = mem->guest_phys_addr >> PAGE_SHIFT;
 	npages = mem->memory_size >> PAGE_SHIFT;
 
@@ -1107,6 +1116,10 @@ int __kvm_set_memory_region(struct kvm *kvm,
 		slot = id_to_memslot(slots, id);
 		slot->flags |= KVM_MEMSLOT_INVALID;
 
+		/*
+		 * 更新kvm->memslots的结构，该函数的主要作用是将
+		 * kvm->memslots[as_id]指针通过RCU机制替换成刚刚分配的slots
+		 */
 		old_memslots = install_new_memslots(kvm, as_id, slots);
 
 		/* From this point no new shadow pages pointing to a deleted,
@@ -1139,6 +1152,9 @@ int __kvm_set_memory_region(struct kvm *kvm,
 	update_memslots(slots, &new, change);
 	old_memslots = install_new_memslots(kvm, as_id, slots);
 
+	/*
+	 * 提交内存
+	 */
 	kvm_arch_commit_memory_region(kvm, mem, &old, &new, change);
 
 	kvm_free_memslot(kvm, &old, &new);
@@ -1160,6 +1176,9 @@ int kvm_set_memory_region(struct kvm *kvm,
 	int r;
 
 	mutex_lock(&kvm->slots_lock);
+	/*
+	 * 建立映射关系
+	 */
 	r = __kvm_set_memory_region(kvm, mem);
 	mutex_unlock(&kvm->slots_lock);
 	return r;

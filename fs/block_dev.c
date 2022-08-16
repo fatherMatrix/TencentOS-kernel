@@ -907,6 +907,9 @@ struct block_device *bdget(dev_t dev)
 	struct block_device *bdev;
 	struct inode *inode;
 
+	/*
+	 * 此inode是bdev fs中的索引节点
+	 */
 	inode = iget5_locked(blockdev_superblock, hash(dev),
 			bdev_test, bdev_set, &dev);
 
@@ -976,6 +979,10 @@ static struct block_device *bd_acquire(struct inode *inode)
 
 	spin_lock(&bdev_lock);
 	bdev = inode->i_bdev;
+	/*
+	 * inode->i_bdev字段已经被另一个内核路径填充，则可以增加其引用计数后直
+	 * 接返回
+	 */
 	if (bdev && !inode_unhashed(bdev->bd_inode)) {
 		bdgrab(bdev);
 		spin_unlock(&bdev_lock);
@@ -1108,6 +1115,9 @@ retry:
 
 static struct gendisk *bdev_get_gendisk(struct block_device *bdev, int *partno)
 {
+	/*
+	 * 这里为什么不用bdev->bd_disk呢？
+	 */
 	struct gendisk *disk = get_gendisk(bdev->bd_dev, partno);
 
 	if (!disk)
@@ -1563,12 +1573,18 @@ static int __blkdev_get(struct block_device *bdev, fmode_t mode, int for_part)
  restart:
 
 	ret = -ENXIO;
+	/*
+	 * 通过查找bdev_map（struct kobj_map)来确定
+	 */
 	disk = bdev_get_gendisk(bdev, &partno);
 	if (!disk)
 		goto out;
 
 	disk_block_events(disk);
 	mutex_lock_nested(&bdev->bd_mutex, for_part);
+	/*
+	 * 第一次打开
+	 */
 	if (!bdev->bd_openers) {
 		first_open = true;
 		bdev->bd_disk = disk;
@@ -1614,6 +1630,9 @@ static int __blkdev_get(struct block_device *bdev, fmode_t mode, int for_part)
 			 */
 			if (bdev->bd_invalidated &&
 			    (!ret || ret == -ENOMEDIUM))
+				/*
+				 * 扫描分区表并更新到gen disk.part_tbl中
+				 */
 				bdev_disk_changed(bdev, ret == -ENOMEDIUM);
 
 			if (ret)
@@ -1644,6 +1663,9 @@ static int __blkdev_get(struct block_device *bdev, fmode_t mode, int for_part)
 		if (bdev->bd_bdi == &noop_backing_dev_info)
 			bdev->bd_bdi = bdi_get(disk->queue->backing_dev_info);
 	} else {
+	/*
+	 * 非第一次打开
+	 */
 		if (bdev->bd_contains == bdev) {
 			ret = 0;
 			if (bdev->bd_disk->fops->open)
@@ -2188,6 +2210,9 @@ struct block_device *lookup_bdev(const char *pathname)
 	if (!pathname || !*pathname)
 		return ERR_PTR(-EINVAL);
 
+	/*
+	 * 标准path查找过程
+	 */
 	error = kern_path(pathname, LOOKUP_FOLLOW, &path);
 	if (error)
 		return ERR_PTR(error);

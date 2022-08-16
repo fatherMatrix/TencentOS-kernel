@@ -393,12 +393,18 @@ struct kvm_mmu {
 	void (*invlpg)(struct kvm_vcpu *vcpu, gva_t gva, hpa_t root_hpa);
 	void (*update_pte)(struct kvm_vcpu *vcpu, struct kvm_mmu_page *sp,
 			   u64 *spte, const void *pte);
+	/*
+	 * 指向EPT页表中第一级页表的物理地址，类似于GuestOS中的CR3
+	 */
 	hpa_t root_hpa;
 	gpa_t root_cr3;
 	union kvm_mmu_role mmu_role;
 	u8 root_level;
 	u8 shadow_root_level;
 	u8 ept_ad;
+	/*
+	 * 表示使用直接映射，也就是使用EPT
+	 */
 	bool direct_map;
 	struct kvm_mmu_root_info prev_roots[KVM_MMU_NUM_PREV_ROOTS];
 
@@ -789,11 +795,24 @@ struct kvm_vcpu_arch {
 };
 
 struct kvm_lpage_info {
+	/*
+	 * 表示是否支持大页
+	 */
 	int disallow_lpage;
 };
 
 struct kvm_arch_memory_slot {
+	/*
+	 * 保存的是gfn与其对应页表项的rmap，KVM_NR_PAGE_SIZES表示页表项的种类，
+	 * 目前为3，分别表示4KB、2MB和1GB页面
+	 *
+	 * 通过这个，可以唯一定位到page
+	 */
 	struct kvm_rmap_head *rmap[KVM_NR_PAGE_SIZES];
+	/*
+	 * 2MB和1GB页面称为大页，lpage_info保存的是大页的信息，所以lpage_info的
+	 * 元素个数比rmap元素个数少1
+	 */
 	struct kvm_lpage_info *lpage_info[KVM_NR_PAGE_SIZES - 1];
 	unsigned short *gfn_track[KVM_PAGE_TRACK_MAX];
 };
@@ -1080,6 +1099,9 @@ struct kvm_x86_ops {
 	u32 (*get_interrupt_shadow)(struct kvm_vcpu *vcpu);
 	void (*patch_hypercall)(struct kvm_vcpu *vcpu,
 				unsigned char *hypercall_addr);
+	/*
+	 * 对应vmx_inject_irq
+	 */
 	void (*set_irq)(struct kvm_vcpu *vcpu);
 	void (*set_nmi)(struct kvm_vcpu *vcpu);
 	void (*queue_exception)(struct kvm_vcpu *vcpu);

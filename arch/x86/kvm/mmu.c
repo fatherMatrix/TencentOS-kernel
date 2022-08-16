@@ -5036,6 +5036,9 @@ static void init_kvm_tdp_mmu(struct kvm_vcpu *vcpu)
 		return;
 
 	context->mmu_role.as_u64 = new_role.as_u64;
+	/*
+	 * 用来处理EPT的页访问错误
+	 */
 	context->page_fault = tdp_page_fault;
 	context->sync_page = nonpaging_sync_page;
 	context->invlpg = nonpaging_invlpg;
@@ -5259,6 +5262,9 @@ void kvm_init_mmu(struct kvm_vcpu *vcpu, bool reset_roots)
 	if (mmu_is_nested(vcpu))
 		init_kvm_nested_mmu(vcpu);
 	else if (tdp_enabled)
+		/*
+		 * [T]wo [D]imensional [P]aging
+		 */
 		init_kvm_tdp_mmu(vcpu);
 	else
 		init_kvm_softmmu(vcpu);

@@ -236,6 +236,12 @@ __recover_probed_insn(kprobe_opcode_t *buf, unsigned long addr)
 	 * at different place, __copy_instruction() tweaks the displacement of
 	 * that instruction. In that case, we can't recover the instruction
 	 * from the kp->ainsn.insn.
+	 * 
+	 * rip相对寻址的指令无法在异地单步执行，因此在拷贝被探测指令的时候，
+	 * __copy_instruction()调整了这些指令的位置。（所以单步执行的时候不必将
+	 * 原指令写回被探测地址。Documentation/kprobe.txt中提到的小时间窗口并不
+	 * 存在了）
+	 *
 	 *
 	 * On the other hand, in case on normal Kprobe, kp->opcode has a copy
 	 * of the first byte of the probed instruction, which is overwritten
@@ -274,6 +280,9 @@ unsigned long recover_probed_instruction(kprobe_opcode_t *buf, unsigned long add
 	if (__addr != addr)
 		return __addr;
 
+	/*
+	 * 到这里说明addr处的指令没有被优化，即这里不存在0xcc被替换成JMP的情况
+	 */
 	return __recover_probed_insn(buf, addr);
 }
 
@@ -341,6 +350,8 @@ static int is_IF_modifier(kprobe_opcode_t *insn)
  * addressing mode. Note that since @real will be the final place of copied
  * instruction, displacement must be adjust by @real, not @dest.
  * This returns the length of copied instruction, or 0 if it has an error.
+ *
+ * 正常返回拷贝指令的长度，异常返回0
  */
 int __copy_instruction(u8 *dest, u8 *src, u8 *real, struct insn *insn)
 {
@@ -486,9 +497,16 @@ int arch_prepare_kprobe(struct kprobe *p)
 	if (alternatives_text_reserved(p->addr, p->addr))
 		return -EINVAL;
 
+	/*
+	 * 调用can_probe检查探测地址是否地址所在代码的指令的边界地址，不是的话
+	 * 不能探测。
+	 */
 	if (!can_probe((unsigned long)p->addr))
 		return -EILSEQ;
-	/* insn: must be on special executable page on x86. */
+	/* insn: must be on special executable page on x86. 
+	 * 
+	 * 从kprobe_insn_slots缓存中分配一个slot，大小为MAX_INSN_SIZE(15)
+	 */
 	p->ainsn.insn = get_insn_slot();
 	if (!p->ainsn.insn)
 		return -ENOMEM;
@@ -664,9 +682,15 @@ int kprobe_int3_handler(struct pt_regs *regs)
 	struct kprobe *p;
 	struct kprobe_ctlblk *kcb;
 
+	/*
+	 * 确保此次int3是从内核态触发的
+	 */
 	if (user_mode(regs))
 		return 0;
 
+	/*
+	 * regs->ip指向的是0xcc后的下下一条指令，这里需要得到0xcc本身的指令地址
+	 */
 	addr = (kprobe_opcode_t *)(regs->ip - sizeof(kprobe_opcode_t));
 	/*
 	 * We don't want to be preempted for the entire duration of kprobe
@@ -674,11 +698,17 @@ int kprobe_int3_handler(struct pt_regs *regs)
 	 * IF while singlestepping, it must be no preemptible.
 	 */
 
+	/*
+	 * 获取kprobe_ctlblk和kprobe结构体
+	 */
 	kcb = get_kprobe_ctlblk();
 	p = get_kprobe(addr);
 
 	if (p) {
 		if (kprobe_running()) {
+			/*
+			 * kprobe重入的情况
+			 */
 			if (reenter_kprobe(p, regs, kcb))
 				return 1;
 		} else {
@@ -693,6 +723,16 @@ int kprobe_int3_handler(struct pt_regs *regs)
 			 * instruction, we must skip the single stepping.
 			 */
 			if (!p->pre_handler || !p->pre_handler(p, regs))
+				/*
+				 * 设置TF位，清除IF位，将regs->ip指向已经保存好
+				 * 好的被探测指令，然后do_int3在下面立即返回。
+				 *
+				 * 返回后regs中保存的内容，包括EFLAGS和IP被异常
+				 * 恢复过程重新装入CPU中。此时CPU立马执行
+				 * regs->ip指向的保存好的被探测指令，但由于设置
+				 * 了TF位，所以在执行完后触发debug异常，进入
+				 * debug异常处理函数do_debug
+				 */
 				setup_singlestep(p, regs, kcb, 0);
 			else
 				reset_current_kprobe();
@@ -976,11 +1016,18 @@ int kprobe_debug_handler(struct pt_regs *regs)
 	if (!cur)
 		return 0;
 
+	/*
+	 * 调用resume_execution函数将debug异常返回的下一条指令设置为被探测指令
+	 * 之后的指令，这样程序do_debug返回后程序就可以按照正常的流程继续执行
+	 */
 	resume_execution(cur, regs, kcb);
 	regs->flags |= kcb->kprobe_saved_flags;
 
 	if ((kcb->kprobe_status != KPROBE_REENTER) && cur->post_handler) {
 		kcb->kprobe_status = KPROBE_HIT_SSDONE;
+		/*
+		 * 调用post_handler()
+		 */
 		cur->post_handler(cur, regs, 0);
 	}
 
@@ -999,6 +1046,10 @@ out:
 	if (regs->flags & X86_EFLAGS_TF)
 		return 0;
 
+	/*
+	 * 返回值0和1控制着do_debug函数中的流程是否继续下去。如果返回1，则
+	 * do_debug也直接返回；如果返回0，则do_debug还要继续处理
+	 */
 	return 1;
 }
 NOKPROBE_SYMBOL(kprobe_debug_handler);

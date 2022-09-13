@@ -7273,6 +7273,9 @@ int kvm_arch_init(void *opaque)
 	int r;
 	struct kvm_x86_ops *ops = opaque;
 
+	/*
+	 * kvm_x86_ops是全局变量，多读
+	 */
 	if (kvm_x86_ops) {
 		printk(KERN_ERR "kvm: already loaded the other module\n");
 		r = -EEXIST;
@@ -7312,7 +7315,9 @@ int kvm_arch_init(void *opaque)
 		goto out;
 	}
 
-	/* 分配per-cpu的变量shared_msrs */
+	/* 
+	 * 分配per-cpu的变量shared_msrs，与内存虚拟化相关
+	 */
 	shared_msrs = alloc_percpu(struct kvm_shared_msrs);
 	if (!shared_msrs) {
 		printk(KERN_ERR "kvm: failed to allocate percpu kvm_shared_msrs\n");
@@ -9452,7 +9457,11 @@ int kvm_arch_hardware_setup(void)
 {
 	int r;
 
-	/* kvm_x86_ops == &vmx_x86_ops */
+	/* 
+	 * kvm_x86_ops == &vmx_x86_ops
+	 *
+	 * 初始化vmcs_config、多种全局变量，以及对应每个pCPU的vmxon区域
+	 */
 	r = kvm_x86_ops->hardware_setup();
 	if (r != 0)
 		return r;

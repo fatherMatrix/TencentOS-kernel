@@ -47,6 +47,9 @@ struct nested_vmx_msrs {
 	u64 vmfunc_controls;
 };
 
+/*
+ * 在创建cpu的时候用这个配置来初始化VMCS
+ */
 struct vmcs_config {
 	int size;
 	int order;
@@ -59,6 +62,9 @@ struct vmcs_config {
 	u32 vmentry_ctrl;
 	struct nested_vmx_msrs nested;
 };
+/*
+ * 全局变量
+ */
 extern struct vmcs_config vmcs_config;
 
 struct vmx_capability {

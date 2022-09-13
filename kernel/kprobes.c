@@ -1000,8 +1000,14 @@ static int kprobe_ftrace_enabled;
 static int prepare_kprobe(struct kprobe *p)
 {
 	if (!kprobe_ftrace(p))
+		/*
+		 * 走到这里，说明探测的不是动态ftrace的mcount段地址
+		 */
 		return arch_prepare_kprobe(p);
 
+	/*
+	 * 走到这里，说明探测的地址刚好是动态ftrace的mcount段地址
+	 */
 	return arch_prepare_kprobe_ftrace(p);
 }
 
@@ -1587,6 +1593,11 @@ static int check_kprobe_address_safe(struct kprobe *p,
 {
 	int ret;
 
+	/*
+	 * 调用ftrace_location函数检测探测地址是否属于动态ftrace的探测点mcount
+	 * 段。一般是函数开始5个nop指令。如果是这个地址，那么置位p->flags的
+	 * KPROBE_FLAG_FTRACE，本次kprobe将走动态ftrace路径，不走int3异常。
+	 */
 	ret = arch_check_ftrace_location(p);
 	if (ret)
 		return ret;
@@ -1645,6 +1656,11 @@ int register_kprobe(struct kprobe *p)
 		return PTR_ERR(addr);
 	p->addr = addr;
 
+	/*
+	 * 检测本kprobe是否已经注册，如果已注册，直接返回完成注册
+	 *
+	 * 已注册的意思是：在p->addr关联的kprobe链表上存在p
+	 */
 	ret = check_kprobe_rereg(p);
 	if (ret)
 		return ret;
@@ -1654,6 +1670,9 @@ int register_kprobe(struct kprobe *p)
 	p->nmissed = 0;
 	INIT_LIST_HEAD(&p->list);
 
+	/*
+	 * 检查探测地址
+	 */
 	ret = check_kprobe_address_safe(p, &probed_mod);
 	if (ret)
 		return ret;
@@ -1662,11 +1681,21 @@ int register_kprobe(struct kprobe *p)
 
 	old_p = get_kprobe(p->addr);
 	if (old_p) {
-		/* Since this may unoptimize old_p, locking text_mutex. */
+		/* Since this may unoptimize old_p, locking text_mutex. 
+		 *
+		 * 这是此地址上第2个或后续kprobe，是一种较为复杂的情况
+		 */
 		ret = register_aggr_kprobe(old_p, p);
 		goto out;
 	}
 
+	/*
+	 * 运行到这里，说明这是此地址上第一个kprobe
+	 */
+
+	/*
+	 * 关闭cpu_hotplug_lock
+	 */
 	cpus_read_lock();
 	/* Prevent text modification */
 	mutex_lock(&text_mutex);
@@ -1681,6 +1710,9 @@ int register_kprobe(struct kprobe *p)
 		       &kprobe_table[hash_ptr(p->addr, KPROBE_HASH_BITS)]);
 
 	if (!kprobes_all_disarmed && !kprobe_disabled(p)) {
+		/*
+		 * 将trap指令写到被探测点处替换原始指令
+		 */
 		ret = arm_kprobe(p);
 		if (ret) {
 			hlist_del_rcu(&p->hlist);
@@ -2369,6 +2401,9 @@ static int __init init_kprobes(void)
 	/* FIXME allocate the probe table, currently defined statically */
 	/* initialize all list heads */
 	for (i = 0; i < KPROBE_TABLE_SIZE; i++) {
+		/*
+		 * 初始化kprobe哈希表
+		 */
 		INIT_HLIST_HEAD(&kprobe_table[i]);
 		INIT_HLIST_HEAD(&kretprobe_inst_table[i]);
 		raw_spin_lock_init(&(kretprobe_table_locks[i].lock));
@@ -2376,6 +2411,9 @@ static int __init init_kprobes(void)
 
 	/*
 	 * __start_kprobe_blacklist和__stop_kprobe_blacklist在链接脚本中
+	 *
+	 * 此函数讲地址范围内的函数地址都加入到kprobe_blacklist链表中去，用于后
+	 * 面注册探测点时判断使用
 	 */
 	err = populate_kprobe_blacklist(__start_kprobe_blacklist,
 					__stop_kprobe_blacklist);
@@ -2408,8 +2446,17 @@ static int __init init_kprobes(void)
 	kprobes_all_disarmed = false;
 
 	err = arch_init_kprobes();
+	/*
+	 * 如此在执行回调函数和单步执行被探测指令期间若发生了内存异常，将优先调
+	 * 用kprobe_exceptions_notify函数处理（架构相关，x86会调用
+	 * kprobe的fault回调函数，而arm则为空）
+	 */
 	if (!err)
 		err = register_die_notifier(&kprobe_exceptions_nb);
+	/*
+	 * 注册module notify回调kprobes_module_callback函数的作用是若当某个内核
+	 * 模块发生卸载操作时有必要检测并移除注册到该模块函数的探测点。
+	 */
 	if (!err)
 		err = register_module_notifier(&kprobe_module_nb);
 

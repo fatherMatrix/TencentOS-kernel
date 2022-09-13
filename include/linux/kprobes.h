@@ -58,9 +58,15 @@ typedef int (*kretprobe_handler_t) (struct kretprobe_instance *,
 				    struct pt_regs *);
 
 struct kprobe {
+	/*
+	 * 全局哈希表，哈希值为被探测地址
+	 */
 	struct hlist_node hlist;
 
-	/* list of kprobes for multi-handler support */
+	/* list of kprobes for multi-handler support
+	 *
+	 * 用于链接同一探测地址的多个kprobe
+	 */
 	struct list_head list;
 
 	/*count the number of times this probe was temporarily disarmed */
@@ -69,7 +75,10 @@ struct kprobe {
 	/* location of the probe point */
 	kprobe_opcode_t *addr;
 
-	/* Allow user to indicate symbol name of the probe point */
+	/* Allow user to indicate symbol name of the probe point 
+	 *
+	 * 被探测函数名称（符号）
+	 */
 	const char *symbol_name;
 
 	/* Offset into the symbol */
@@ -87,10 +96,16 @@ struct kprobe {
 	 */
 	kprobe_fault_handler_t fault_handler;
 
-	/* Saved opcode (which has been replaced with breakpoint) */
+	/* Saved opcode (which has been replaced with breakpoint)
+	 *
+	 * 保存的被探测点原始指令
+	 */
 	kprobe_opcode_t opcode;
 
-	/* copy of the original instruction */
+	/* copy of the original instruction 
+	 *
+	 * 被复制的原始指令，架构强相关
+	 */
 	struct arch_specific_insn ainsn;
 
 	/*

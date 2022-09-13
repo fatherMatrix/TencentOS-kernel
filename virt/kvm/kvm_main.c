@@ -4477,7 +4477,11 @@ int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 	if (r < 0)
 		goto out_free_0a;
 
-	/* 检测所有cpu的特性是否一致 */
+	/* 
+	 * 检测所有cpu的特性是否一致
+	 *
+	 * 对每个pCPU都调用check_processor_compat()函数
+	 */
 	for_each_online_cpu(cpu) {
 		smp_call_function_single(cpu, check_processor_compat, &r, 1);
 		if (r < 0)

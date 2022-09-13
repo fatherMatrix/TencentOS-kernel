@@ -7656,6 +7656,10 @@ static __init int hardware_setup(void)
 	for (i = 0; i < ARRAY_SIZE(vmx_msr_index); ++i)
 		kvm_define_shared_msr(i, vmx_msr_index[i]);
 
+	/*
+	 * 根据硬件CPU的特性填充vmcs_config全局变量，后面创建vCPU的时候，以此作
+	 * 为模版
+	 */
 	if (setup_vmcs_config(&vmcs_config, &vmx_capability) < 0)
 		return -EIO;
 
@@ -7804,10 +7808,14 @@ static __init int hardware_setup(void)
 	}
 
 	/* 
-	 * 为每个物理cpu分配一个vmcs结构体，并将其放到vmxarea这个per-cpu变量中。
-	 *
 	 * vmcs不是与vcpu一一对应吗？这里给每个pcpu分配一个是什么意思？
-	 * 难道是作为vcpu对应的vmcs创建时的模版？
+	 * - 这里分配的不是vmcs，而是vmxon区域。其尺寸和边界与vmcs相似，但完全
+	 *   由硬件控制，软件除版本号外，其余不可访问。其内部细节和作用Intel并
+	 *   未公开。
+	 * - 详情见Intel手册第3册，23.11.5
+	 *
+	 * 为每个物理cpu分配一个vmxon区域，并将其放到vmxarea这个per-cpu变量中。
+	 * 该区域基地址作为vmxon指令的参数。
 	 */
 	r = alloc_kvm_area();
 	if (r)
@@ -8068,6 +8076,7 @@ static int __init vmx_init(void)
 	 * 在vmx_init初始化的过程中并未向cr4.vmxe写入1，也没有分配vmxon区域。这
 	 * 其实是一种惰性策略，毕竟如果加在了kvm模块，但没有创建虚拟机的需求，
 	 * 那也就没有必要让cpu进入vmx模式。
+	 *
 	 * vmx模式的真正开启是在创建第一个虚拟机的时候。
 	 */
 	r = kvm_init(&vmx_x86_ops, sizeof(struct vcpu_vmx),

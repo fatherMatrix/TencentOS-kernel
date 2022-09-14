@@ -391,12 +391,17 @@ int hibernation_snapshot(int platform_mode)
 	if (error || hibernation_test(TEST_DEVICES))
 		platform_recover(platform_mode);
 	else
+		/*
+		 * 正常的hibernate进入create_image后是不再返回的，直接关机了
+		 */
 		error = create_image(platform_mode);
 
 	/*
 	 * In the case that we call create_image() above, the control
 	 * returns here (1) after the image has been created or the
 	 * image creation has failed and (2) after a successful restore.
+	 *
+	 * 当resume后，从这里开始运行
 	 */
 
 	/* We may need to release the preallocated image pages here. */

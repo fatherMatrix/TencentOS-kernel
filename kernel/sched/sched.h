@@ -889,6 +889,9 @@ struct rq {
 #define UCLAMP_FLAG_IDLE 0x01
 #endif
 
+	/*
+	 * 不同的调度队列
+	 */
 	struct cfs_rq		cfs;
 	struct rt_rq		rt;
 	struct dl_rq		dl;

@@ -117,8 +117,8 @@ void go_to_protected_mode(void)
 	mask_all_interrupts();
 
 	/* Actual transition to protected mode... */
-	setup_idt();
-	setup_gdt();
+	setup_idt();	/* 仅初始化了一个null_idt项 */
+	setup_gdt();	/* 数据段和代码段，平坦地址空间 */
 	protected_mode_jump(boot_params.hdr.code32_start,
 			    (u32)&boot_params + (ds() << 4));
 }

@@ -36,6 +36,10 @@ static void copy_boot_params(void)
 		(const struct old_cmdline *)OLD_CL_ADDRESS;
 
 	BUILD_BUG_ON(sizeof(boot_params) != 4096);
+	/*
+	 * 将bootloader和编译期共同填充的setup_header结构体拷贝到boot_params中
+	 * 的setup_header中
+	 */
 	memcpy(&boot_params.hdr, &hdr, sizeof(hdr));
 
 	if (!boot_params.hdr.cmd_line_ptr &&
@@ -139,6 +143,9 @@ void main(void)
 	/* Initialize the early-boot console */
 	console_init();
 	if (cmdline_find_option_bool("debug"))
+		/*
+		 * 调用了bios中断的
+		 */
 		puts("early console in setup code\n");
 
 	/* End of heap check */

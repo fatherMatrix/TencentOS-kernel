@@ -20,6 +20,9 @@
 
 /*
  * void protected_mode_jump(u32 entrypoint, u32 bootparams);
+ * 
+ * 第一个参数在eax
+ * 第二个参数在edx
  */
 GLOBAL(protected_mode_jump)
 	movl	%edx, %esi		# Pointer to boot_params table

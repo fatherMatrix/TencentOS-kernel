@@ -39,6 +39,12 @@ SYSSEG		= 0x1000		/* historical load address >> 4 */
 	.code16
 	.section ".bstext", "ax"
 
+	#
+        # bootsect_start部分被编译进了内核，但是不会被运行。
+	#
+	# 现在的内核启动依赖于bootloader(UEFI or others)，它们会直接跳过这部分
+	# 代码。
+	#
 	.global bootsect_start
 bootsect_start:
 #ifdef CONFIG_EFI_STUB
@@ -288,6 +294,10 @@ boot_flag:	.word 0xAA55
 
 	# offset 512, entry point
 
+	# 这里是现代内核的真正入口，bootloader知道这个位置的偏移（0x200），所以
+	# 在将控制权转移给内核时直接跳到了这里
+	#
+	# 内核被加载到0x10000，这里的地址是0x10200。
 	.globl	_start
 _start:
 		# Explicitly enter this as bytes, or the assembler
@@ -576,7 +586,7 @@ handover_offset:	.long 0			# Filled in by build.c
 	.section ".entrytext", "ax"
 start_of_setup:
 # Force %es = %ds
-# 强制将ds和es的内容设成相同的
+# 强制将ds和es的内容设成相同的0x1000
 	movw	%ds, %ax
 	movw	%ax, %es
 	cld			# CLD清除EFLAGS中的DF标记。当DF标记为0时，字符串
@@ -591,6 +601,7 @@ start_of_setup:
 	cmpw	%ax, %dx	# %ds == %ss?
 	movw	%sp, %dx	# mov指令不影响flag，所以下面的je取决于上面的cmp
 	je	2f		# -> assume %sp is reasonably set
+				# 如果SS == 0x1000，跳转到标签2f
 
 	# Invalid %ss, make up a new stack
 	movw	$_end, %dx
@@ -601,6 +612,16 @@ start_of_setup:
 	jnc	2f
 	xorw	%dx, %dx	# Prevent wraparound
 
+	# 如果SS == 0x1000，那么：
+	#   1. 如果DX == 0，将SP设置为64KB - 4B
+	#   2. 如果DX != 0，将SP设置为DX（DX是bootloader设置的)
+	# 主要目的是为了形成如下的C语言栈环境
+	#   +----------------------+  <--- esp
+	#   |    stack for main    |
+	#   +----------------------+  <--- _end
+	#   |  bootsect(not used)  |
+	#   +----------------------+  <--- ss(0x10000)
+	#
 2:	# Now %dx should point to the end of our stack space
 	andw	$~3, %dx	# dword align (might as well...)
 	jnz	3f
@@ -614,7 +635,13 @@ start_of_setup:
 # it is on par with the other segments.
 	pushw	%ds		# 这三条指令用于将cs寄存器的值设置成和其
 	pushw	$6f		# 他寄存器相同的值，是一个小技巧。先把ds和6f压
-	lretw			# 栈，再使用lretw将栈中的ds弹出到cs，6f弹出到ip
+	lretw			# 栈，再使用lretw将栈中的ds弹出到cs，6f标签所在
+				# 的地址（就是下面的指令地址）弹出到ip
+				#
+				# 这么做的原因是因为bootloader在跳到_start时将
+				# CS设置为0x1020、IP设置为0，以此来寻址0x10200。
+				# 但此处我们希望CS和其他段寄存器的值都变成
+				# 0x1000，所以需要将IP设置为6f标签所在地址
 6:
 
 # Check signature at end of setup

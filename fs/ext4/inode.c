@@ -5107,6 +5107,10 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 	if (ret)
 		goto bad_inode;
 
+	/*
+	 * 根据不同的inode类型（块设备、字符设备、目录、文件、链接）给inode指定
+	 * 对应的inode_operations和file_operations
+	 */
 	if (S_ISREG(inode->i_mode)) {
 		inode->i_op = &ext4_file_inode_operations;
 		inode->i_fop = &ext4_file_operations;

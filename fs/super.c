@@ -1406,12 +1406,21 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 		error = -EBUSY;
 		goto error_bdev;
 	}
+	/*
+	 * 获取文件系统对应的超级块
+	 *   - 要么在内存中的超级块链表中
+	 *   - 要么新创建一个
+	 */
 	s = sget(fs_type, test_bdev_super, set_bdev_super, flags | SB_NOSEC,
 		 bdev);
 	mutex_unlock(&bdev->bd_fsfreeze_mutex);
 	if (IS_ERR(s))
 		goto error_s;
 
+	/*
+	 * 上面sget()过程中，对于新创建superblock的情况，在分配内存时使用的是
+	 * kzalloc()。因此对于新创建的superblock，其s_root为0
+	 */
 	if (s->s_root) {
 		if ((flags ^ s->s_flags) & SB_RDONLY) {
 			deactivate_locked_super(s);

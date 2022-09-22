@@ -109,6 +109,9 @@ struct fs_context {
 	struct net		*net_ns;	/* The network namespace for this mount */
 	const struct cred	*cred;		/* The mounter's credentials */
 	struct fc_log		*log;		/* Logging buffer */
+	/*
+	 * 被挂载的设备，如/dev/vda、devtmpfs
+	 */
 	const char		*source;	/* The source name (eg. dev path) */
 	/* 
 	 * 用于LSM模块的安全域

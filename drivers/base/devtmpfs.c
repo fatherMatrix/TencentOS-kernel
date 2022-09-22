@@ -434,12 +434,19 @@ int __init devtmpfs_init(void)
 	char opts[] = "mode=0755";
 	int err;
 
+	/*
+	 * mnt是一个文件内全局变量
+	 * vfs_kern_mount生成一个mountpoint结构体，但不关联到mountpoint树
+	 */
 	mnt = vfs_kern_mount(&internal_fs_type, 0, "devtmpfs", opts);
 	if (IS_ERR(mnt)) {
 		printk(KERN_ERR "devtmpfs: unable to create devtmpfs %ld\n",
 				PTR_ERR(mnt));
 		return PTR_ERR(mnt);
 	}
+	/*
+	 * dev_fs_type中的mount方法仅仅返回上面全局mnt中的sb即可
+	 */
 	err = register_filesystem(&dev_fs_type);
 	if (err) {
 		printk(KERN_ERR "devtmpfs: unable to register devtmpfs "

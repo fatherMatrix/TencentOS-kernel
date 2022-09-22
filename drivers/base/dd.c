@@ -1046,6 +1046,11 @@ static int __driver_attach(struct device *dev, void *data)
 	 * is an error.
 	 */
 
+	/*
+	 * 内部调用对应bus_type的match方法
+	 *   - 匹配成功返回0
+	 *   - 匹配失败返回非0
+	 */
 	ret = driver_match_device(drv, dev);
 	if (ret == 0) {
 		/* no match */
@@ -1077,6 +1082,9 @@ static int __driver_attach(struct device *dev, void *data)
 		return 0;
 	}
 
+	/*
+	 * 调用device_driver的probe方法
+	 */
 	device_driver_attach(drv, dev);
 
 	return 0;

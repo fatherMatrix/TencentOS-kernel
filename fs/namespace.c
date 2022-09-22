@@ -1008,7 +1008,8 @@ struct vfsmount *vfs_kern_mount(struct file_system_type *type,
 	if (!ret)
 		ret = parse_monolithic_mount_data(fc, data);
 	/*
-	 * 执行真正的mount生成操作。只生成，不关联
+	 * 执行真正的mount生成操作。只生成mountpoint结构体，但不关联到
+	 * mountpoint树
 	 */
 	if (!ret)
 		mnt = fc_mount(fc);

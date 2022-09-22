@@ -235,7 +235,7 @@ ENTRY(secondary_startup_64)
 	 */
 	pushq	$.Lafter_lret	# put return address on stack for unwinder
 	xorl	%ebp, %ebp	# clear frame pointer
-	movq	initial_code(%rip), %rax
+	movq	initial_code(%rip), %rax	# 这里是x86_64_start_kernel
 	pushq	$__KERNEL_CS	# set correct cs
 	pushq	%rax		# target address in negative space
 	lretq

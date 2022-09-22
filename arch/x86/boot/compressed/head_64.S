@@ -57,6 +57,8 @@ ENTRY(startup_32)
 	/*
 	 * Test KEEP_SEGMENTS flag to see if the bootloader is asking
 	 * us to not reload segments
+	 * 
+	 * 决定是否需要reload段寄存器
 	 */
 	testb $KEEP_SEGMENTS, BP_loadflags(%esi)
 	jnz 1f
@@ -75,20 +77,50 @@ ENTRY(startup_32)
  * address we are running at.  The reserved chunk of the real-mode
  * data at 0x1e4 (defined as a scratch field) are used as the stack
  * for this calculation. Only 4 bytes are needed.
+ * 
+ * 在vmlinux.ld.S中，startup_32的LMA及VMA都是0，但是bootloader可能
+ * 将其加载到非0的地址上，因此我们需要计算出我们现在到底在哪里
+ * 
+ * 之所以可以这么做，是因为内核在编译的时候使用了-fPIE选项，生成的
+ * 代码都是位置无关的!
  */
+	/*
+	 * esi中保存着boot_params的地址，是在protected_mode_jump的
+	 * 第一行被赋值的
+	 */
 	leal	(BP_scratch+4)(%esi), %esp
-	call	1f
-1:	popl	%ebp
-	subl	$1b, %ebp
+	call	1f		/* call指令会跳到哪里去呢？
+				 * 机器码是：e8 00 00 00 00
+				 *   near跳转，e8后是rel-ip，跳转到下面的指令
+				 */
+1:	popl	%ebp		/* call指令执行后，栈顶元素是返回地址
+                                 * 即call指令后的指令地址
+				 *
+				 * 这个栈空间就是位于boot_params中的一
+				 * 个32位的变量，因为这里的call调用也
+				 * 只会用到4个byte。
+				 *
+				 * 此时ebp中保存了1f的VMA
+				 */
+	subl	$1b, %ebp	/* 用上边标签1的VMA减去上边的标签1的LMA，
+				 * 得到的差值即为startup_32的VMA：
+				 *   delta = VMA_1 - LMA_1
+				 *   delta = VMA_s - LMA_s
+				 *         = VMA_s - 0
+				 *         = VMA_s
+				 * 
+				 * 其实在vmlinux中，VMA和LMA是相等的。但
+				 * 是加载的时候被加载到了0x100000
+				 */
 
 /* setup a stack and make sure cpu supports long mode. */
-	movl	$boot_stack_end, %eax
-	addl	%ebp, %eax
+	movl	$boot_stack_end, %eax	# eax中保存boot_stack的顶部的VMA（编译时）
+	addl	%ebp, %eax		# 因为vmlinux被加载到了0x100000，所以要加上
 	movl	%eax, %esp
 
-	call	verify_cpu
+	call	verify_cpu		# 验证通过返回0，验证失败返回1
 	testl	%eax, %eax
-	jnz	.Lno_longmode
+	jnz	.Lno_longmode		# 如果eax是1，即验证失败，跳转
 
 /*
  * Compute the delta between where we were compiled to run at
@@ -100,8 +132,8 @@ ENTRY(startup_32)
  */
 
 #ifdef CONFIG_RELOCATABLE
-	movl	%ebp, %ebx
-	movl	BP_kernel_alignment(%esi), %eax
+	movl	%ebp, %ebx		# ebp中存储的是startup_32的物理地址
+	movl	BP_kernel_alignment(%esi), %eax	# esi中保存boot_params的地址
 	decl	%eax
 	addl	%eax, %ebx
 	notl	%eax

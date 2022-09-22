@@ -282,7 +282,7 @@ section_table:
 	.globl	sentinel
 sentinel:	.byte 0xff, 0xff        /* Used to detect broken loaders */
 
-	.globl	hdr
+	.globl	hdr			# struct setup_header的上半部分
 hdr:
 setup_sects:	.byte 0			/* Filled in by build.c */
 root_flags:	.word ROOT_RDONLY
@@ -613,14 +613,14 @@ start_of_setup:
 	xorw	%dx, %dx	# Prevent wraparound
 
 	# 如果SS == 0x1000，那么：
-	#   1. 如果DX == 0，将SP设置为64KB - 4B
+	#   1. 如果DX == 0，将SP设置为0xfffc
 	#   2. 如果DX != 0，将SP设置为DX（DX是bootloader设置的)
 	# 主要目的是为了形成如下的C语言栈环境
-	#   +----------------------+  <--- esp
+	#   +----------------------+  <--- ss:esp
 	#   |    stack for main    |
 	#   +----------------------+  <--- _end
 	#   |  bootsect(not used)  |
-	#   +----------------------+  <--- ss(0x10000)
+	#   +----------------------+  <--- ss(0x1000 << 4 = 0x10000)
 	#
 2:	# Now %dx should point to the end of our stack space
 	andw	$~3, %dx	# dword align (might as well...)

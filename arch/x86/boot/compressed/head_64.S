@@ -129,10 +129,13 @@ ENTRY(startup_32)
  * %ebp contains the address we are loaded at by the boot loader and %ebx
  * contains the address where we should move the kernel image temporarily
  * for safe in-place decompression.
+ *  
+ * %ebp保存内核被boot loader加载到了哪里，%ebx将保存内核应该被移动到哪里。
+ * 但两个地址都与内核镜像编译时的地址无关，因为内核的代码是地址无关的。
  */
 
 #ifdef CONFIG_RELOCATABLE
-	movl	%ebp, %ebx		# ebp中存储的是startup_32的物理地址
+	movl	%ebp, %ebx		        # ebp中存储的是startup_32的物理地址
 	movl	BP_kernel_alignment(%esi), %eax	# esi中保存boot_params的地址
 	decl	%eax
 	addl	%eax, %ebx

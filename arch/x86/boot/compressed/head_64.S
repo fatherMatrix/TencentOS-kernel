@@ -148,16 +148,32 @@ ENTRY(startup_32)
 1:
 
 	/* Target address to relocate to for decompression */
-	movl	BP_init_size(%esi), %eax
+	movl	BP_init_size(%esi), %eax	# BP_init_size保存了压缩镜像和解压
+						# 镜像两者尺寸的较大值（肯定是解压
+						# 后的镜像更大）
 	subl	$_end, %eax
 	addl	%eax, %ebx
+
+	#
+	# 到这里后，应该是这个样子的
+	#
+	#  +----------+----------------+
+	#  |          |    压缩镜像    |
+	#  +----------+----------------+
+	#  ^          ^
+	#  |          |
+	# old_ebp    ebp
+	#
 
 /*
  * Prepare for entering 64 bit mode
  */
 
 	/* Load new GDT with the 64bit segments using 32bit descriptor */
-	addl	%ebp, gdt+2(%ebp)
+	addl	%ebp, gdt+2(%ebp)		# 地址gdt+2(%ebp)保存的是gdt的基地址
+						# 这里是因为我们把原本应该从0地址开始
+						# 的startup_32加载到了%ebp指向的地址，
+						# 因此这里要修正
 	lgdt	gdt(%ebp)
 
 	/* Enable PAE mode */
@@ -702,8 +718,8 @@ gdt64:
 	.quad   0
 	.balign	8
 gdt:
-	.word	gdt_end - gdt
-	.long	gdt
+	.word	gdt_end - gdt		/* gdt长度 */
+	.long	gdt			/* gdt基址 */
 	.word	0
 	.quad	0x00cf9a000000ffff	/* __KERNEL32_CS */
 	.quad	0x00af9a000000ffff	/* __KERNEL_CS */

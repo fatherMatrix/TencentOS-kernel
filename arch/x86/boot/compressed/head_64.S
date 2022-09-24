@@ -150,8 +150,8 @@ ENTRY(startup_32)
 	/* Target address to relocate to for decompression */
 	movl	BP_init_size(%esi), %eax	# BP_init_size保存了压缩镜像和解压
 						# 镜像两者尺寸的较大值（肯定是解压
-						# 后的镜像更大）
-	subl	$_end, %eax
+						# 后的镜像更大）-- 0x307200
+	subl	$_end, %eax			# $_end -- 0xb26000
 	addl	%eax, %ebx
 
 	#
@@ -162,7 +162,7 @@ ENTRY(startup_32)
 	#  +----------+----------------+
 	#  ^          ^
 	#  |          |
-	# old_ebp    ebp
+	# old_ebx    ebx
 	#
 
 /*
@@ -198,7 +198,7 @@ ENTRY(startup_32)
 1:
 
 	/* Initialize Page tables to 0 */
-	leal	pgtable(%ebx), %edi
+	leal	pgtable(%ebx), %edi		# pgtable这个位置链接时留出了6张页表的空间
 	xorl	%eax, %eax
 	movl	$(BOOT_INIT_PGT_SIZE/4), %ecx
 	rep	stosl

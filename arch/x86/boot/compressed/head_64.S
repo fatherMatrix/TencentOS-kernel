@@ -201,39 +201,39 @@ ENTRY(startup_32)
 	leal	pgtable(%ebx), %edi		# pgtable这个位置链接时留出了6张页表的空间
 	xorl	%eax, %eax
 	movl	$(BOOT_INIT_PGT_SIZE/4), %ecx
-	rep	stosl
+	rep	stosl				# 这三条指令的作用是将6张页表的内容全部写0
 
 	/* Build Level 4 */
-	leal	pgtable + 0(%ebx), %edi
-	leal	0x1007 (%edi), %eax
+	leal	pgtable + 0(%ebx), %edi		# 这四条指令其实是向PML4页表中的第一项写入
+	leal	0x1007 (%edi), %eax		# 了数据，使其指向紧挨着的PD表项
 	movl	%eax, 0(%edi)
 	addl	%edx, 4(%edi)
 
 	/* Build Level 3 */
 	leal	pgtable + 0x1000(%ebx), %edi
 	leal	0x1007(%edi), %eax
-	movl	$4, %ecx
+	movl	$4, %ecx			# 循环变量
 1:	movl	%eax, 0x00(%edi)
 	addl	%edx, 0x04(%edi)
 	addl	$0x00001000, %eax
 	addl	$8, %edi
 	decl	%ecx
-	jnz	1b
+	jnz	1b				# 一共构建了4个页表项
 
 	/* Build Level 2 */
-	leal	pgtable + 0x2000(%ebx), %edi
-	movl	$0x00000183, %eax
-	movl	$2048, %ecx
-1:	movl	%eax, 0(%edi)
-	addl	%edx, 4(%edi)
-	addl	$0x00200000, %eax
-	addl	$8, %edi
-	decl	%ecx
-	jnz	1b
+	leal	pgtable + 0x2000(%ebx), %edi	#
+	movl	$0x00000183, %eax		# 这个0x183是页表项的标志位，不是地址
+	movl	$2048, %ecx			# 这里的地址是0
+1:	movl	%eax, 0(%edi)			#	
+	addl	%edx, 4(%edi)			# 构建了2048个页表项，每个页表项索引一个
+	addl	$0x00200000, %eax		# 2MB的页。共索引了4GB的内存。
+	addl	$8, %edi                        #
+	decl	%ecx                            # 这是不是4k的页，见SDM Vol3 4-22 Fig4-9
+	jnz	1b				#
 
 	/* Enable the boot page tables */
 	leal	pgtable(%ebx), %eax
-	movl	%eax, %cr3
+	movl	%eax, %cr3			# 把上边建立的页表装到cr3里
 
 	/* Enable Long mode in EFER (Extended Feature Enable Register) */
 	movl	$MSR_EFER, %ecx
@@ -258,7 +258,7 @@ ENTRY(startup_32)
 	 * used to perform that far jump.
 	 */
 	pushl	$__KERNEL_CS
-	leal	startup_64(%ebp), %eax
+	leal	startup_64(%ebp), %eax		# 将startup_64的地址放到eax中
 #ifdef CONFIG_EFI_MIXED
 	movl	efi32_config(%ebp), %ebx
 	cmp	$0, %ebx
@@ -266,11 +266,13 @@ ENTRY(startup_32)
 	leal	handover_entry(%ebp), %eax
 1:
 #endif
-	pushl	%eax
+	pushl	%eax				# 和上面的pushl $__KERNEL_CS一起将跳转
+						# 地址压入栈中，然后利用下面的lret指令
+						# 完成跳转过程(假装是返回)
 
 	/* Enter paged protected Mode, activating Long Mode */
 	movl	$(X86_CR0_PG | X86_CR0_PE), %eax /* Enable Paging and Protected mode */
-	movl	%eax, %cr0
+	movl	%eax, %cr0			# 开启分页
 
 	/* Jump from 32bit compatibility mode into 64bit mode. */
 	lret
@@ -342,7 +344,7 @@ ENTRY(startup_64)
 
 	/* Start with the delta to where the kernel will run at. */
 #ifdef CONFIG_RELOCATABLE
-	leaq	startup_32(%rip) /* - $startup_32 */, %rbp
+	leaq	startup_32(%rip) /* - $startup_32 */, %rbp	# 代码是pie方式编译的，所以startup_32会编译为负值（相对rip的偏移）
 	movl	BP_kernel_alignment(%rsi), %eax
 	decl	%eax
 	addq	%rax, %rbp
@@ -357,8 +359,14 @@ ENTRY(startup_64)
 	/* Target address to relocate to for decompression */
 	movl	BP_init_size(%rsi), %ebx
 	subl	$_end, %ebx
-	addq	%rbp, %rbx
+	addq	%rbp, %rbx					# 这一段的逻辑跟前边是一样的
+								# 之所以要再算一遍是因为64位bootloader会
+								# 直接跳到这里，省略前面的startup_32
 
+	# 到这里时：
+	# ebp == 0x1000000
+	# ebx == 0x354c000
+	 
 	/* Set up the stack */
 	leaq	boot_stack_end(%rbx), %rsp
 
@@ -409,7 +417,11 @@ ENTRY(startup_64)
 	/* Make sure we have GDT with 32-bit code segment */
 	leaq	gdt(%rip), %rax
 	movq	%rax, gdt64+2(%rip)
-	lgdt	gdt64(%rip)
+	lgdt	gdt64(%rip)		# 这里又把startup_32里的活儿干了一遍
+					# 加载的还是同一套gdt
+					#
+					# 应该是因为有些bootloader会直接跳过
+					# 上边的startup_32？
 
 	/*
 	 * paging_prepare() sets up the trampoline and checks if we need to
@@ -484,7 +496,7 @@ trampoline_return:
  * Copy the compressed kernel to the end of our buffer
  * where decompression in place becomes safe.
  */
-	pushq	%rsi
+	pushq	%rsi				# 拷贝压缩内核到rdi
 	leaq	(_bss-8)(%rip), %rsi
 	leaq	(_bss-8)(%rbx), %rdi
 	movq	$_bss /* - $startup_32 */, %rcx
@@ -497,7 +509,7 @@ trampoline_return:
 /*
  * Jump to the relocated address.
  */
-	leaq	.Lrelocated(%rbx), %rax
+	leaq	.Lrelocated(%rbx), %rax		# 跳到relocated标签处
 	jmp	*%rax
 
 #ifdef CONFIG_EFI_STUB
@@ -573,7 +585,7 @@ ENDPROC(efi64_stub_entry)
 /*
  * Clear BSS (stack is currently empty)
  */
-	xorl	%eax, %eax
+	xorl	%eax, %eax		# 将bss段全部清0
 	leaq    _bss(%rip), %rdi
 	leaq    _ebss(%rip), %rcx
 	subq	%rdi, %rcx
@@ -711,6 +723,22 @@ ENTRY(trampoline_32bit_src)
 	jmp     1b
 
 #include "../../kernel/verify_cpu.S"
+
+/*
+ *  63         56         51   48    45           39        32 
+ * ------------------------------------------------------------
+ * |             | |B| |A|       | |   | |0|E|W|A|            |
+ * | BASE 31:24  |G|/|L|V| LIMIT |P|DPL|S|  TYPE | BASE 23:16 |
+ * |             | |D| |L| 19:16 | |   | |1|C|R|A|            |
+ * ------------------------------------------------------------
+ *
+ * 31                         16 15                         0 
+ * ------------------------------------------------------------
+ * |                             |                            |
+ * |        BASE 15:0            |       LIMIT 15:0           |
+ * |                             |                            |
+ * ------------------------------------------------------------
+ */
 
 	.data
 gdt64:

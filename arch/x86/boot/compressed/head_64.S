@@ -594,6 +594,8 @@ ENDPROC(efi64_stub_entry)
 
 /*
  * Do the extraction, and jump to the new kernel..
+ * 
+ * 这里是按照x86_64标准的寄存器使用规则来的
  */
 	pushq	%rsi			/* Save the real mode argument */
 	movq	%rsi, %rdi		/* real mode address */
@@ -608,7 +610,7 @@ ENDPROC(efi64_stub_entry)
 /*
  * Jump to the decompressed kernel.
  */
-	jmp	*%rax
+	jmp	*%rax			# arch/x86/kernel/head_64.S:startup_64
 
 /*
  * Adjust the global offset table

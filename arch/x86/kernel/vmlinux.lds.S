@@ -118,6 +118,7 @@ SECTIONS
 #endif
 
 	/* Text and read-only data */
+	/* AT后面跟的是加载地址 */
 	.text :  AT(ADDR(.text) - LOAD_OFFSET) {
 		_text = .;
 		_stext = .;

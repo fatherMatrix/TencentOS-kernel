@@ -113,6 +113,10 @@ static bool __head check_la57_support(unsigned long physaddr)
 unsigned long __head __startup_64(unsigned long physaddr,
 				  struct boot_params *bp)
 {
+	/*
+	 * 参数physaddr是rdi,保存_text的绝对地址
+	 * 第二个参数是rsi
+	 */
 	unsigned long vaddr, vaddr_end;
 	unsigned long load_delta, *p;
 	unsigned long pgtable_flags;
@@ -134,6 +138,8 @@ unsigned long __head __startup_64(unsigned long physaddr,
 	/*
 	 * Compute the delta between the address I am compiled to run at
 	 * and the address I am actually running at.
+	 *
+	 * KASLR开启后，加载地址会产生变化，这里要计算偏移
 	 */
 	load_delta = physaddr - (unsigned long)(_text - __START_KERNEL_map);
 

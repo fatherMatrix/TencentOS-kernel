@@ -84,7 +84,7 @@ startup_64:
 	 */
 	leaq	_text(%rip), %rdi
 	pushq	%rsi
-	call	__startup_64
+	call	__startup_64		# 位于arch/x86/kernel/head64.c
 	popq	%rsi
 
 	/* Form the CR3 value being sure to include the CR3 modifier */

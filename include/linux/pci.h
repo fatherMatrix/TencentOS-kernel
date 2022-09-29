@@ -849,7 +849,7 @@ struct pci_driver {
 	const struct pci_error_handlers *err_handler;
 	const struct attribute_group **groups;
 	struct device_driver	driver;
-	struct pci_dynids	dynids;
+	struct pci_dynids	dynids;		/* 动态id? */
 
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);

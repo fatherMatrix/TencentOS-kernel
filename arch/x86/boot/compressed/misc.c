@@ -366,6 +366,10 @@ asmlinkage __visible void *extract_kernel(void *rmode, memptr heap,
 	lines = boot_params->screen_info.orig_video_lines;
 	cols = boot_params->screen_info.orig_video_cols;
 
+	/*
+	 * 因为我们不知道有没有忽略boot loader或着是否运行了16位和32位代码，所
+	 * 以这里要做一次初始化，确保任何情况下console都是被初始化过的
+	 */
 	console_init();
 
 	/*
@@ -436,9 +440,12 @@ asmlinkage __visible void *extract_kernel(void *rmode, memptr heap,
 #endif
 
 	debug_putstr("\nDecompressing Linux... ");
+	/* 解压内核镜像 */
 	__decompress(input_data, input_len, NULL, NULL, output, output_len,
 			NULL, error);
+	/* 解析内核镜像的elf文件头 */
 	parse_elf(output);
+	/* 根据elf文件头移动解压后的镜像 */
 	handle_relocations(output, output_len, virt_addr);
 	debug_putstr("done.\nBooting the kernel.\n");
 	return output;

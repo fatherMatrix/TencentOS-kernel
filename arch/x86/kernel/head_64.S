@@ -122,7 +122,7 @@ ENTRY(secondary_startup_64)
 1:
 
 	/* Enable PAE mode, PGE and LA57 */
-	movl	$(X86_CR4_PAE | X86_CR4_PGE), %ecx
+	movl	$(X86_CR4_PAE | X86_CR4_PGE), %ecx	# 开启分页PG
 #ifdef CONFIG_X86_5LEVEL
 	testl	$1, __pgtable_l5_enabled(%rip)
 	jz	1f
@@ -133,12 +133,12 @@ ENTRY(secondary_startup_64)
 
 	/* Setup early boot stage 4-/5-level pagetables. */
 	addq	phys_base(%rip), %rax
-	movq	%rax, %cr3
+	movq	%rax, %cr3	# 装载页表
 
 	/* Ensure I am executing from virtual addresses */
 	movq	$1f, %rax
 	ANNOTATE_RETPOLINE_SAFE
-	jmp	*%rax
+	jmp	*%rax		# 这里就是跳到了下面的标号
 1:
 	UNWIND_HINT_EMPTY
 

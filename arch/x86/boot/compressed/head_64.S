@@ -228,7 +228,7 @@ ENTRY(startup_32)
 	addl	%edx, 4(%edi)			# 构建了2048个页表项，每个页表项索引一个
 	addl	$0x00200000, %eax		# 2MB的页。共索引了4GB的内存。
 	addl	$8, %edi                        #
-	decl	%ecx                            # 这是不是4k的页，见SDM Vol3 4-22 Fig4-9
+	decl	%ecx                            # 这里不是4k的页，见SDM Vol3 4-22 Fig4-9
 	jnz	1b				#
 
 	/* Enable the boot page tables */

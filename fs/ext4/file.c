@@ -278,6 +278,7 @@ ext4_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	 */
 	if (ret == -EIOCBQUEUED && unaligned_aio)
 		ext4_unwritten_wait(inode);
+	/* 解锁inode */
 	inode_unlock(inode);
 
 	if (ret > 0)

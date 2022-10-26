@@ -777,6 +777,10 @@ asmlinkage __visible void __init start_kernel(void)
 	 */
 	security_init();
 	dbg_late_init();
+	/*
+	 * 初始化vfs
+	 *   包括：根文件系统
+	 */
 	vfs_caches_init();
 	pagecache_init();
 	signals_init();

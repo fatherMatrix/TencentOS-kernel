@@ -746,7 +746,7 @@ struct ext4_inode {
 			__u32  m_i_reserved1;
 		} masix1;
 	} osd1;				/* OS dependent 1 */
-	__le32	i_block[EXT4_N_BLOCKS];/* Pointers to blocks */
+	__le32	i_block[EXT4_N_BLOCKS]; /* Pointers to blocks, 共15*4=60Bytes */
 	__le32	i_generation;	/* File version (for NFS) */
 	__le32	i_file_acl_lo;	/* File ACL */
 	__le32	i_size_high;

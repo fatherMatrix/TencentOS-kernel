@@ -3245,6 +3245,9 @@ void __init vfs_caches_init(void)
 	inode_init();
 	files_init();
 	files_maxfiles_init();
+	/*
+	 * 初始化mount tree相关
+	 */
 	mnt_init();
 	bdev_cache_init();
 	chrdev_init();

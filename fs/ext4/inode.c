@@ -5909,6 +5909,9 @@ static int ext4_meta_trans_blocks(struct inode *inode, int lblocks,
  */
 int ext4_writepage_trans_blocks(struct inode *inode)
 {
+	/*
+	 * 计算每个page需要多少个block来做journal
+	 */
 	int bpp = ext4_journal_blocks_per_page(inode);
 	int ret;
 

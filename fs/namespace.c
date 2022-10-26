@@ -1001,6 +1001,8 @@ struct vfsmount *vfs_kern_mount(struct file_system_type *type,
 	 *
 	 * TODO:
 	 * 哪里设置挂载目录呢？
+	 * vfs_kern_mount仅生成mountpoint结构体，并不将其关联到mount tree上，所
+	 * 以不需要挂载目录。
 	 */
 	if (name)
 		ret = vfs_parse_fs_string(fc, "source",

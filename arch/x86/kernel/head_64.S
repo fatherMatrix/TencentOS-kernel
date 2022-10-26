@@ -405,6 +405,8 @@ NEXT_PAGE(level2_ident_pgt)
 	 * Note: This sets _PAGE_GLOBAL despite whether
 	 * the CPU supports it or it is enabled.  But,
 	 * the CPU should ignore the bit.
+	 * 
+	 * 这一个页表是4MB或2MB的大页
 	 */
 	PMDS(0, __PAGE_KERNEL_IDENT_LARGE_EXEC, PTRS_PER_PMD)
 #else
@@ -439,6 +441,8 @@ NEXT_PAGE(level2_kernel_pgt)
 	 *  This table is eventually used by the kernel during normal
 	 *  runtime.  Care must be taken to clear out undesired bits
 	 *  later, like _PAGE_RW or _PAGE_GLOBAL in some cases.
+	 *
+	 * 这里也是2MB或4MB的大页
 	 */
 	PMDS(0, __PAGE_KERNEL_LARGE_EXEC,
 		KERNEL_IMAGE_SIZE/PMD_SIZE)

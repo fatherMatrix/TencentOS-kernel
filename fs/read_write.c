@@ -478,7 +478,9 @@ static ssize_t new_sync_write(struct file *filp, const char __user *buf, size_t 
 
 	/* struct kiocb保存了设备侧的位置信息，struct iov_iter保存了内存侧的位置信息 */
 	init_sync_kiocb(&kiocb, filp);
+	/* 保存要写入的数据在文件中的偏移 */
 	kiocb.ki_pos = (ppos ? *ppos : 0);
+	/* 初始化iov_iter */
 	iov_iter_init(&iter, WRITE, &iov, 1, len);
 
 	ret = call_write_iter(filp, &kiocb, &iter);
@@ -495,9 +497,14 @@ static ssize_t __vfs_write(struct file *file, const char __user *p,
 		/* 
  		 * 如果是ext4文件系统，则f_op = &ext4_file_operations，且
  		 * 	.write = NULL; .write_iter = ext4_file_write_iter
+		 * 即ext4文件系统没有走这个分支，而是走了下面的new_sync_write
+		 * 分支。
  		 */ 
 		return file->f_op->write(file, p, count, pos);
 	else if (file->f_op->write_iter)
+		/*
+		 * ext4文件系统走了这个分支
+		 */
 		return new_sync_write(file, p, count, pos);
 	else
 		return -EINVAL;
@@ -559,7 +566,10 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 	if (!ret) {
 		if (count > MAX_RW_COUNT)
 			count =  MAX_RW_COUNT;
-		/* 会加个per cpu的读写信号量，每个cpu上都分了freeze级别 */
+		/* 
+		 * 会加个per cpu的读写信号量，每个cpu上都分了freeze级别。
+		 * 主要还是为了确保后边对文件的写操作有相应的权限。
+		 */
 		file_start_write(file);
 		ret = __vfs_write(file, buf, count, pos);
 		if (ret > 0) {
@@ -567,7 +577,9 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 			add_wchar(current, ret);
 		}
 		inc_syscw(current);
-		/* 解锁 */
+		/* 
+		 * 解锁，对应file_start_write()
+		 */
 		file_end_write(file);
 	}
 

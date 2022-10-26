@@ -430,6 +430,9 @@ repeat:
 /* Allocate a new handle.  This should probably be in a slab... */
 static handle_t *new_handle(int nblocks)
 {
+	/*
+	 * 通过slab分配一个新的handle_t的内存
+	 */
 	handle_t *handle = jbd2_alloc_handle(GFP_NOFS);
 	if (!handle)
 		return NULL;
@@ -449,12 +452,18 @@ handle_t *jbd2__journal_start(journal_t *journal, int nblocks, int rsv_blocks,
 	if (!journal)
 		return ERR_PTR(-EROFS);
 
+	/*
+	 * 如果当前task有一个handle，则直接返回
+	 */
 	if (handle) {
 		J_ASSERT(handle->h_transaction->t_journal == journal);
 		handle->h_ref++;
 		return handle;
 	}
 
+	/*
+	 * 如果当前task没有对应的handle，则创建一个新的handle
+	 */
 	handle = new_handle(nblocks);
 	if (!handle)
 		return ERR_PTR(-ENOMEM);
@@ -471,6 +480,11 @@ handle_t *jbd2__journal_start(journal_t *journal, int nblocks, int rsv_blocks,
 		handle->h_rsv_handle = rsv_handle;
 	}
 
+	/*
+	 * start_this_handle()的主要作用是将handle与当前正在运行的transaction相
+	 * 关联，如果当前没有正在运行的transaction，则创建一个新的并将二者关联
+	 * 起来
+	 */
 	err = start_this_handle(journal, handle, gfp_mask);
 	if (err < 0) {
 		if (handle->h_rsv_handle)

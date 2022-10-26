@@ -1717,6 +1717,9 @@ int generic_update_time(struct inode *inode, struct timespec64 *time, int flags)
 
 	if (dirty)
 		iflags |= I_DIRTY_SYNC;
+	/*
+	 * 这里会把inode置为脏的
+	 */
 	__mark_inode_dirty(inode, iflags);
 	return 0;
 }

@@ -34,16 +34,16 @@ struct iov_iter {
 	 * the caller isn't expecting to drop a page reference when done.
 	 */
 	unsigned int type;
-	size_t iov_offset;
-	size_t count;
+	size_t iov_offset;			/* 待处理iovec的待处理第一个字节在iovec中的偏移 */
+	size_t count;				/* iovec数组中所有元素的总字节数 */
 	union {
-		const struct iovec *iov;
+		const struct iovec *iov;	/* iovec数组 */
 		const struct kvec *kvec;
 		const struct bio_vec *bvec;
 		struct pipe_inode_info *pipe;
 	};
 	union {
-		unsigned long nr_segs;
+		unsigned long nr_segs;		/* iovec数组中的元素个数 */
 		struct {
 			int idx;
 			int start_idx;

@@ -3299,7 +3299,13 @@ ssize_t generic_perform_write(struct file *file,
 		size_t copied;		/* Bytes copied from user */
 		void *fsdata;
 
+		/*
+		 * offset是pos在某一页中的偏移
+		 */
 		offset = (pos & (PAGE_SIZE - 1));
+		/*
+		 * 保证每次只对一个page进行操作。如果跨页的话，就先只处理一页
+		 */
 		bytes = min_t(unsigned long, PAGE_SIZE - offset,
 						iov_iter_count(i));
 
@@ -3398,12 +3404,20 @@ ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	ssize_t		status;
 
 	/* We can write back this queue in page reclaim */
-	/* 当前task_struct中的backing_dev_info设置为inode对应的 */
+	/* 
+	 * 当前task_struct中的backing_dev_info设置为inode对应的 
+	 * 
+	 * 这里直接改吗？改之前是什么？难道sechdule()的时候会设置成NULL吗？
+	 *   - 不，在本函数退出前就将其设置为了NULL
+	 */
 	current->backing_dev_info = inode_to_bdi(inode);
 	err = file_remove_privs(file);
 	if (err)
 		goto out;
 
+	/*
+	 * 内部会调用mark_inode_dirty
+	 */
 	err = file_update_time(file);
 	if (err)
 		goto out;

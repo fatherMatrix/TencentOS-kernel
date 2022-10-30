@@ -11,11 +11,20 @@
 
 #define PIPE_PARANOIA /* for now */
 
+/*
+ * 进入时的参数：
+ *    i: iov_iter
+ *    n: bytes
+ *  __v: iovec
+ *  __p: iovec *
+ * skip: i->iov_offset
+ * STEP: 精挑细选的内存拷贝函数，copy_from_user/memcpy/memcpy_from_page三选一
+ */
 #define iterate_iovec(i, n, __v, __p, skip, STEP) {	\
 	size_t left;					\
 	size_t wanted = n;				\
 	__p = i->iov;					\
-	__v.iov_len = min(n, __p->iov_len - skip);	\
+	__v.iov_len = min(n, __p->iov_len - skip);	\    /* 这里说明最多只拷贝一页内的数据 */
 	if (likely(__v.iov_len)) {			\
 		__v.iov_base = __p->iov_base + skip;	\
 		left = (STEP);				\
@@ -74,6 +83,12 @@
 	}						\
 }
 
+/*
+ * 进入时参数情况：
+ * i: iov_iter
+ * n: bytes
+ * I: copyin，内部会调用copy_from_user 
+ */
 #define iterate_all_kinds(i, n, v, I, B, K) {			\
 	if (likely(n)) {					\
 		size_t skip = i->iov_offset;			\
@@ -423,6 +438,9 @@ int iov_iter_fault_in_readable(struct iov_iter *i, size_t bytes)
 	struct iovec v;
 
 	if (!(i->type & (ITER_BVEC|ITER_KVEC))) {
+		/*
+ 		 * 这个函数在进来之前，bytes已经被缩小到了一页的范围内
+ 		 */ 
 		iterate_iovec(i, bytes, v, iov, skip, ({
 			err = fault_in_pages_readable(v.iov_base, v.iov_len);
 			if (unlikely(err))
@@ -965,7 +983,16 @@ EXPORT_SYMBOL(iov_iter_zero);
 size_t iov_iter_copy_from_user_atomic(struct page *page,
 		struct iov_iter *i, unsigned long offset, size_t bytes)
 {
+	/*
+ 	 * kmap_atomic在x86_64上仅执行了关抢占和关闭缺页中断两个操作。
+ 	 * 这里关闭缺页中断指的是绕过其他缺页处理过程直接交由fixup段处理缺页
+ 	 *
+ 	 * 为什么要这么做呢？
+ 	 * - 内部会调用copy_from_page，这里想要一次没拷贝完就下次拷贝，应该是尽
+ 	 *   量减少持锁？
+ 	 */ 
 	char *kaddr = kmap_atomic(page), *p = kaddr + offset;
+	/* 与复合页相关 */
 	if (unlikely(!page_copy_sane(page, offset, bytes))) {
 		kunmap_atomic(kaddr);
 		return 0;
@@ -981,6 +1008,9 @@ size_t iov_iter_copy_from_user_atomic(struct page *page,
 				 v.bv_offset, v.bv_len),
 		memcpy((p += v.iov_len) - v.iov_len, v.iov_base, v.iov_len)
 	)
+	/*
+ 	 * 对应kmap_atomic
+ 	 */ 
 	kunmap_atomic(kaddr);
 	return bytes;
 }

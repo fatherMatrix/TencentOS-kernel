@@ -27,6 +27,9 @@ enum iter_type {
 	ITER_DISCARD = 64,
 };
 
+/*
+ * 保存要写的数据在内存中的位置
+ */
 struct iov_iter {
 	/*
 	 * Bit 0 is the read/write bit, set if we're writing.

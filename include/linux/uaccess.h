@@ -143,10 +143,10 @@ _copy_to_user(void __user *, const void *, unsigned long);
  * 2. 虚拟地址是否具有对应的物理页
  *
  * 第一个问题较为容易解决，只需对要拷贝的起始-结束地址做检查即可。
- * 第二个问题比较复杂，现代内核使用fixup段在异常处理时解决
+ * 第二个问题比较复杂，现代内核使用fixup段和__ex_table段在异常处理时解决
  *
  * 返回值：
- * --没有-- 被拷贝的字节数
+ * - 没有被拷贝的字节数(要拷贝的字节数 - 已拷贝的字节数）
  *
  * 待求证问题：
  * 1. copy_from_user是否可以跨PAGE？
@@ -194,6 +194,8 @@ static __always_inline void pagefault_disabled_dec(void)
 /*
  * These routines enable/disable the pagefault handler. If disabled, it will
  * not take any locks and go straight to the fixup table.
+ *
+ * 并不是完全关闭缺页中断的处理过程，而是直接交由fixup和__ex_table处理
  *
  * User access methods will not sleep when called from a pagefault_disabled()
  * environment.

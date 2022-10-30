@@ -577,6 +577,15 @@ static inline int fault_in_pages_writeable(char __user *uaddr, int size)
 	return 0;
 }
 
+/*
+ * 确认[uaddr, uaddr + seize)区域是否可读。
+ * - 可读返回0
+ * - 不可读返回负数
+ *
+ * 内部使用了__get_user()，所以可能会产生睡眠。其原理猜测应该是：对于每个页，尝
+ * 试读其中的几个字节。如果读成功了，那么就说明整个页都是可读的；如果没有读成功，
+ * 则说明整个页都是不可读的。
+ */
 static inline int fault_in_pages_readable(const char __user *uaddr, int size)
 {
 	volatile char c;

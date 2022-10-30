@@ -916,6 +916,9 @@ __bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 
 		sanitize_error_code(address, &error_code);
 
+		/*
+ 		 * fixup段处理
+ 		 */
 		if (fixup_vdso_exception(regs, X86_TRAP_PF, error_code, address))
 			return;
 

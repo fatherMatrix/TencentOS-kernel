@@ -282,7 +282,10 @@ ext4_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	inode_unlock(inode);
 
 	if (ret > 0)
-		/* 写成功了就sync？同步什么？有空要看一下 */
+		/* 写成功了就sync？同步什么？有空要看一下 
+		 * - 上边的__generic_file_write_iter中没有进行O_SYNC操作，所以
+		 *   在这里对数据进行同步。详见__generic_file_write_iter的注释
+		 */
 		ret = generic_write_sync(iocb, ret);
 
 	return ret;

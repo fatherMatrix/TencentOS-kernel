@@ -519,6 +519,7 @@ struct __large_struct { unsigned long buf[100]; };
  * dereferencing @ptr must be assignable to @x without a cast.
  *
  * Caller must check the pointer with access_ok() before calling this
+ *                                    ^^^^^^^^^^^
  * function.
  *
  * Return: zero on success, or -EFAULT on error.

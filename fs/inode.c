@@ -1948,10 +1948,19 @@ int file_update_time(struct file *file)
 		return 0;
 
 	/* Finally allowed to write? Takes lock. */
+        /* 
+ 	 * 对mount结构体中的writers字段加一
+ 	 */
 	if (__mnt_want_write_file(file))
 		return 0;
 
+	/*
+	 * 内部会触发journal操作
+	 */
 	ret = update_time(inode, &now, sync_it);
+	/*
+ 	 * 对mount结构体中的writers字段减一
+ 	 */
 	__mnt_drop_write_file(file);
 
 	return ret;

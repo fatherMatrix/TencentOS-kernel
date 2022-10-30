@@ -91,6 +91,9 @@ static inline void kunmap(struct page *page)
 static inline void *kmap_atomic(struct page *page)
 {
 	preempt_disable();
+	/*
+ 	 * 将缺页异常交由fixup和__ex_table处理
+ 	 */ 
 	pagefault_disable();
 	return page_address(page);
 }

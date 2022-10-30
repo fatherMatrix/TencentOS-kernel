@@ -317,6 +317,9 @@ enum rw_hint {
 #define IOCB_WRITE		(1 << 6)
 #define IOCB_NOWAIT		(1 << 7)
 
+/*
+ * 保存要写的数据在文件中的位置
+ */
 struct kiocb {
 	struct file		*ki_filp;
 

@@ -9,10 +9,20 @@ unsigned long _copy_from_user(void *to, const void __user *from, unsigned long n
 {
 	unsigned long res = n;
 	might_fault();
+	/*
+	 * access_ok()用于检查用户态指针是否处于合法范围内
+	 */ 
 	if (likely(access_ok(from, n))) {
 		kasan_check_write(to, n);
+		/* 拷贝动作，由fixup段和__ex_table字段处理期间的缺页异常 */
 		res = raw_copy_from_user(to, from, n);
 	}
+	/*
+ 	 * res不为0，说明有一部分用户态数据没有拷贝到内核中。
+ 	 *
+ 	 * 这里可能是用户态指针指向的部分内存暂时未分配物理页，所以拷贝0到对应
+ 	 * 的内核态内存中。
+ 	 */ 
 	if (unlikely(res))
 		memset(to + (n - res), 0, res);
 	return res;

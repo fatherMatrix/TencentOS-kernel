@@ -3319,6 +3319,8 @@ again:
 		 * Not only is this an optimisation, but it is also required
 		 * to check that the address is actually valid, when atomic
 		 * usercopies are used, below.
+		 *
+		 * 其实就是检测用户态页是否可读
 		 */
 		if (unlikely(iov_iter_fault_in_readable(i, bytes))) {
 			status = -EFAULT;
@@ -3330,14 +3332,30 @@ again:
 			break;
 		}
 
+		/*
+ 		 * write_begin方法会为该页分配和初始化缓冲区头部
+ 		 */ 
 		status = a_ops->write_begin(file, mapping, pos, bytes, flags,
 						&page, &fsdata);
 		if (unlikely(status < 0))
 			break;
 
+		/*
+ 		 * mapping->i_mmap_writable记录记录VM_SHAREE共享映射数。若其不
+ 		 * 等于0，则说明该页被多个共享使用，此时应调用flush_dcache_page
+ 		 * 将dcache中的属于该页的数据刷写到内存中。
+ 		 *
+ 		 * 在x86架构中，该操作为空。
+ 		 */ 
 		if (mapping_writably_mapped(mapping))
 			flush_dcache_page(page);
 
+		/*
+ 		 * iov_iter_copy_from_user_atomic中会执行关中断和关缺页中断的操
+ 		 * 作(关缺页中断指的是直接交由fixup段处理)。疑问：
+ 		 * - 上面通过iov_iter_fault_in_readable检查了用户态页面可读后，
+ 		 *   到执行真正的copy操作这段窗口中，如果页面被换出了怎么办？
+ 		 */ 
 		copied = iov_iter_copy_from_user_atomic(page, i, offset, bytes);
 		flush_dcache_page(page);
 
@@ -3349,6 +3367,9 @@ again:
 
 		cond_resched();
 
+		/*
+ 		 * 更改iov_iter中的记录
+ 		 */ 
 		iov_iter_advance(i, copied);
 		if (unlikely(copied == 0)) {
 			/*
@@ -3366,6 +3387,10 @@ again:
 		pos += copied;
 		written += copied;
 
+		/*
+ 		 * 检查cache中的脏页比例是否超过一定的阈值，如果超过了，则调用
+ 		 * writeback_inodes刷一些到磁盘上
+ 		 */ 
 		balance_dirty_pages_ratelimited(mapping);
 	} while (iov_iter_count(i));
 
@@ -3389,6 +3414,7 @@ EXPORT_SYMBOL(generic_perform_write);
  * This function does *not* take care of syncing data in case of O_SYNC write.
  * A caller has to handle it. This is mainly due to the fact that we want to
  * avoid syncing under i_mutex.
+ * 注意：这个函数是不做同步操作的！
  *
  * Return:
  * * number of bytes written, even for truncated writes
@@ -3416,7 +3442,9 @@ ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 		goto out;
 
 	/*
-	 * 内部会调用mark_inode_dirty
+	 * 内部会调用mark_inode_dirty，继而触发jbd2的journal操作。
+	 *
+	 * 这里触发的jbd2操作有可能会成为一个瓶颈。
 	 */
 	err = file_update_time(file);
 	if (err)

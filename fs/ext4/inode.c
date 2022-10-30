@@ -3051,6 +3051,10 @@ static int ext4_da_write_begin(struct file *file, struct address_space *mapping,
 
 	index = pos >> PAGE_SHIFT;
 
+	/*
+ 	 * 如果当前存储空间剩余空闲块低于一定的阈值，或inode是链接文件，或
+ 	 * verity_in_progress则禁止使用延迟分配
+ 	 */ 
 	if (ext4_nonda_switch(inode->i_sb) || S_ISLNK(inode->i_mode) ||
 	    ext4_verity_in_progress(inode)) {
 		*fsdata = (void *)FALL_BACK_TO_NONDELALLOC;
@@ -3078,6 +3082,11 @@ static int ext4_da_write_begin(struct file *file, struct address_space *mapping,
 	 * the page (if needed) without using GFP_NOFS.
 	 */
 retry_grab:
+	/*
+ 	 * 在pagecache中查找目标页面。如果找到了，则增加其引用计数并设置其
+ 	 * PG_locked标志。如果该页不在pagecache中，则分配一个新页，并将其
+ 	 * 加入pagecache中，增加其引用计数及设置PG_locked标志。
+ 	 */ 
 	page = grab_cache_page_write_begin(mapping, index, flags);
 	if (!page)
 		return -ENOMEM;

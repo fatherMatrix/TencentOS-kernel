@@ -414,6 +414,7 @@ void *page_address(const struct page *page)
 	if (!PageHighMem(page))
 		return lowmem_page_address(page);
 
+	/* 对于高端内存需要特殊处理，但是64位系统已经没有高端内存了 */
 	pas = page_slot(page);
 	ret = NULL;
 	spin_lock_irqsave(&pas->lock, flags);

@@ -3355,6 +3355,10 @@ again:
  		 * 作(关缺页中断指的是直接交由fixup段处理)。疑问：
  		 * - 上面通过iov_iter_fault_in_readable检查了用户态页面可读后，
  		 *   到执行真正的copy操作这段窗口中，如果页面被换出了怎么办？
+ 		 *   o 那就从iov_iter_copy_from_user_atomic中退出，重新循环进入
+ 		 *     上边的iov_iter_fault_in_readable，使得要读写的页重新被缺
+ 		 *     页中断加载进内存，然后再次进入下面的函数。总有机会（99.9%）
+ 		 *     使得进入下面函数时源页未被换出到磁盘
  		 */ 
 		copied = iov_iter_copy_from_user_atomic(page, i, offset, bytes);
 		flush_dcache_page(page);

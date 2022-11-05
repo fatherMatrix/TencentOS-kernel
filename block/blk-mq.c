@@ -2470,6 +2470,10 @@ static bool __blk_mq_alloc_rq_map(struct blk_mq_tag_set *set, int hctx_idx)
 {
 	int ret = 0;
 
+	/*
+	 * 分配blk_mq_tag_set->tag指向的blk_mq_tag指针数组中的元素，前边只分配
+	 * 了指针数组，没有分配数组中指向的元素
+	 */ 
 	set->tags[hctx_idx] = blk_mq_alloc_rq_map(set, hctx_idx,
 					set->queue_depth, set->reserved_tags);
 	if (!set->tags[hctx_idx])
@@ -3005,6 +3009,11 @@ static int blk_mq_alloc_rq_maps(struct blk_mq_tag_set *set)
 
 	depth = set->queue_depth;
 	do {
+		/*
+		 * - 如果分配成功了，就在下面的if语句中退出。
+		 * - 如果没有分配成功，就降低queue_depth，重新分配。本质上是减
+		 *   少内存诉求量
+		 */ 
 		err = __blk_mq_alloc_rq_maps(set);
 		if (!err)
 			break;
@@ -3105,6 +3114,8 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 	 * If a crashdump is active, then we are potentially in a very
 	 * memory constrained environment. Limit us to 1 queue and
 	 * 64 tags to prevent using too much memory.
+	 *
+	 * 在crashdump情况下，硬件队列数量设置成1，用意在于节省内存
 	 */
 	if (is_kdump_kernel()) {
 		set->nr_hw_queues = 1;
@@ -3118,6 +3129,10 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 	if (set->nr_maps == 1 && set->nr_hw_queues > nr_cpu_ids)
 		set->nr_hw_queues = nr_cpu_ids;
 
+	/*
+ 	 * 分配用于硬件队列空间管理的blk_mq_tags指针数组，但是仅仅只分配了指针
+ 	 * 数组，并没有分配其中指向的元素
+ 	 */ 
 	set->tags = kcalloc_node(nr_hw_queues(set), sizeof(struct blk_mq_tags *),
 				 GFP_KERNEL, set->numa_node);
 	if (!set->tags)
@@ -3125,6 +3140,15 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 
 	ret = -ENOMEM;
 	for (i = 0; i < set->nr_maps; i++) {
+		/*
+		 * 分配用于管理软硬队列映射关系的blk_mq_queue_map->mq_map，
+		 * blk_mq_queue_map本身是嵌入到blk_mq_tag_set结构体内的，不需要
+		 * 再动态分配
+		 *
+		 * blk_mq_queue_map->mq_map为一个数组，数组下标为软件队列编号（
+		 * cpu编号），对应元素为软件队列对应的硬件队列编号。所以这里给
+		 * mq_map分配的内存 = cpu个数 * sizeof(mq_map[0])
+		 */ 
 		set->map[i].mq_map = kcalloc_node(nr_cpu_ids,
 						  sizeof(set->map[i].mq_map[0]),
 						  GFP_KERNEL, set->numa_node);
@@ -3133,10 +3157,16 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 		set->map[i].nr_queues = is_kdump_kernel() ? 1 : set->nr_hw_queues;
 	}
 
+	/*
+	 * 更新软硬队列的映射关系
+	 */ 
 	ret = blk_mq_update_queue_map(set);
 	if (ret)
 		goto out_free_mq_map;
 
+	/*
+	 * 分配blk_mq_tag_set->tags指针数组中指向的元素
+	 */ 
 	ret = blk_mq_alloc_rq_maps(set);
 	if (ret)
 		goto out_free_mq_map;

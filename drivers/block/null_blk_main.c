@@ -1572,6 +1572,9 @@ static int null_init_tag_set(struct nullb *nullb, struct blk_mq_tag_set *set)
 	if ((nullb && nullb->dev->blocking) || g_blocking)
 		set->flags |= BLK_MQ_F_BLOCKING;
 
+	/*
+	 * 初始化blk_mq_tag_set，函数名字取的有点不好 :)
+	 */ 
 	return blk_mq_alloc_tag_set(set);
 }
 

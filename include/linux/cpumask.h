@@ -87,6 +87,10 @@ extern unsigned int nr_cpu_ids;
  *    only one CPU.
  */
 
+/*
+ * config文件中有配置内核可支持的最大cpu数量，这里的possible_mask就是对应
+ * 最大cpu数量
+ */
 extern struct cpumask __cpu_possible_mask;
 extern struct cpumask __cpu_online_mask;
 extern struct cpumask __cpu_present_mask;

@@ -415,8 +415,9 @@ struct request_queue {
 
 	const struct blk_mq_ops	*mq_ops;
 
-	/* sw queues */
-	/*
+	/* 
+ 	 * sw queues
+	 *
 	 * per-cpu的软件队列
 	 */
 	struct blk_mq_ctx __percpu	*queue_ctx;
@@ -424,9 +425,9 @@ struct request_queue {
 
 	unsigned int		queue_depth;
 
-	/* hw dispatch queues */
-	/*
-	 * 硬件队列
+	/* hw dispatch queues
+	 *
+	 * 硬件队列数组，现代硬件都有多个硬件队列
 	 */
 	struct blk_mq_hw_ctx	**queue_hw_ctx;
 	unsigned int		nr_hw_queues;
@@ -496,6 +497,10 @@ struct request_queue {
 	unsigned int		rq_timeout;
 	int			poll_nsec;
 
+	/*
+ 	 * 每个request_queue队列都有一个blk_stat_callback与之对应，会通过定时器
+ 	 * 回调函数来定时统计request状态 
+ 	 */
 	struct blk_stat_callback	*poll_cb;
 	struct blk_rq_stat	poll_stat[BLK_MQ_POLL_STATS_BKTS];
 
@@ -584,8 +589,18 @@ struct request_queue {
 	struct mutex		mq_freeze_lock;
 	struct percpu_ref	q_usage_counter;
 
+	/*
+	 * blk_mq_tag_set是多队列的总领数据结构，包含了所有相关的信息
+	 */ 
 	struct blk_mq_tag_set	*tag_set;
+	/*
+ 	 * request_queue可以共享blk_mq_tag_set，通过tag_set_list链接到
+ 	 * blk_mq_tag_set中的tag_list字段
+ 	 */ 
 	struct list_head	tag_set_list;
+	/*
+ 	 * 是一个bio池描述符，用于快速分配bio和bio_vec
+ 	 */ 
 	struct bio_set		bio_split;
 
 #ifdef CONFIG_BLK_DEBUG_FS

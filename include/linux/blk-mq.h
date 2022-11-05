@@ -12,6 +12,8 @@ struct blk_flush_queue;
 
 /**
  * struct blk_mq_hw_ctx - State for a hardware queue facing the hardware block device
+ *
+ * 在blk_mq_init_queue_data->blk_mq_init_allocated_queue->blk_mq_realloc_hw_ctxs中分配
  */
 struct blk_mq_hw_ctx {
 	struct {
@@ -25,7 +27,7 @@ struct blk_mq_hw_ctx {
 	int			next_cpu;
 	int			next_cpu_batch;
 
-	unsigned long		flags;		/* BLK_MQ_F_* flags */
+	unsigned long		flags;			/* BLK_MQ_F_* flags */
 
 	void			*sched_data;
 	struct request_queue	*queue;
@@ -46,6 +48,13 @@ struct blk_mq_hw_ctx {
 	wait_queue_entry_t	dispatch_wait;
 	atomic_t		wait_index;
 
+	/*
+ 	 * tags用来保存硬队列本身所具有的blk_mq_tags
+ 	 *             ^^^^^^^^^^
+ 	 * sched_tags用来保存硬队列所对应调度队列的blk_mq_tags
+ 	 *                               ^^^^^^^^
+ 	 * blk_mq_tags用于管理tag空间管理
+ 	 */ 
 	struct blk_mq_tags	*tags;
 	struct blk_mq_tags	*sched_tags;
 
@@ -86,6 +95,8 @@ struct blk_mq_queue_map {
 	/*
 	 * 用于保存软硬队列的映射关系。
 	 * 数组下标为cpu编号（软件队列），数组元素为cpu编号对应的硬件队列
+	 *
+	 * 如何处理cpu热插拔？
 	 */
 	unsigned int *mq_map;
 	unsigned int nr_queues;
@@ -108,7 +119,7 @@ struct blk_mq_tag_set {
 	 * share maps between types.
 	 *
 	 * 
-	 * 软件队列ctx到硬件队列hctx的映射表。
+	 * 硬件队列ctx到软件队列hctx的映射表。
 	 *
 	 * blk-mq中将一个或者多个软件队列映射到一个硬件队列。一个器件可能支持多
 	 * 种类型的硬件队列。
@@ -145,7 +156,7 @@ struct blk_mq_tag_set {
 	 */
 	int			numa_node;
 	/*
-	 * 请求处理的超时时间，单位时jiffies，例如UFS默认是30s
+	 * 请求处理的超时时间，单位是jiffies，例如UFS默认是30s
 	 */
 	unsigned int		timeout;
 	unsigned int		flags;		/* BLK_MQ_F_* */
@@ -155,7 +166,7 @@ struct blk_mq_tag_set {
 	void			*driver_data;
 
 	/*
-	 * 块设备mq tag数组
+	 * 用于硬件队列的空间管理
 	 *
 	 * 每个硬队列一个blk_mq_tags结构体,保存在tags[hctx_idx]中。每个
 	 * blk_mq_tags是通过sbitmap_queue来描述，每个bit代表一个tag, 对应一个
@@ -164,6 +175,11 @@ struct blk_mq_tag_set {
 	struct blk_mq_tags	**tags;
 
 	struct mutex		tag_list_lock;
+	/*
+ 	 * 一个blk_mq_tag_set可以被多个request_queue共享
+ 	 *
+ 	 * request_queue->tag_set_list链接入tag_list
+ 	 */
 	struct list_head	tag_list;
 
 	KABI_RESERVE(1);

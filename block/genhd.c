@@ -307,11 +307,15 @@ EXPORT_SYMBOL_GPL(disk_map_sector_rcu);
 /*
  * Can be deleted altogether. Later.
  *
+ * major_names数组本身被block_class_lock互斥锁保护
  */
 #define BLKDEV_MAJOR_HASH_SIZE 255
 static struct blk_major_name {
 	struct blk_major_name *next;
 	int major;
+	/*
+ 	 * 意思是块设备名最多16个字符？
+ 	 */ 
 	char name[16];
 } *major_names[BLKDEV_MAJOR_HASH_SIZE];
 
@@ -339,6 +343,7 @@ void blkdev_show(struct seq_file *seqf, off_t offset)
  *
  * @major: the requested major device number [1..BLKDEV_MAJOR_MAX-1]. If
  *         @major = 0, try to allocate any unused major number.
+ *          ^^^^^^^^^                  ^^^^^^^^^^^^^^^^^^^^^^^
  * @name: the name of the new block device as a zero terminated string
  *
  * The @name must be unique within the system.
@@ -359,6 +364,9 @@ int register_blkdev(unsigned int major, const char *name)
 	struct blk_major_name **n, *p;
 	int index, ret = 0;
 
+	/*
+ 	 * 保护对major_names哈希数组的并发访问
+ 	 */ 
 	mutex_lock(&block_class_lock);
 
 	/* temporary */
@@ -374,6 +382,11 @@ int register_blkdev(unsigned int major, const char *name)
 			ret = -EBUSY;
 			goto out;
 		}
+		/*
+ 		 * major_names数组的下标作为块设备的主设备号
+ 		 *
+ 		 * 字符设备有类似机制，但实现上与块设备并不对称
+ 		 */ 
 		major = index;
 		ret = major;
 	}
@@ -395,11 +408,23 @@ int register_blkdev(unsigned int major, const char *name)
 		goto out;
 	}
 
+	/*
+ 	 * 填充blk_major_name中的相关信息
+ 	 */ 
 	p->major = major;
 	strlcpy(p->name, name, sizeof(p->name));
 	p->next = NULL;
+	/*
+ 	 * 这里调用major_to_index有点多余
+ 	 */ 
 	index = major_to_index(major);
 
+	/*
+ 	 * 将blk_major_name的指针加入major_names哈希数组
+ 	 *
+ 	 * 这么复杂的写法纯粹只是为了不区分哈希数组中每条链表的第一个元素与后续
+ 	 * 元素，使用这种方法可以统一写法。属于大佬炫技
+ 	 */	 
 	for (n = &major_names[index]; *n; n = &(*n)->next) {
 		if ((*n)->major == major)
 			break;

@@ -14,6 +14,8 @@ struct blk_mq_ctxs {
 
 /**
  * struct blk_mq_ctx - State for a software queue facing the submitting CPUs
+ *
+ * 在blk_mq_init_queue_data->blk_mq_init_allocated_queue时会分配
  */
 struct blk_mq_ctx {
 	struct {
@@ -23,6 +25,9 @@ struct blk_mq_ctx {
 
 	unsigned int		cpu;
 	unsigned short		index_hw[HCTX_MAX_TYPES];
+	/*
+ 	 * 指向对应的硬件队列
+ 	 */ 
 	struct blk_mq_hw_ctx 	*hctxs[HCTX_MAX_TYPES];
 
 	/* incremented at dispatch time */

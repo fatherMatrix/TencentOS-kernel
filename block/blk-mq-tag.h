@@ -8,7 +8,8 @@
  * Tag address space map.
  *
  * 用于tag空间管理。tags中包含了对request及payload的分配, page_list就是用于链接
- * 分配出的page; blk_mq_tags与硬队列blk_mq_hw_ctx一一对应，它管理了硬队列的
+ * 分配出的page; blk_mq_tags与硬件队列blk_mq_hw_ctx一一对应，它管理了硬队列的
+ *               ^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^oooooooo
  * tag bitmap和request，其中每一个tag bit代表了一个request
  */
 struct blk_mq_tags {
@@ -37,6 +38,9 @@ struct blk_mq_tags {
 
 	struct request **rqs;
 	struct request **static_rqs;
+	/*
+ 	 * 用于链接分配出的page
+ 	 */ 
 	struct list_head page_list;
 };
 

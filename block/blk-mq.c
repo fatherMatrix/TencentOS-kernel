@@ -2130,11 +2130,19 @@ struct blk_mq_tags *blk_mq_alloc_rq_map(struct blk_mq_tag_set *set,
 	if (node == NUMA_NO_NODE)
 		node = set->numa_node;
 
+	/*
+	 * blk_mq_tags的实际分配动作
+	 */
 	tags = blk_mq_init_tags(nr_tags, reserved_tags, node,
 				BLK_MQ_FLAG_TO_ALLOC_POLICY(set->flags));
 	if (!tags)
 		return NULL;
 
+	/*
+	 * 分配blk_mq_tags->rqs和blk_mq_tags->static_rqs
+	 *
+	 * 它们两个只是指针数组，数组中的元素为request指针
+	 */ 
 	tags->rqs = kcalloc_node(nr_tags, sizeof(struct request *),
 				 GFP_NOIO | __GFP_NOWARN | __GFP_NORETRY,
 				 node);
@@ -2349,6 +2357,9 @@ static int blk_mq_init_hctx(struct request_queue *q,
 
 	cpuhp_state_add_instance_nocalls(CPUHP_BLK_MQ_DEAD, &hctx->cpuhp_dead);
 
+	/*
+	 * blk_mq_hw_ctx->tags是从blk_mq_tag_set->tags中拷贝过来的
+	 */ 
 	hctx->tags = set->tags[hctx_idx];
 
 	if (set->ops->init_hctx &&
@@ -2479,6 +2490,12 @@ static bool __blk_mq_alloc_rq_map(struct blk_mq_tag_set *set, int hctx_idx)
 	if (!set->tags[hctx_idx])
 		return false;
 
+	/*
+	 * 分配requests相关，上边的blk_mq_alloc_rq_map中分配的只是request指针数
+	 * 组，没有分配指针数组中的元素。
+	 *
+	 * 这里在分配request本身
+	 */ 
 	ret = blk_mq_alloc_rqs(set, set->tags[hctx_idx], hctx_idx,
 				set->queue_depth);
 	if (!ret)
@@ -2672,6 +2689,10 @@ static void blk_mq_add_queue_tag_set(struct blk_mq_tag_set *set,
 /* All allocations will be freed in release handler of q->mq_kobj */
 static int blk_mq_alloc_ctxs(struct request_queue *q)
 {
+	/*
+	 * 这里是blk_mq_ctxs，注意和request_queue中的blk_mq_ctx区分
+	 *                 ^
+	 */ 
 	struct blk_mq_ctxs *ctxs;
 	int cpu;
 
@@ -2730,6 +2751,9 @@ struct request_queue *blk_mq_init_queue(struct blk_mq_tag_set *set)
 {
 	struct request_queue *uninit_q, *q;
 
+	/*
+	 * 分配request_queue
+	 */
 	uninit_q = blk_alloc_queue_node(GFP_KERNEL, set->numa_node);
 	if (!uninit_q)
 		return ERR_PTR(-ENOMEM);
@@ -2737,6 +2761,10 @@ struct request_queue *blk_mq_init_queue(struct blk_mq_tag_set *set)
 	/*
 	 * Initialize the queue without an elevator. device_add_disk() will do
 	 * the initialization.
+	 *
+	 * 初始化request_queue，期间会分配软件队列和硬件队列，并进一步建立软件
+	 *       ^^^^^^^^^^^^^            ^^^^^^^^  ^^^^^^^^
+	 * 队列和硬件队列的映射关系。
 	 */
 	q = blk_mq_init_allocated_queue(set, uninit_q, false);
 	if (IS_ERR(q))
@@ -2799,10 +2827,12 @@ static struct blk_mq_hw_ctx *blk_mq_alloc_and_init_hctx(
 	spin_unlock(&q->unused_hctx_lock);
 
 	if (!hctx)
+		/* 分配 */
 		hctx = blk_mq_alloc_hctx(q, set, node);
 	if (!hctx)
 		goto fail;
 
+	/* 初始化 */
 	if (blk_mq_init_hctx(q, set, hctx, hctx_idx))
 		goto free_hctx;
 
@@ -2835,6 +2865,9 @@ static void blk_mq_realloc_hw_ctxs(struct blk_mq_tag_set *set,
 		if (hctxs[i] && (hctxs[i]->numa_node == node))
 			continue;
 
+		/*
+		 * 分配并初始化硬件队列
+		 */
 		hctx = blk_mq_alloc_and_init_hctx(set, q, i, node);
 		if (hctx) {
 			if (hctxs[i])
@@ -2901,12 +2934,18 @@ struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 	if (!q->poll_cb)
 		goto err_exit;
 
+	/*
+	 * 分配per cpu的软件队列
+	 */
 	if (blk_mq_alloc_ctxs(q))
 		goto err_poll;
 
 	/* init q->mq_kobj and sw queues' kobjects */
 	blk_mq_sysfs_init(q);
 
+	/* 
+	 * 分配硬件队列
+	 */
 	q->nr_queues = nr_hw_queues(set);
 	q->queue_hw_ctx = kcalloc_node(q->nr_queues, sizeof(*(q->queue_hw_ctx)),
 						GFP_KERNEL, set->numa_node);
@@ -2920,6 +2959,9 @@ struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 	if (!q->nr_hw_queues)
 		goto err_hctxs;
 
+	/*
+	 * 初始化超时请求的处理
+	 */
 	INIT_WORK(&q->timeout_work, blk_mq_timeout_work);
 	blk_queue_rq_timeout(q, set->timeout ? set->timeout : 30 * HZ);
 
@@ -2932,10 +2974,16 @@ struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 
 	q->sg_reserved_size = INT_MAX;
 
+	/*
+	 * 重入队处理
+	 */ 
 	INIT_DELAYED_WORK(&q->requeue_work, blk_mq_requeue_work);
 	INIT_LIST_HEAD(&q->requeue_list);
 	spin_lock_init(&q->requeue_lock);
 
+	/*
+	 * 设置request_queue->make_request_fn
+	 */
 	blk_queue_make_request(q, blk_mq_make_request);
 
 	/*
@@ -2948,10 +2996,16 @@ struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 	 */
 	q->poll_nsec = BLK_MQ_POLL_CLASSIC;
 
+	/*
+	 * 进一步初始化软硬件队列
+	 */
 	blk_mq_init_cpu_queues(q, set->nr_hw_queues);
 	blk_mq_add_queue_tag_set(set, q);
 	blk_mq_map_swqueue(q);
 
+	/*
+	 * 初始化request_queue的电梯调度算法
+	 */
 	if (elevator_init)
 		elevator_init_mq(q);
 
@@ -3131,6 +3185,7 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 
 	/*
  	 * 分配用于硬件队列空间管理的blk_mq_tags指针数组，但是仅仅只分配了指针
+ 	 *                 ^^^^^^^^
  	 * 数组，并没有分配其中指向的元素
  	 */ 
 	set->tags = kcalloc_node(nr_hw_queues(set), sizeof(struct blk_mq_tags *),
@@ -3142,6 +3197,7 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 	for (i = 0; i < set->nr_maps; i++) {
 		/*
 		 * 分配用于管理软硬队列映射关系的blk_mq_queue_map->mq_map，
+		 *                     ^^^^^^^^
 		 * blk_mq_queue_map本身是嵌入到blk_mq_tag_set结构体内的，不需要
 		 * 再动态分配
 		 *
@@ -3158,14 +3214,17 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 	}
 
 	/*
-	 * 更新软硬队列的映射关系
+	 * 更新软硬队列的映射关系，有两种方式：
+	 * - 自定义的blk_mq_ops->map_queue（如果定义了这个函数指针）
+	 * - blk_mq_queue_map（如果上面的函数指针没有定义）
 	 */ 
 	ret = blk_mq_update_queue_map(set);
 	if (ret)
 		goto out_free_mq_map;
 
 	/*
-	 * 分配blk_mq_tag_set->tags指针数组中指向的元素
+	 * 分配blk_mq_tag_set->tags指针数组中指向的元素，重点是sbitmap。
+	 * 还有就是根据队列深度创建相应数目的request
 	 */ 
 	ret = blk_mq_alloc_rq_maps(set);
 	if (ret)

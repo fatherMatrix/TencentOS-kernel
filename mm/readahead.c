@@ -116,10 +116,16 @@ EXPORT_SYMBOL(read_cache_pages);
 static int read_pages(struct address_space *mapping, struct file *filp,
 		struct list_head *pages, unsigned int nr_pages, gfp_t gfp)
 {
+	/*
+	 * 这是一个栈上对象，所以在其生命期结束之前势必要将内容转存
+	 */ 
 	struct blk_plug plug;
 	unsigned page_idx;
 	int ret;
 
+	/*
+	 * 塞住
+	 */ 
 	blk_start_plug(&plug);
 
 	if (mapping->a_ops->readpages) {
@@ -139,6 +145,9 @@ static int read_pages(struct address_space *mapping, struct file *filp,
 	ret = 0;
 
 out:
+	/*
+	 * 打开塞子
+	 */
 	blk_finish_plug(&plug);
 
 	return ret;

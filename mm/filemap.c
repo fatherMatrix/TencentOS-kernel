@@ -2035,6 +2035,9 @@ static ssize_t generic_file_buffered_read(struct kiocb *iocb,
 	struct file *filp = iocb->ki_filp;
 	struct address_space *mapping = filp->f_mapping;
 	struct inode *inode = mapping->host;
+	/*
+	 * 预读状态一直是和file结构体相关联的
+	 */
 	struct file_ra_state *ra = &filp->f_ra;
 	loff_t *ppos = &iocb->ki_pos;
 	pgoff_t index;
@@ -2079,6 +2082,9 @@ find_page:
 				goto no_cached_page;
 		}
 		if (PageReadahead(page)) {
+			/*
+			 * 异步读
+			 */
 			page_cache_async_readahead(mapping,
 					ra, filp, page,
 					index, last_index - index);
@@ -2093,6 +2099,9 @@ find_page:
 			 * See comment in do_read_cache_page on why
 			 * wait_on_page_locked is used to avoid unnecessarily
 			 * serialisations and why it's safe.
+			 *
+			 * 看是不是已经读完了，如果没有读完，就继续等待。读完后
+			 * 会通过end_io机制通知到这里
 			 */
 			error = wait_on_page_locked_killable(page);
 			if (unlikely(error))

@@ -37,11 +37,19 @@ struct blk_mq_hw_ctx {
 
 	struct sbitmap		ctx_map;
 
+	/*
+	 * 对应的软件队列
+	 *
+	 * 对应的软件队列不应该是多个吗？这里只能指向一个吧？
+	 */
 	struct blk_mq_ctx	*dispatch_from;
 	unsigned int		dispatch_busy;
 
 	unsigned short		type;
 	unsigned short		nr_ctx;
+	/*
+	 * 难道这里是此硬件队列对应的多个软件队列吗？
+	 */
 	struct blk_mq_ctx	**ctxs;
 
 	spinlock_t		dispatch_wait_lock;
@@ -49,11 +57,14 @@ struct blk_mq_hw_ctx {
 	atomic_t		wait_index;
 
 	/*
+ 	 * blk_mq_tags用于管理tag空间管理
+ 	 *
  	 * tags用来保存硬队列本身所具有的blk_mq_tags
  	 *             ^^^^^^^^^^
  	 * sched_tags用来保存硬队列所对应调度队列的blk_mq_tags
  	 *                               ^^^^^^^^
- 	 * blk_mq_tags用于管理tag空间管理
+ 	 *
+ 	 * tags的值通过blk_mq_init_hctx()在blk_mq_tag_set结构体中拷贝过来的
  	 */ 
 	struct blk_mq_tags	*tags;
 	struct blk_mq_tags	*sched_tags;
@@ -169,6 +180,7 @@ struct blk_mq_tag_set {
 	 * 用于硬件队列的空间管理
 	 *
 	 * 每个硬队列一个blk_mq_tags结构体,保存在tags[hctx_idx]中。每个
+	 * ^^^^^^^^^^
 	 * blk_mq_tags是通过sbitmap_queue来描述，每个bit代表一个tag, 对应一个
 	 * request
 	 */

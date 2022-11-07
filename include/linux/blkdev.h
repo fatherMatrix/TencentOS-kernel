@@ -413,6 +413,10 @@ struct request_queue {
 	make_request_fn		*make_request_fn;
 	dma_drain_needed_fn	*dma_drain_needed;
 
+	/*
+	 * 这个字段是从blk_mq_tag_set中复制过来的，
+	 * 复制动作在blk_mq_init_allocated_queue中，所以这里是const
+	 */
 	const struct blk_mq_ops	*mq_ops;
 
 	/* 
@@ -432,6 +436,9 @@ struct request_queue {
 	struct blk_mq_hw_ctx	**queue_hw_ctx;
 	unsigned int		nr_hw_queues;
 
+	/*
+	 * backing_dev_info是随request queue的分配一起分配的
+	 */ 
 	struct backing_dev_info	*backing_dev_info;
 
 	/*

@@ -534,6 +534,9 @@ struct request_queue *blk_alloc_queue_node(gfp_t gfp_mask, int node_id)
 
 	q->last_merge = NULL;
 
+	/*
+	 * 用于在ioctx中索引request queue
+	 */ 
 	q->id = ida_simple_get(&blk_queue_ida, 0, 0, gfp_mask);
 	if (q->id < 0)
 		goto fail_q;
@@ -542,6 +545,9 @@ struct request_queue *blk_alloc_queue_node(gfp_t gfp_mask, int node_id)
 	if (ret)
 		goto fail_id;
 
+	/*
+	 * 分配backing_dev_info
+	 */ 
 	q->backing_dev_info = bdi_alloc_node(gfp_mask, node_id);
 	if (!q->backing_dev_info)
 		goto fail_split;
@@ -586,6 +592,9 @@ struct request_queue *blk_alloc_queue_node(gfp_t gfp_mask, int node_id)
 				PERCPU_REF_INIT_ATOMIC, GFP_KERNEL))
 		goto fail_bdi;
 
+	/*
+	 * 进行blkcg初始化
+	 */
 	if (blkcg_init_queue(q))
 		goto fail_ref;
 

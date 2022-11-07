@@ -1655,10 +1655,16 @@ static int null_add_dev(struct nullb_device *dev)
 
 	if (dev->queue_mode == NULL_Q_MQ) {
 		if (shared_tags) {
+			/*
+			 * 全局变量tag_set在caller已经初始化过了
+			 */ 
 			nullb->tag_set = &tag_set;
 			rv = 0;
 		} else {
 			nullb->tag_set = &nullb->__tag_set;
+			/*
+			 * 随nullb一起分配的tag_set还未初始化，所以要在这里初始化
+			 */ 
 			rv = null_init_tag_set(nullb, nullb->tag_set);
 		}
 
@@ -1669,6 +1675,14 @@ static int null_add_dev(struct nullb_device *dev)
 			goto out_cleanup_queues;
 
 		nullb->tag_set->timeout = 5 * HZ;
+		/*
+		 * 分配一个request_queue
+		 *
+		 * blk_mq_ctx和blk_mq_hw_ctx是在这里分配的，前面blk_mq_alloc_tag_set
+		 * 中关注的是：
+		 * - 硬件队列的空间管理(blk_mq_tags)
+		 * - 软硬队列的映射管理(blk_mq_queue_map)
+		 */ 
 		nullb->q = blk_mq_init_queue(nullb->tag_set);
 		if (IS_ERR(nullb->q)) {
 			rv = -ENOMEM;
@@ -1790,6 +1804,9 @@ static int __init null_init(void)
 		g_submit_queues = 1;
 
 	if (g_queue_mode == NULL_Q_MQ && shared_tags) {
+		/*
+		 * 初始化blk_mq_tag_set
+		 */ 
 		ret = null_init_tag_set(NULL, &tag_set);
 		if (ret)
 			return ret;
@@ -1804,6 +1821,9 @@ static int __init null_init(void)
 
 	mutex_init(&lock);
 
+	/*
+	 * 注册主设备号
+	 */ 
 	null_major = register_blkdev(0, "nullb");
 	if (null_major < 0) {
 		ret = null_major;

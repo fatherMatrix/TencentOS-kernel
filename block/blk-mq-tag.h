@@ -36,6 +36,9 @@ struct blk_mq_tags {
 	struct sbitmap_queue bitmap_tags;
 	struct sbitmap_queue breserved_tags;
 
+	/*
+	 * 提前分配的request
+	 */
 	struct request **rqs;
 	struct request **static_rqs;
 	/*

@@ -2357,6 +2357,9 @@ EXPORT_SYMBOL(d_lookup);
 struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 {
 	unsigned int hash = name->hash;
+	/*
+	 * 找到全局哈希表dentry_hashtable中的特定桶
+	 */ 
 	struct hlist_bl_head *b = d_hash(hash);
 	struct hlist_bl_node *node;
 	struct dentry *found = NULL;
@@ -2384,6 +2387,11 @@ struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 	 */
 	rcu_read_lock();
 	
+	/*
+	 * 查找是在全局哈希表dentry_hashtable中进行的。
+	 * 很奇怪，dentry间并没有构建层次关系，而是通过一个全局哈希表来构建。
+	 * 好像inode cache也是一个全局哈希表
+	 */ 
 	hlist_bl_for_each_entry_rcu(dentry, node, b, d_hash) {
 
 		if (dentry->d_name.hash != hash)
@@ -2406,6 +2414,10 @@ struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 		 *
 		 * 因为这里是ref-walk，所以才需要增加引用计数。对于rcu-walk是没
 		 * 有增加引用计数的
+		 *
+		 * 这里仅仅增加了dentry的引用计数，但是并没有增加inode的引用计
+		 * 数，应该是dentry cache为inode cache做了一层屏蔽，只要dentry
+		 * 没有被析构，inode就不应该被析构。
 		 */
 		dentry->d_lockref.count++;
 		found = dentry;

@@ -3292,6 +3292,8 @@ static sector_t ext4_bmap(struct address_space *mapping, sector_t block)
 
 	/*
 	 * We can get here for an inline file via the FIBMAP ioctl
+	 *
+	 * 意思是这种文件系统实例不能用inode做journal？
 	 */
 	if (ext4_has_inline_data(inode))
 		return 0;
@@ -3306,6 +3308,9 @@ static sector_t ext4_bmap(struct address_space *mapping, sector_t block)
 		filemap_write_and_wait(mapping);
 	}
 
+	/*
+	 * 如果inode所在文件系统有journal且inode中存在journal数据
+	 */ 
 	if (EXT4_JOURNAL(inode) &&
 	    ext4_test_inode_state(inode, EXT4_STATE_JDATA)) {
 		/*
@@ -4874,6 +4879,9 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 	gid_t i_gid;
 	projid_t i_projid;
 
+	/*
+	 * 检查要get的inode编号是否处于合法范围内
+	 */
 	if ((!(flags & EXT4_IGET_SPECIAL) &&
 	     (ino < EXT4_FIRST_INO(sb) && ino != EXT4_ROOT_INO)) ||
 	    (ino < EXT4_ROOT_INO) ||
@@ -4886,14 +4894,20 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 		return ERR_PTR(-EFSCORRUPTED);
 	}
 
-	/*
-	 * 这里返回的inode是通过alloc_inode新分配的，并没有填充信息
+	/* 
+	 * 如果现有的inode表中没有查找到对应的ino，则这里返回的inode是通过
+	 * alloc_inode新分配的，并没有填充信息。且其中inode的state中置位了
+	 * I_NEW，当inode中的信息填充完成后清除
 	 *
-	 * 其中inode的state中置位了I_NEW，当inode中的信息填充完成后清除
+	 * 本函数最后一步就是清除I_NEW
 	 */
 	inode = iget_locked(sb, ino);
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
+	/*
+	 * 如果inode->i_state中没有I_NEW，说明此inode不是查找失败后新分配的，可
+	 * 以直接返回
+	 */ 
 	if (!(inode->i_state & I_NEW))
 		return inode;
 

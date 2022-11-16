@@ -144,6 +144,9 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	atomic_set(&inode->i_count, 1);
 	inode->i_op = &empty_iops;
 	inode->i_fop = &no_open_fops;
+	/*
+	 * __i_nlink和i_nlink是一个union
+	 */ 
 	inode->__i_nlink = 1;
 	inode->i_opflags = 0;
 	if (sb->s_xattr)
@@ -245,6 +248,9 @@ static struct inode *alloc_inode(struct super_block *sb)
 				return NULL;
 		}
 		inode->free_inode = ops->free_inode;
+		/*
+		 * TODO: inode的删除似乎就是用了延迟的机制 
+		 */
 		i_callback(&inode->i_rcu);
 		return NULL;
 	}
@@ -868,6 +874,9 @@ repeat:
 			spin_unlock(&inode->i_lock);
 			return ERR_PTR(-ESTALE);
 		}
+		/*
+		 * 增加计数
+		 */
 		__iget(inode);
 		spin_unlock(&inode->i_lock);
 		return inode;
@@ -1172,7 +1181,9 @@ EXPORT_SYMBOL(iget5_locked);
  * where the inode number is sufficient for unique identification of an inode.
  *
  * If the inode is not in cache, allocate a new inode and return it locked,
+ *                 ^^^^^^^^^^^^  ^^^^^^^^^^^^^^                     ^^^^^^
  * hashed, and with the I_NEW flag set.  The file system gets to fill it in
+ * ^^^^^^               ^^^^^
  * before unlocking it via unlock_new_inode().
  */
 struct inode *iget_locked(struct super_block *sb, unsigned long ino)
@@ -1180,9 +1191,18 @@ struct inode *iget_locked(struct super_block *sb, unsigned long ino)
 	struct hlist_head *head = inode_hashtable + hash(sb, ino);
 	struct inode *inode;
 again:
+	/*
+	 * 对inode哈希表加锁，然后在其中搜索目标inode
+	 */ 
 	spin_lock(&inode_hash_lock);
 	inode = find_inode_fast(sb, head, ino);
 	spin_unlock(&inode_hash_lock);
+	/*
+	 * 如果在哈希表中找到了，则返回找到的inode。
+	 * NOTE: 要等待并确保返回的inode是将磁盘上inode信息加载完毕的，因为找到
+	 *       的inode有可能是另一个内核路径刚刚分配、将其加入hash表但未读取
+	 *       磁盘数据的（带I_NEW的）
+	 */ 
 	if (inode) {
 		if (IS_ERR(inode))
 			return NULL;
@@ -1194,6 +1214,9 @@ again:
 		return inode;
 	}
 
+	/*
+	 * 调用文件系统自定义的inode分配方法，然后执行具有共性的初始化部分
+	 */
 	inode = alloc_inode(sb);
 	if (inode) {
 		struct inode *old;
@@ -1217,8 +1240,17 @@ again:
 			 * 对于新创建的inode，设置其标志的I_NEW位
 			 */
 			inode->i_state = I_NEW;
+			/*
+			 * 将我们的inode插入全局哈希表中
+			 *
+			 * TODO: 这里明明可以不用全局哈希表，而是每个namespace
+			 *       建立一个哈希表的
+			 */
 			hlist_add_head(&inode->i_hash, head);
 			spin_unlock(&inode->i_lock);
+			/*
+			 * 将inode放入对应超级块的inode链表中
+			 */
 			inode_sb_list_add(inode);
 			spin_unlock(&inode_hash_lock);
 

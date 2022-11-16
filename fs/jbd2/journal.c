@@ -1117,6 +1117,9 @@ static journal_t *journal_init_common(struct block_device *bdev,
 	struct buffer_head *bh;
 	int n;
 
+	/*
+	 * journal结构体内存分配
+	 */
 	journal = kzalloc(sizeof(*journal), GFP_KERNEL);
 	if (!journal)
 		return NULL;
@@ -1138,6 +1141,9 @@ static journal_t *journal_init_common(struct block_device *bdev,
 	atomic_set(&journal->j_reserved_credits, 0);
 
 	/* The journal is marked for error until we succeed with recovery! */
+	/* 因为这里只是建立磁盘上journal数据和内存中journal结构体的映射关系，而
+	 * 没有实际操作磁盘
+	 */
 	journal->j_flags = JBD2_ABORT;
 
 	/* Set up a default-sized revoke table for the new mount. */
@@ -1227,7 +1233,9 @@ journal_t *jbd2_journal_init_dev(struct block_device *bdev,
  *
  * jbd2_journal_init_inode creates a journal which maps an on-disk inode as
  * the journal.  The inode must exist already, must support bmap() and
+ * 						    ^^^^^^^^^^^^^^
  * must have all data blocks preallocated.
+ *      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  */
 journal_t *jbd2_journal_init_inode(struct inode *inode)
 {
@@ -2694,6 +2702,9 @@ static int __init journal_init(void)
 	 */
 	ret = journal_init_caches();
 	if (ret == 0) {
+		/*
+		 * 创建/proc/fs/jbd2目录
+		 */	
 		jbd2_create_jbd_stats_proc_entry();
 	} else {
 		jbd2_journal_destroy_caches();

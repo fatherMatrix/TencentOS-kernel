@@ -2598,11 +2598,6 @@ static int ext4_add_nondir(handle_t *handle,
 static int ext4_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 		       bool excl)
 {
-	/*
-	 * 因为这里是创建新的inode，所以在磁盘上并没有对应的inode节点。
-	 *
-	 * 因此这里仅执行有限的几个初始化即可
-	 */
 	handle_t *handle;
 	struct inode *inode;
 	int err, credits, retries = 0;
@@ -2619,6 +2614,10 @@ retry:
 	 * inode字段都进行了傻瓜初始化
 	 *
 	 * ext_new_inode -> alloc_inode -> inode_init_always
+	 *
+	 * [SELinux]
+	 * - 新建inode的selinux安全上下文是在这里里面创建好的
+	 * - 会获取sid
 	 */
 	inode = ext4_new_inode_start_handle(dir, mode, &dentry->d_name, 0,
 					    NULL, EXT4_HT_DIR, credits);

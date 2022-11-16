@@ -4805,6 +4805,11 @@ static struct inode *ext4_get_journal_inode(struct super_block *sb,
 		ext4_msg(sb, KERN_ERR, "no journal found");
 		return NULL;
 	}
+
+	/*
+	 * 如果inode->i_nlink == 0，说明这个inode已经被删除了。
+	 * i_nlink与删除操作有关，新分配的inode的i_nlink为1
+	 */
 	if (!journal_inode->i_nlink) {
 		make_bad_inode(journal_inode);
 		iput(journal_inode);
@@ -4862,20 +4867,54 @@ static journal_t *ext4_get_dev_journal(struct super_block *sb,
 	if (WARN_ON_ONCE(!ext4_has_feature_journal(sb)))
 		return NULL;
 
+	/*
+	 * 获取日志分区对应的block_device
+	 */ 
 	bdev = ext4_blkdev_get(j_dev, sb);
 	if (bdev == NULL)
 		return NULL;
 
+	/* 
+	 * 文件系统以byte为单位的块大小，典型值是4096
+	 */
 	blocksize = sb->s_blocksize;
+	/*
+	 * 块设备的物理块大小 
+	 */
 	hblock = bdev_logical_block_size(bdev);
+	/*
+	 * 如果文件系统的块比设备的物理扇区还小，则无法进行操作。
+	 * 直接退出
+	 */
 	if (blocksize < hblock) {
 		ext4_msg(sb, KERN_ERR,
 			"blocksize too small for journal device");
 		goto out_bdev;
 	}
 
+	/* 
+	 * sb_block和offset是为了避开文件系统开始的引导块？
+	 *
+	 * 因为EXT4_MIN_BLOCK_SIZE = 1024，下面/和%操作后，__bread从sb_block开
+	 * 始读数据的话，就是直接从块组0的超级块开始读了
+	 *
+	 *      +-----------+--------+---- ~ ----+--------+
+	 *      | boot sect |  bg 0  |    ...    |  bg N  |
+	 *      +-----------+--------+---- ~ ----+--------+
+	 *           1 KB   /        \
+	 *  ----------------          ---------------------------
+	 * /                                                     \
+	 * +----+------+-------+--------+---------+-------+------+
+	 * | sb | d.bg | rd.bg | m.data | m.inode | inode | data |
+	 * +----+------+-------+--------+---------+-------+------+ 
+	 *  1024  
+	 *
+	 */
 	sb_block = EXT4_MIN_BLOCK_SIZE / blocksize;
 	offset = EXT4_MIN_BLOCK_SIZE % blocksize;
+	/*
+	 * 设置分区的块大小为文件系统的块大小
+	 */
 	set_blocksize(bdev, blocksize);
 	if (!(bh = __bread(bdev, sb_block, blocksize))) {
 		ext4_msg(sb, KERN_ERR, "couldn't read superblock of "
@@ -4883,6 +4922,11 @@ static journal_t *ext4_get_dev_journal(struct super_block *sb,
 		goto out_bdev;
 	}
 
+	/*
+	 * 之所以要+offset，是因为上边是从sb_block开始读的，有可能引导块里还有
+	 * 一部分在sb_block后边，所以要将其排除掉，剩下的才是ext4文件系统的超级
+	 * 块部分
+	 */
 	es = (struct ext4_super_block *) (bh->b_data + offset);
 	if ((le16_to_cpu(es->s_magic) != EXT4_SUPER_MAGIC) ||
 	    !(le32_to_cpu(es->s_feature_incompat) &
@@ -4902,23 +4946,47 @@ static journal_t *ext4_get_dev_journal(struct super_block *sb,
 		goto out_bdev;
 	}
 
+	/*
+	 * 文件系统本身的超级块保存了journal的uuid
+	 * 独立journal设备的ext4超级块的s_uuid中也保存了相同的uuid
+	 */
 	if (memcmp(EXT4_SB(sb)->s_es->s_journal_uuid, es->s_uuid, 16)) {
 		ext4_msg(sb, KERN_ERR, "journal UUID does not match");
 		brelse(bh);
 		goto out_bdev;
 	}
 
+	/*
+	 * 获取分区的block数量，以及分区数据开始的block号。
+	 * block号之所以要加一，是因为第一个block要用来存放ext4_super_block，后
+	 * 面才是数据区。
+	 *
+	 * 文件系统一个block是4096字节
+	 */ 
 	len = ext4_blocks_count(es);
 	start = sb_block + 1;
 	brelse(bh);	/* we're done with the superblock */
 
+	/*
+	 * 初始化一个journal结构体，将一段连续的磁盘块映射到这个journal中。日志
+	 * 区的起始块号是start，长度是len。
+	 *
+	 * 但这个函数中并没有真正操作磁盘，只是建立了映射关系。
+	 */
 	journal = jbd2_journal_init_dev(bdev, sb->s_bdev,
 					start, len, blocksize);
 	if (!journal) {
 		ext4_msg(sb, KERN_ERR, "failed to create device journal");
 		goto out_bdev;
 	}
+
+	/*
+	 * 将母文件系统的超级块关联到journal->j_private中
+	 */ 
 	journal->j_private = sb;
+	/*
+	 * 从journal的磁盘上读取数据到journal中
+	 */ 
 	ll_rw_block(REQ_OP_READ, REQ_META | REQ_PRIO, 1, &journal->j_sb_buffer);
 	wait_on_buffer(journal->j_sb_buffer);
 	if (!buffer_uptodate(journal->j_sb_buffer)) {
@@ -4947,6 +5015,7 @@ static int ext4_load_journal(struct super_block *sb,
 			     unsigned long journal_devnum)
 {
 	journal_t *journal;
+	/* 读出日志所在inode节点的编号 */
 	unsigned int journal_inum = le32_to_cpu(es->s_journal_inum);
 	dev_t journal_dev;
 	int err = 0;
@@ -4956,6 +5025,9 @@ static int ext4_load_journal(struct super_block *sb,
 	if (WARN_ON_ONCE(!ext4_has_feature_journal(sb)))
 		return -EFSCORRUPTED;
 
+	/*
+	 * 分配日志设备的设备号
+	 */ 
 	if (journal_devnum &&
 	    journal_devnum != le32_to_cpu(es->s_journal_dev)) {
 		ext4_msg(sb, KERN_INFO, "external journal device major/minor "
@@ -4964,12 +5036,20 @@ static int ext4_load_journal(struct super_block *sb,
 	} else
 		journal_dev = new_decode_dev(le32_to_cpu(es->s_journal_dev));
 
+	/*
+	 * jbd2日志要么储存于与inode（journal_inum）相关联的目录中，
+	 * 	   要么存储于单独的设备上（journal_devnum)
+	 * 二者选其一，不可以同时存在
+	 */ 
 	if (journal_inum && journal_dev) {
 		ext4_msg(sb, KERN_ERR,
 			 "filesystem has both journal inode and journal device!");
 		return -EINVAL;
 	}
 
+	/*
+	 * 核心系统调用之一，从inode或者dev中提取journal_s
+	 */ 
 	if (journal_inum) {
 		journal = ext4_get_journal(sb, journal_inum);
 		if (!journal)
@@ -5014,13 +5094,23 @@ static int ext4_load_journal(struct super_block *sb,
 	if (!(journal->j_flags & JBD2_BARRIER))
 		ext4_msg(sb, KERN_INFO, "barriers disabled");
 
+	/*
+	 * 如果文件系统不需要做recovery，则将日志区清扫
+	 */
 	if (!ext4_has_feature_journal_needs_recovery(sb))
 		err = jbd2_journal_wipe(journal, !really_read_only);
+	/*
+	 * 如果日志区有还有需要恢复的数据，就把日志信息从分区的super_block中读
+	 * 出来
+	 */
 	if (!err) {
 		char *save = kmalloc(EXT4_S_ERR_LEN, GFP_KERNEL);
 		if (save)
 			memcpy(save, ((char *) es) +
 			       EXT4_S_ERR_START, EXT4_S_ERR_LEN);
+		/*
+		 * 把日志信息从分区的super_block中读出来
+		 */
 		err = jbd2_journal_load(journal);
 		if (save)
 			memcpy(((char *) es) + EXT4_S_ERR_START,
@@ -5046,6 +5136,7 @@ static int ext4_load_journal(struct super_block *sb,
 		es->s_journal_dev = cpu_to_le32(journal_devnum);
 
 		/* Make sure we flush the recovery flag to disk. */
+		/* 第二个参数代表同步操作 */
 		ext4_commit_super(sb, 1);
 	}
 

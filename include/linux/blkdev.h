@@ -1194,6 +1194,9 @@ extern void blk_set_queue_dying(struct request_queue *);
  * or when attempting a merge, because blk_schedule_flush_list() will only flush
  * the plug list when the task sleeps by itself. For details, please see
  * schedule() where blk_schedule_flush_plug() is called.
+ *
+ * 向current->plug_list上添加request时可以不关抢占，因为唯一的消费者是一个由自
+ * 己控制的执行流。
  */
 struct blk_plug {
 	struct list_head mq_list; /* blk-mq requests */

@@ -513,7 +513,7 @@ struct jbd2_revoke_table_s;
  * 在一个handle中，可能会修改若干个缓冲区，即buffer_head。
  *
  * 但是在handle中并不包含缓冲区，因为handle的主要作用是顺藤摸瓜找到对应的
- * transactino。缓冲区其实是在transaction中的。
+ * transaction。缓冲区其实是在transaction中的。
  */
 struct jbd2_journal_handle
 {
@@ -1013,6 +1013,8 @@ struct journal_s
 	 *
 	 * 本journal相对于设备的块偏移量。
 	 * 这个用j_first不能算出来吗？
+	 * - 对于journal放在独立分区的情况，两者确实有关系
+	 * - 对于journal放在文件系统inode中的情况，这两者应该存在一个偏移
 	 */
 	unsigned long long	j_blk_offset;
 

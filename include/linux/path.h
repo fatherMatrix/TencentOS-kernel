@@ -6,7 +6,7 @@ struct dentry;
 struct vfsmount;
 
 struct path {
-	struct vfsmount *mnt;
+	struct vfsmount *mnt;	/* 被mount文件系统的根目录和超级块 */
 	struct dentry *dentry;
 } __randomize_layout;
 

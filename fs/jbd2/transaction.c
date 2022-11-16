@@ -786,6 +786,9 @@ void jbd2_journal_lock_updates(journal_t *journal)
 		spin_lock(&transaction->t_handle_lock);
 		prepare_to_wait(&journal->j_wait_updates, &wait,
 				TASK_UNINTERRUPTIBLE);
+		/* 
+		 * 如果running updates是0，则进入if语句，执行break流程
+		 */ 
 		if (!atomic_read(&transaction->t_updates)) {
 			spin_unlock(&transaction->t_handle_lock);
 			finish_wait(&journal->j_wait_updates, &wait);

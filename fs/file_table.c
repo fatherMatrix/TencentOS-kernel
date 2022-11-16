@@ -103,6 +103,9 @@ static struct file *__alloc_file(int flags, const struct cred *cred)
 		return ERR_PTR(-ENOMEM);
 
 	f->f_cred = get_cred(cred);
+	/*
+	 * selinux
+	 */	 
 	error = security_file_alloc(f);
 	if (unlikely(error)) {
 		file_free_rcu(&f->f_u.fu_rcuhead);

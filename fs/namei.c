@@ -534,13 +534,12 @@ EXPORT_SYMBOL(path_put);
 
 #define EMBEDDED_LEVELS 2
 struct nameidata {
-	struct path	path; 			/* 已解析路径，未解析分量的父目录 */
+	struct path	path; 			/* 已解析路径(未解析分量的父目录) */
 	struct qstr	last; 			/* 需要解析的文件路径分量 */
 	struct path	root; 			/* 根目录 */
 	struct inode	*inode; 		/* path.dentry.d_inode */
 	unsigned int	flags;
-	unsigned	seq, m_seq; 		/* 
-						 * 顺序锁
+	unsigned	seq, m_seq; 		/* 顺序锁
 						 * seq保护path.dentry->d_seq
 						 * m_seq保护mount_lock
 						 */
@@ -904,6 +903,9 @@ static void set_root(struct nameidata *nd)
 			nd->root_seq = __read_seqcount_begin(&nd->root.dentry->d_seq);
 		} while (read_seqcount_retry(&fs->seq, seq));
 	} else {
+		/*
+		 * 增加引用计数
+		 */
 		get_fs_root(fs, &nd->root);
 		nd->flags |= LOOKUP_ROOT_GRABBED;
 	}
@@ -1780,6 +1782,7 @@ static int lookup_fast(struct nameidata *nd,
 	} else {
 		/* 
 		 * 这里是一种ref-walk
+		 * 内部增加了dentry的引用计数，没有增加对应inode的引用计数
 		 */
 		dentry = __d_lookup(parent, &nd->last);
 		if (unlikely(!dentry))
@@ -2381,11 +2384,17 @@ static int link_path_walk(const char *name, struct nameidata *nd)
  		 * 在了nd->last.name中
  		 */
 		name += hashlen_len(hash_len);
+		/*
+		 * 此函数本身并不要求将所有路径解析完成，当发现待解析的路径已经
+		 * 是最后一个路径分量时即可退出本函数，交由lookup_last操作
+		 */ 
 		if (!*name)
 			goto OK;
 		/*
 		 * If it wasn't NUL, we know it was '/'. Skip that
 		 * slash, and continue until no more slashes.
+		 *
+		 * 过滤掉多余的/
 		 */
 		do {
 			name++;
@@ -2497,7 +2506,6 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		} else {
 			/* 
 			 * 使用reflock的情况
-			 *
 			 * 在terminate_walk()中调用了path_put()
 			 */
 			path_get(&nd->path);
@@ -2505,7 +2513,13 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		return s;
 	}
 
+	/*
+	 * 根文件系统的挂载点是强制为NULL吗？
+	 */ 
 	nd->root.mnt = NULL;
+	/*
+	 * 暂时还未知，下面多个地方都对其进行了设置
+	 */
 	nd->path.mnt = NULL;
 	nd->path.dentry = NULL;
 
@@ -2525,6 +2539,10 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 
 			do {
 				seq = read_seqcount_begin(&fs->seq);
+				/*
+				 * 上面nd->path.mnt和nd->path.dentry都被置为NULL了，这里
+				 * 就不是NULL了
+				 */
 				nd->path = fs->pwd;
 				nd->inode = nd->path.dentry->d_inode;
 				nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
@@ -2533,6 +2551,8 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			/* 
 			 * 获取fs->pwd(struct path)，并对其进行path_get()，
 			 * 因为这是ref-walk，所以要增加引用计数。
+			 *
+			 * 这里里面也是要设置nd->path
 			 */
 			get_fs_pwd(current->fs, &nd->path);
 			nd->inode = nd->path.dentry->d_inode;
@@ -2628,7 +2648,6 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 {
 	/* 
 	 * 如果是rcu-walk模式，在path_init()中就进行了rcu_read_lock()
-	 *
 	 * 如果是ref-walk模式，在path_init()中就进行了path_get()
 	 */
 	const char *s = path_init(nd, flags);
@@ -2651,6 +2670,12 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 		 * rcu-walk模式下没有增加引用计数
 		 */
 		&& ((err = lookup_last(nd)) > 0)) {
+		/*
+		 * 进入到这里，说明最后一项是个符号链接，所以要重新进入while循
+		 * 环中的link_path_walk()和lookup_last。
+		 *
+		 * 如果最后一项不是符号链接，则整个while循环直接结束了
+		 */ 
 		s = trailing_symlink(nd);
 	}
 	if (!err)

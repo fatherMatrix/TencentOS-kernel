@@ -109,7 +109,8 @@ struct dentry {
 	/*
 	 * 第一个链表
 	 *
-	 * 用于链入dentry哈希表
+	 * 用于链入dentry哈希表dentry hashtable，这个哈希表是全局的。
+	 * 为什么不直接通过dentry构建层次关系呢？
 	 */
 	struct hlist_bl_node d_hash;	/* lookup hash list */
 	struct dentry *d_parent;	/* parent directory */

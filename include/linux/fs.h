@@ -1513,7 +1513,7 @@ struct super_block {
 	struct list_head	s_list;		/* Keep this first */
 	/* 设备标识符 */
 	dev_t			s_dev;		/* search index; _not_ kdev_t */
-	/* 以bit为单位的块大小 */
+	/* 以bit阶数为单位的块大小 */
 	unsigned char		s_blocksize_bits;
 	/* 以byte为单位的块大小 */
 	unsigned long		s_blocksize;

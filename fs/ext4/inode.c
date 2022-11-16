@@ -4895,9 +4895,11 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 	}
 
 	/* 
-	 * 如果现有的inode表中没有查找到对应的ino，则这里返回的inode是通过
-	 * alloc_inode新分配的，并没有填充信息。且其中inode的state中置位了
-	 * I_NEW，当inode中的信息填充完成后清除
+	 * 这个函数不出异常的情况下，一定会返回一个inode指针。
+	 * - 如果inode_hashtable中存在目标inode，则增加起引用计数，直接返回
+	 * - 如果现有的inode表中没有查找到对应的ino，则这里返回的inode是通过
+	 *   alloc_inode新分配的，并没有填充信息。且其中inode的state中置位了
+	 *   I_NEW，当inode中的信息填充完成后清除
 	 *
 	 * 本函数最后一步就是清除I_NEW
 	 */

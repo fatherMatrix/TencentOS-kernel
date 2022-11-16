@@ -578,6 +578,9 @@ static void __dentry_kill(struct dentry *dentry)
 	}
 	/* if it was on the hash then remove it */
 	__d_drop(dentry);
+	/*
+	 * 将dentry从parent dentry中的children list中摘下来
+	 */ 
 	dentry_unlist(dentry, parent);
 	if (parent)
 		spin_unlock(&parent->d_lock);
@@ -1732,6 +1735,9 @@ struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 	/* Make sure we always see the terminating NUL character */
 	smp_store_release(&dentry->d_name.name, dname); /* ^^^ */
 
+	/*
+	 * 新分配的dentry引用计数设置为1
+	 */
 	dentry->d_lockref.count = 1;
 	dentry->d_flags = 0;
 	spin_lock_init(&dentry->d_lock);
@@ -1784,6 +1790,9 @@ struct dentry *d_alloc(struct dentry * parent, const struct qstr *name)
 	 */
 	__dget_dlock(parent);
 	dentry->d_parent = parent;
+	/*
+	 * 构建与parent dentry的联系
+	 */
 	list_add(&dentry->d_child, &parent->d_subdirs);
 	spin_unlock(&parent->d_lock);
 
@@ -2389,7 +2398,9 @@ struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 	
 	/*
 	 * 查找是在全局哈希表dentry_hashtable中进行的。
-	 * 很奇怪，dentry间并没有构建层次关系，而是通过一个全局哈希表来构建。
+	 * 很奇怪，dentry明明有一个children list，为什么不直接用这个？反倒是在
+	 * 全局链表中查找？
+	 *
 	 * 好像inode cache也是一个全局哈希表
 	 */ 
 	hlist_bl_for_each_entry_rcu(dentry, node, b, d_hash) {
@@ -2558,9 +2569,15 @@ struct dentry *d_alloc_parallel(struct dentry *parent,
 				wait_queue_head_t *wq)
 {
 	unsigned int hash = name->hash;
+	/*
+	 * inlookup_hashtable中的桶
+	 */
 	struct hlist_bl_head *b = in_lookup_hash(parent, hash);
 	struct hlist_bl_node *node;
-	/* 哈希表中不存在目标dentry，所以这里必须创建一个了 */
+	/* 
+	 * 哈希表中不存在目标dentry，所以这里必须创建一个了。
+	 * d_alloc中已经将新创建的dentry和parent dentry建立了父子联系
+	 */
 	struct dentry *new = d_alloc(parent, name);
 	struct dentry *dentry;
 	unsigned seq, r_seq, d_seq;
@@ -2573,6 +2590,12 @@ retry:
 	seq = smp_load_acquire(&parent->d_inode->i_dir_seq);
 	/* 这里为什么会有一个全局锁？*/
 	r_seq = read_seqbegin(&rename_lock);
+	/*
+	 * 在dentry_hashtable中再查找一次（parent，name）
+	 *
+	 * 如果查找到了，说明另外有人已经创建了这个dentry，将上边新分配的dentry
+	 * 释放掉，然后将别人创建的dentry返回
+	 */ 
 	dentry = __d_lookup_rcu(parent, name, &d_seq);
 	if (unlikely(dentry)) {
 		if (!lockref_get_not_dead(&dentry->d_lockref)) {
@@ -2585,6 +2608,7 @@ retry:
 			goto retry;
 		}
 		rcu_read_unlock();
+		/* 将new释放掉，里面该做的都做了 */
 		dput(new);
 		return dentry;
 	}
@@ -2649,13 +2673,23 @@ retry:
 		/* OK, it *is* a hashed match; return it */
 		spin_unlock(&dentry->d_lock);
 		dput(new);
+		/*
+		 * 别人lookup结束，直接返回
+		 */ 
 		return dentry;
 	}
+
+	/*
+	 * 走到这里，说明没有inlookup的dentry，我们上面分配的new就是当前唯一的
+	 * 目标dentry了，给他设置lookup标志然后添加进inlookup_hashtable
+	 */
 	rcu_read_unlock();
 	/* we can't take ->d_lock here; it's OK, though. */
 	new->d_flags |= DCACHE_PAR_LOOKUP;
 	new->d_wait = wq;
-	/* 在这里把新的dentry放入dentry_hashtable */
+	/* 
+	 * 在这里把新的dentry放入inlookup_hashtable 
+	 */
 	hlist_bl_add_head_rcu(&new->d_u.d_in_lookup_hash, b);
 	hlist_bl_unlock(b);
 	return new;
@@ -2672,6 +2706,9 @@ void __d_lookup_done(struct dentry *dentry)
 						 dentry->d_name.hash);
 	hlist_bl_lock(b);
 	dentry->d_flags &= ~DCACHE_PAR_LOOKUP;
+	/*
+	 * 将dentry从inlookup_hashtable中摘下来
+	 */
 	__hlist_bl_del(&dentry->d_u.d_in_lookup_hash);
 	wake_up_all(dentry->d_wait);
 	dentry->d_wait = NULL;

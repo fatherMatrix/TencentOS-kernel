@@ -110,7 +110,6 @@ struct dentry {
 	 * 第一个链表
 	 *
 	 * 用于链入dentry哈希表dentry hashtable，这个哈希表是全局的。
-	 * 为什么不直接通过dentry构建层次关系呢？
 	 */
 	struct hlist_bl_node d_hash;	/* lookup hash list */
 	struct dentry *d_parent;	/* parent directory */
@@ -136,14 +135,20 @@ struct dentry {
 		struct list_head d_lru;		/* LRU list */
 		wait_queue_head_t *d_wait;	/* in-lookup ones only */
 	};
+	/*
+	 * 第三个链表
+	 */ 
 	struct list_head d_child;	/* child of parent list */
+	/*
+	 * 第四个链表
+	 */ 
 	struct list_head d_subdirs;	/* our children */
 	/*
 	 * d_alias and d_rcu can share memory
 	 */
 	union {
 		/*
-		 * 第三个链表
+		 * 第五个链表
 		 *
 		 * 链入相关inode的i_dentry链表
 		 */

@@ -1723,7 +1723,15 @@ static int lookup_fast(struct nameidata *nd,
 	if (nd->flags & LOOKUP_RCU) {
 		unsigned seq;
 		bool negative;
-		/* 在dentry_hashtable中查找分量 */
+		/* 
+		 * 在dentry_hashtable中查找分量
+		 *
+		 * 在什么时候将dentry放入dentry_hashtable中的呢？
+		 * - lookup_slow
+		 *     ext4_lookup
+		 *       d_splice_alias
+		 *         __d_add
+		 */
 		dentry = __d_lookup_rcu(parent, &nd->last, &seq);
 		if (unlikely(!dentry)) {
 			/*
@@ -1835,7 +1843,10 @@ again:
 		return dentry;
 	if (unlikely(!d_in_lookup(dentry))) {
 		/*
-		 * 这里是什么情况呢？其他线程已经完成了lookup？锁呢？
+		 * d_alloc_parallel中将正确分配的dentry加入了inlookup_hashtable
+		 * 并置位了inlookup flag。
+		 *
+		 * 进入到这里，说明d_alloc_parallel中除了错误
 		 */
 		if (!(flags & LOOKUP_NO_REVAL)) {
 			int error = d_revalidate(dentry, flags);
@@ -1856,8 +1867,14 @@ again:
 		 * 根据Documentation/filesystems/vfs.txt中的要求，此回调函数内
 		 * 1. 必须调用d_add()将inode与dentry建立联系
 		 * 2. 必须对inode->i_count加一
+		 *
+		 * ext4_lookup中通过调用d_splice_alias -> __d_add将dentry放到了
+		 * dentry_hashtable中
 		 */
 		old = inode->i_op->lookup(inode, dentry, flags);
+		/*
+		 * 将dentry从inlookup_hashtable中摘下来
+		 */
 		d_lookup_done(dentry);
 		if (unlikely(old)) {
 			dput(dentry);
@@ -1871,6 +1888,7 @@ static struct dentry *lookup_slow(const struct qstr *name,
 				  struct dentry *dir,
 				  unsigned int flags)
 {
+	/* 父目录对应的inode */
 	struct inode *inode = dir->d_inode;
 	struct dentry *res;
 	inode_lock_shared(inode);
@@ -2016,6 +2034,7 @@ static int walk_component(struct nameidata *nd, int flags)
 	}
 	/*
 	 * 快速查找————依赖于缓存。根据「父目录、名称」查找
+	 * 疑问：为什么不直接通过parent dentry的d_child链表来查找呢？
 	 *
  	 * 进行路径名的查找，目标存放在nd->last中，查找结果存放在inode和path中
  	 * 返回出来
@@ -2032,6 +2051,9 @@ static int walk_component(struct nameidata *nd, int flags)
 		 *
 		 * 内部会调用文件系统特定的方法。此函数返回后，path.dentry中保
 		 * 存目标文件的dentry项指针
+		 *
+		 * 内部会将找到的dentry到到dentry_hashtable中（期间经历了一次放
+		 * 到inlookup_hashtable，然后从里面拿出来的过程）
  		 */ 
 		path.dentry = lookup_slow(&nd->last, nd->path.dentry,
 					  nd->flags);
@@ -2068,6 +2090,8 @@ static int walk_component(struct nameidata *nd, int flags)
 	 * 套层次超过40，返回错误；nameidata结构体的成员stack指向一个栈，如果栈
 	 * 的最大深度是初始值2，那么把栈的最大深度扩大到40；把解析分量得到的路
 	 * 径信息保存到栈中，接下来解析符号链接的目标。
+	 *
+	 * 返回0说明不是符号链接或者不应该被follow
 	 */
 	return step_into(nd, &path, flags, inode, seq);
 }
@@ -2435,6 +2459,8 @@ OK:
 
 		/* 
 		 * 是符号连接
+		 *
+		 * walk_component返回0说明不是符号链接或者不应该被follow
 		 */
 		if (err) {
 			/* 

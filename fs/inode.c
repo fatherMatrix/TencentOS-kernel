@@ -141,6 +141,9 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	inode->i_blkbits = sb->s_blocksize_bits;
 	inode->i_flags = 0;
 	atomic64_set(&inode->i_sequence, 0);
+	/*
+	 * 引用计数设置为1
+	 */
 	atomic_set(&inode->i_count, 1);
 	inode->i_op = &empty_iops;
 	inode->i_fop = &no_open_fops;
@@ -241,6 +244,9 @@ static struct inode *alloc_inode(struct super_block *sb)
 	if (!inode)
 		return NULL;
 
+	/*
+	 * 这里面会将新分配的inode的引用计数设置为1
+	 */
 	if (unlikely(inode_init_always(sb, inode))) {
 		if (ops->destroy_inode) {
 			ops->destroy_inode(inode);
@@ -1195,6 +1201,9 @@ again:
 	 * 对inode哈希表加锁，然后在其中搜索目标inode
 	 */ 
 	spin_lock(&inode_hash_lock);
+	/*
+	 * 在inode_hashtable中查找目标inode，在返回前会增加其引用计数
+	 */
 	inode = find_inode_fast(sb, head, ino);
 	spin_unlock(&inode_hash_lock);
 	/*

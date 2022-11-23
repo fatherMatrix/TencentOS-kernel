@@ -2794,7 +2794,7 @@ static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint,
 	up_write(&sb->s_umount);
 
 	/*
-	 * 分配并设置struct mount中的各字段
+	 * 分配并设置struct mount中的各字段，但并没有将这个mount插入到mount树中
 	 */
 	mnt = vfs_create_mount(fc);
 	if (IS_ERR(mnt))

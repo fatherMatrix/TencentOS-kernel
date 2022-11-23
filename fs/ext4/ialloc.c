@@ -1179,6 +1179,9 @@ got:
 		if (err)
 			goto fail_free_drop;
 
+		/*
+		 * 这里会调用security_inode_init_security
+		 */
 		err = ext4_init_security(handle, inode, dir, qstr);
 		if (err)
 			goto fail_free_drop;

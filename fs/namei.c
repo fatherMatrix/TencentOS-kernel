@@ -655,6 +655,8 @@ static void terminate_walk(struct nameidata *nd)
 		 * 如果是从path_openat()调用进来，那么正常情况下，path里保存了
 		 * 要返回的dentry（在调用前没有进行移动语义）。此时返回给调用者
 		 * 的dentry和vfsmount时处于引用计数减少过后的状态
+		 * TODO: 我记得这里当时是看错了，应该也是增加状态才对，后面继续
+		 *       看一下
 		 */
 		path_put(&nd->path);
 		for (i = 0; i < nd->depth; i++)
@@ -1846,7 +1848,7 @@ again:
 		 * d_alloc_parallel中将正确分配的dentry加入了inlookup_hashtable
 		 * 并置位了inlookup flag。
 		 *
-		 * 进入到这里，说明d_alloc_parallel中除了错误
+		 * 进入到这里，说明d_alloc_parallel中出了错误
 		 */
 		if (!(flags & LOOKUP_NO_REVAL)) {
 			int error = d_revalidate(dentry, flags);
@@ -1862,7 +1864,7 @@ again:
 		}
 	} else {
 		/* 
-		 * 调用具体文件系统的lookup方法来查找
+		 * 调用具体文件系统的lookup方法来查找对应的inode节点
 		 *
 		 * 根据Documentation/filesystems/vfs.txt中的要求，此回调函数内
 		 * 1. 必须调用d_add()将inode与dentry建立联系
@@ -1891,8 +1893,14 @@ static struct dentry *lookup_slow(const struct qstr *name,
 	/* 父目录对应的inode */
 	struct inode *inode = dir->d_inode;
 	struct dentry *res;
+	/*
+	 * 获取了inode->i_rwsem的读锁
+	 */
 	inode_lock_shared(inode);
 	res = __lookup_slow(name, dir, flags);
+	/*
+	 * 释放了inode->i_rwsem的读锁
+	 */
 	inode_unlock_shared(inode);
 	return res;
 }
@@ -3252,12 +3260,21 @@ static inline int may_create(struct inode *dir, struct dentry *child)
 
 /*
  * p1 and p2 should be directories on the same fs.
+ * 如果在同一个文件系统间使用mv，则使用的是renameat系统调用。
+ * 如果在两个不同的文件系统（同类型不同实例也算）间使用mv，则使用的是open、
+ * read、write、unlink等组合（其实就是拷贝并删除了）。
+ *
+ * 但实际上，在第二种情况中，mv还是会先尝试使用renameat，如果返回错误(EXDEV)则
+ * 说明时跨设备的，此时再尝试拷贝并删除的方式。
  */
 struct dentry *lock_rename(struct dentry *p1, struct dentry *p2)
 {
 	struct dentry *p;
 
 	if (p1 == p2) {
+		/*
+		 * 等价于down_write(d_inode->i_rwsem)
+		 */
 		inode_lock_nested(p1->d_inode, I_MUTEX_PARENT);
 		return NULL;
 	}
@@ -3528,6 +3545,9 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 			const struct open_flags *op,
 			bool got_write)
 {
+	/*
+	 * dir是父目录的dentry
+	 */
 	struct dentry *dir = nd->path.dentry;
 	struct inode *dir_inode = dir->d_inode;
 	int open_flag = op->open_flag;
@@ -3540,9 +3560,18 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 		return -ENOENT;
 
 	file->f_mode &= ~FMODE_CREATED;
+	/*
+	 * dentry是待查找目标的dentry
+	 */
 	dentry = d_lookup(dir, &nd->last);
 	for (;;) {
 		if (!dentry) {
+			/*
+			 * 内部将分配好的dentry放入了inlookup_hashtable
+			 *
+			 * 在后面的d_lookup_done中将其从inlookup_hashtable中取
+			 * 下来
+			 */
 			dentry = d_alloc_parallel(dir, &nd->last, &wq);
 			if (IS_ERR(dentry))
 				return PTR_ERR(dentry);
@@ -3617,6 +3646,9 @@ no_open:
 		 */
 		struct dentry *res = dir_inode->i_op->lookup(dir_inode, dentry,
 							     nd->flags);
+		/*
+		 * 将找到的dentry从inlookup_hashtable中摘下来
+		 */
 		d_lookup_done(dentry);
 		if (unlikely(res)) {
 			if (IS_ERR(res)) {
@@ -3697,10 +3729,13 @@ static int do_last(struct nameidata *nd,
 		/* 
 		 * we _can_ be in RCU mode here
 		 *
-		 * 内部通过对path增加了一次引用计数
+		 * ref_walk内部对path增加了一次引用计数
+		 * rcu-walk内部没有对path增加引用计数（后边会有complete_walk来
+		 * 将引用计数对齐的）
 		 *
 		 * 这里只有lookup_fast吗？如果内存的哈希表中没有呢？不需要通过
 		 * lookup_slow去磁盘上查找吗？
+		 * - 没有的话会走到下面的lookup_open
 		 */
 		error = lookup_fast(nd, &path, &inode, &seq);
 		if (likely(error > 0))
@@ -3842,7 +3877,10 @@ finish_open_created:
 	if (error)
 		goto out;
 	BUG_ON(file->f_mode & FMODE_OPENED); /* once it's opened, it's opened */
-	/* 这里调用vfs_open()执行真正的文件打开操作 */
+	/* 
+	 * 这里调用vfs_open()执行真正的文件打开操作 
+	 * 其中会对nd->path增加引用计数
+	 */
 	error = vfs_open(&nd->path, file);
 	if (error)
 		goto out;
@@ -3945,6 +3983,7 @@ static int do_o_path(struct nameidata *nd, unsigned flags, struct file *file)
 
 /*
  * 本函数要和path_lookupat()对比着看，path的引用计数部分很微妙
+ * 注视要一起看！
  */
 static struct file *path_openat(struct nameidata *nd,
 			const struct open_flags *op, unsigned flags)
@@ -3989,11 +4028,42 @@ static struct file *path_openat(struct nameidata *nd,
 		while (!(error = link_path_walk(s, nd)) &&
 			/*
 			 * path_lookupat()中这里调用的是lookup_last()
+			 * 
+			 * ++++++++++++ 关于do_last和lookup_last ++++++++++++++
+			 *
+			 * 在do_last中，调用了lookup_last和complete_walk，
+			 * 所以本函数在调用terminate_walk之前，是没有调用
+			 * complete_walk的。
+			 *
+			 * 总结：
+			 *   do_last - vfs_open = lookup_last + complete_walk
+			 *
+			 * ++++++++++++++++++ 关于引用计数 ++++++++++++++++++++
+			 *
+			 * 在do_last中，没有nd={NULL, NULL}的操作，所以下面的
+			 * terminate_walk操作确实会减少nd->path的引用计数。但是
+			 * 在do_last中，调用了vfs_open，在其中又增加了一次nd的
+			 * 引用计数。
+			 *
+			 * 总结来说，就是do_last中增加了两次引用计数，
+			 * terminiate_walk中减少了一次引用计数，所以返回时dentry
+			 * 是有一个引用计数增量的
+			 *
+			 * 对比path_lookupat，因为lookup_last + complete_walk中
+			 * 没有vfs_open，所以在lookup_last + complete_walk中仅
+			 * 仅增加了一次引用计数，但它在调用terminate_walk前执行
+			 * 了nd={NULL, NULL}的移动语义，所以terminiate_walk中没
+			 * 有减掉dentry的引用计数。所以还是有一个引用计数的增量
 			 */
 			(error = do_last(nd, file, op)) > 0) {
 			nd->flags &= ~(LOOKUP_OPEN|LOOKUP_CREATE|LOOKUP_EXCL);
 			s = trailing_symlink(nd);
 		}
+
+		/*
+		 * path_lookupat中在terminate_walk之前有一个complete_walk和
+		 * nd={NULL, NULL}的过程
+		 */
 		terminate_walk(nd);
 	}
 	if (likely(!error)) {
@@ -5045,6 +5115,10 @@ static int do_renameat2(int olddfd, const char __user *oldname, int newdfd,
 		target_flags = 0;
 
 retry:
+	/*
+	 * 获取源地址和目的地址的父目录的dentry
+	 *                       ^^^^^^
+	 */
 	from = filename_parentat(olddfd, getname(oldname), lookup_flags,
 				&old_path, &old_last, &old_type);
 	if (IS_ERR(from)) {
@@ -5077,8 +5151,17 @@ retry:
 		goto exit2;
 
 retry_deleg:
+	/*
+	 * 首先会锁住文件系统的rename锁
+	 * 然后会分别锁住两个父目录的inode节点，但这里的锁好没见过，要好好看看
+	 *
+	 * 其实就是对父目录inode->i_rwsem的写者做了P操作
+	 */
 	trap = lock_rename(new_path.dentry, old_path.dentry);
 
+	/*
+	 * 找到要被rename文件的dentry
+	 */
 	old_dentry = __lookup_hash(&old_last, old_path.dentry, lookup_flags);
 	error = PTR_ERR(old_dentry);
 	if (IS_ERR(old_dentry))
@@ -5087,6 +5170,10 @@ retry_deleg:
 	error = -ENOENT;
 	if (d_is_negative(old_dentry))
 		goto exit4;
+
+	/*
+	 * 找到或分配目标文件的dentry
+	 */
 	new_dentry = __lookup_hash(&new_last, new_path.dentry, lookup_flags | target_flags);
 	error = PTR_ERR(new_dentry);
 	if (IS_ERR(new_dentry))

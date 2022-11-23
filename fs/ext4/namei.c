@@ -1604,6 +1604,10 @@ static struct buffer_head *ext4_lookup_entry(struct inode *dir,
 					     struct dentry *dentry,
 					     struct ext4_dir_entry_2 **res_dir)
 {
+	/* 
+	 * dir是父目录的inode
+	 * dentry是待查找目标的dentry
+	 */
 	int err;
 	struct ext4_filename fname;
 	struct buffer_head *bh;
@@ -1687,7 +1691,11 @@ static struct dentry *ext4_lookup(struct inode *dir, struct dentry *dentry, unsi
 		return ERR_CAST(bh);
 	inode = NULL;
 	if (bh) {
-		/* 找到对应的索引节点号 */
+		/* 找到对应的索引节点号 
+		 * 
+		 * 因为这个时候磁盘上是有inode的，所以在ext4_dir_entry中可以找
+		 * 到对应的索引节点号
+		 */
 		__u32 ino = le32_to_cpu(de->inode);
 		brelse(bh);
 		if (!ext4_valid_inum(dir->i_sb, ino)) {
@@ -1701,7 +1709,10 @@ static struct dentry *ext4_lookup(struct inode *dir, struct dentry *dentry, unsi
 		}
 		/*
 		 * 1. 在icache中查找已存在的inode
-		 * 2. 若icache中不能存在inode，则去磁盘上找
+		 * 2. 若icache中不能存在inode，则去磁盘上找，并将磁盘上的inode
+		 *    读到内存中
+		 *
+		 * 返回的inode是携带了本次的引用计数的
 		 */
 		inode = ext4_iget(dir->i_sb, ino, EXT4_IGET_NORMAL);
 		if (inode == ERR_PTR(-ESTALE)) {

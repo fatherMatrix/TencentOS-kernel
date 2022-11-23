@@ -747,6 +747,9 @@ struct ext4_inode {
 		} masix1;
 	} osd1;				/* OS dependent 1 */
 	__le32	i_block[EXT4_N_BLOCKS]; /* Pointers to blocks, 共15*4=60Bytes */
+					/* 数据块指针
+					 * 可能是表，也可能是extent树
+					 */
 	__le32	i_generation;	/* File version (for NFS) */
 	__le32	i_file_acl_lo;	/* File ACL */
 	__le32	i_size_high;
@@ -971,6 +974,8 @@ struct ext4_inode_info {
 	/*
 	 * Extended attributes can be read independently of the main file
 	 * data. Taking i_mutex even when reading would cause contention
+	 *              ^^^^^^^
+	 *        已经是i_rwsem了
 	 * between readers of EAs and writers of regular file data, so
 	 * instead we synchronize on xattr_sem when reading or changing
 	 * EAs.

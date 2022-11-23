@@ -1943,6 +1943,9 @@ static void __d_instantiate(struct dentry *dentry, struct inode *inode)
 		this_cpu_dec(nr_dentry_negative);
 	hlist_add_head(&dentry->d_u.d_alias, &inode->i_dentry);
 	raw_write_seqcount_begin(&dentry->d_seq);
+	/*
+	 * 在此处将dentry和inode关联起来
+	 */
 	__d_set_inode_and_type(dentry, inode, add_flags);
 	raw_write_seqcount_end(&dentry->d_seq);
 	fsnotify_update_flags(dentry);
@@ -1966,8 +1969,14 @@ static void __d_instantiate(struct dentry *dentry, struct inode *inode)
  
 void d_instantiate(struct dentry *entry, struct inode * inode)
 {
+	/*
+	 * 如果现在已经是一个dentry_hashtable中的dentry了，那么就触发一个bug
+	 */
 	BUG_ON(!hlist_unhashed(&entry->d_u.d_alias));
 	if (inode) {
+		/*
+		 * LSM模块
+		 */
 		security_d_instantiate(entry, inode);
 		spin_lock(&inode->i_lock);
 		__d_instantiate(entry, inode);
@@ -3084,6 +3093,9 @@ struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry)
 	if (IS_ERR(inode))
 		return ERR_CAST(inode);
 
+	/*
+	 * 如果dentry已经在dentry_hashtable中了，BUG！
+	 */
 	BUG_ON(!d_unhashed(dentry));
 
 	if (!inode)

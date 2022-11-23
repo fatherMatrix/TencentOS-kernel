@@ -4626,6 +4626,9 @@ static int __ext4_get_inode_loc(struct inode *inode,
 	block = ext4_inode_table(sb, gdp) + (inode_offset / inodes_per_block);
 	iloc->offset = (inode_offset % inodes_per_block) * EXT4_INODE_SIZE(sb);
 
+	/*
+	 * 这里都是按照设备的块，一块一块得读
+	 */
 	bh = sb_getblk(sb, block);
 	if (unlikely(!bh))
 		return -ENOMEM;
@@ -4901,7 +4904,16 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 	 *   alloc_inode新分配的，并没有填充信息。且其中inode的state中置位了
 	 *   I_NEW，当inode中的信息填充完成后清除
 	 *
+	 * 如果返回的inode是新分配的，那么在iget_locked中会将其放入全局的
+	 * inode_hashtable中
+	 *
 	 * 本函数最后一步就是清除I_NEW
+	 *
+	 * [SELinux]
+	 * iget_locked
+	 *   alloc_inode
+	 *     inode_init_always
+	 *       inode_alloc_security
 	 */
 	inode = iget_locked(sb, ino);
 	if (!inode)
@@ -4922,6 +4934,9 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 	ret = __ext4_get_inode_loc(inode, &iloc, 0);
 	if (ret < 0)
 		goto bad_inode;
+	/*
+	 * 从读到的buffer head中找到ext4_inode
+	 */
 	raw_inode = ext4_raw_inode(&iloc);
 
 	if ((ino == EXT4_ROOT_INO) && (raw_inode->i_links_count == 0)) {

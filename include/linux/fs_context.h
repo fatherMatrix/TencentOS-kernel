@@ -137,8 +137,14 @@ struct fs_context_operations {
 	 * 用来对fc_context->fs_private字段进行复制
 	 */
 	int (*dup)(struct fs_context *fc, struct fs_context *src_fc);
+	/*
+	 * 用于挂载参数的解析
+	 */
 	int (*parse_param)(struct fs_context *fc, struct fs_parameter *param);
 	int (*parse_monolithic)(struct fs_context *fc, void *data);
+	/*
+	 * 用于获取待挂载文件系统的super_block，并将其根目录dentry放入fc中
+	 */
 	int (*get_tree)(struct fs_context *fc);
 	int (*reconfigure)(struct fs_context *fc);
 };

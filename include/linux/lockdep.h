@@ -427,6 +427,9 @@ static inline void lockdep_set_selftest_task(struct task_struct *task)
 {
 }
 
+/*
+ * 如果没有定义CONFIG_LOCKDEP
+ */
 # define lock_acquire(l, s, t, r, c, n, i)	do { } while (0)
 # define lock_release(l, n, i)			do { } while (0)
 # define lock_downgrade(l, i)			do { } while (0)

@@ -769,7 +769,9 @@ struct inode {
 	struct list_head	i_wb_list;	/* backing dev writeback list */
 	union {
 		/*
-		 * 所有引用该inode的dentry将形成一个链表
+		 * 所有引用该inode的dentry将形成一个链表，对应dentry->d_alias
+		 *
+		 * 这些dentry是硬链接吗？
 		 */
 		struct hlist_head	i_dentry;
 		struct rcu_head		i_rcu;

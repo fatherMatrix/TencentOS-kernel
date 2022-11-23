@@ -197,6 +197,9 @@ static const struct inode_operations bad_inode_ops =
  
 void make_bad_inode(struct inode *inode)
 {
+	/*
+	 * 从inode_hashtable中摘下来
+	 */
 	remove_inode_hash(inode);
 
 	inode->i_mode = S_IFREG;

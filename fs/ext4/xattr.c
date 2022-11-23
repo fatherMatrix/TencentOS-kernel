@@ -586,11 +586,17 @@ ext4_xattr_ibody_get(struct inode *inode, int name_index, const char *name,
 	if (error)
 		return error;
 	raw_inode = ext4_raw_inode(&iloc);
+	/*
+	 * 获取放在inode中空闲空间中的拓展属性的头部
+	 */
 	header = IHDR(inode, raw_inode);
 	end = (void *)raw_inode + EXT4_SB(inode->i_sb)->s_inode_size;
 	error = xattr_check_inode(inode, header, end);
 	if (error)
 		goto cleanup;
+	/*
+	 * 获取紧跟在拓展属性头部后的第一个拓展属性
+	 */
 	entry = IFIRST(header);
 	error = xattr_find_entry(inode, &entry, end, name_index, name, 0);
 	if (error)
@@ -637,6 +643,9 @@ int
 ext4_xattr_get(struct inode *inode, int name_index, const char *name,
 	       void *buffer, size_t buffer_size)
 {
+	/*
+	 * 文件拓展属性的存储位置有两个
+	 */
 	int error;
 
 	if (unlikely(ext4_forced_shutdown(EXT4_SB(inode->i_sb))))
@@ -645,12 +654,24 @@ ext4_xattr_get(struct inode *inode, int name_index, const char *name,
 	if (strlen(name) > 255)
 		return -ERANGE;
 
+	/*
+	 * 加锁
+	 */
 	down_read(&EXT4_I(inode)->xattr_sem);
+	/*
+	 * 1. 首先从文件对应索引节点的空闲空间中查找指定的拓展属性
+	 */
 	error = ext4_xattr_ibody_get(inode, name_index, name, buffer,
 				     buffer_size);
+	/*
+	 * 2. 如果索引节点的空闲空间中没有指定的拓展属性，那么就从独立的块中查
+	 */
 	if (error == -ENODATA)
 		error = ext4_xattr_block_get(inode, name_index, name, buffer,
 					     buffer_size);
+	/*
+	 * 解锁
+	 */
 	up_read(&EXT4_I(inode)->xattr_sem);
 	return error;
 }

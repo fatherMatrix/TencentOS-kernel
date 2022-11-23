@@ -176,6 +176,11 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	inode->i_wb_frn_history = 0;
 #endif
 
+	/*
+	 * 在inode_init_always中调用的security竟然是security_inode_alloc
+	 *
+	 * security_inode_init反倒是在create中调用的
+	 */
 	if (security_inode_alloc(inode))
 		goto out;
 	spin_lock_init(&inode->i_lock);
@@ -237,6 +242,13 @@ static struct inode *alloc_inode(struct super_block *sb)
 	struct inode *inode;
 
 	if (ops->alloc_inode)
+		/*
+		 * 对于ext4文件系统来说，这里调用的是ext4_alloc_inode，其中分配
+		 * 的是ext4_inode_info，并指定了部分初始值，返回的是其中的
+		 * vfs inode部分。
+		 *
+		 * 所以，这里结束时我们有了一个ext4_inode_info
+		 */
 		inode = ops->alloc_inode(sb);
 	else
 		inode = kmem_cache_alloc(inode_cachep, GFP_KERNEL);
@@ -246,6 +258,8 @@ static struct inode *alloc_inode(struct super_block *sb)
 
 	/*
 	 * 这里面会将新分配的inode的引用计数设置为1
+	 *
+	 * 在里面执行了security_inode_alloc
 	 */
 	if (unlikely(inode_init_always(sb, inode))) {
 		if (ops->destroy_inode) {
@@ -1242,6 +1256,8 @@ again:
 		if (!old) {
 			/* 运行到这里，说明没有其他inode被创建，我们创建的inode
 			 * 要被插入到inode_hashtable中。
+			 *
+			 * inode终于有了索引节点号
 			 */
 			inode->i_ino = ino;
 			spin_lock(&inode->i_lock);
@@ -1273,6 +1289,9 @@ again:
 		 * Uhhuh, somebody else created the same inode under
 		 * us. Use the old inode instead of the one we just
 		 * allocated.
+		 *
+		 * 别人创建的相同inode先一步被插入到了inode_hashtable中，我们就
+		 * 使用别人创建的就好了
 		 */
 		spin_unlock(&inode_hash_lock);
 		destroy_inode(inode);

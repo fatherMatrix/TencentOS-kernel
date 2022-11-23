@@ -200,6 +200,9 @@ static void destroy_unused_super(struct super_block *s)
 static struct super_block *alloc_super(struct file_system_type *type, int flags,
 				       struct user_namespace *user_ns)
 {
+	/*
+	 * 分配super_block结构体对应的内存
+	 */
 	struct super_block *s = kzalloc(sizeof(struct super_block),  GFP_USER);
 	static const struct super_operations default_op;
 	int i;
@@ -228,6 +231,9 @@ static struct super_block *alloc_super(struct file_system_type *type, int flags,
 	 */
 	down_write_nested(&s->s_umount, SINGLE_DEPTH_NESTING);
 
+	/*
+	 * LSM模块
+	 */
 	if (security_sb_alloc(s))
 		goto fail;
 
@@ -250,6 +256,9 @@ static struct super_block *alloc_super(struct file_system_type *type, int flags,
 	INIT_LIST_HEAD(&s->s_inodes_wb);
 	spin_lock_init(&s->s_inode_wblist_lock);
 
+	/*
+	 * 引用计数s_count和次引用计数s_active都设置为1
+	 */
 	s->s_count = 1;
 	atomic_set(&s->s_active, 1);
 	mutex_init(&s->s_vfs_rename_mutex);
@@ -527,6 +536,9 @@ retry:
 	}
 	if (!s) {
 		spin_unlock(&sb_lock);
+		/*
+		 * 分配一个超级块
+		 */
 		s = alloc_super(fc->fs_type, fc->sb_flags, user_ns);
 		if (!s)
 			return ERR_PTR(-ENOMEM);
@@ -600,7 +612,17 @@ struct super_block *sget(struct file_system_type *type,
 retry:
 	spin_lock(&sb_lock);
 	if (test) {
+		/*
+		 * 在file_system_type中的super_block链表上查找是否已经存在我们
+		 * 在找的目标super_block
+		 *
+		 * test函数是我们自定义的函数，用于确定是否是我们要找的目标
+		 * super_block
+		 */
 		hlist_for_each_entry(old, &type->fs_supers, s_instances) {
+			/*
+			 * 在mount_bdev中，这个函数是test_bdev_super
+			 */
 			if (!test(old, data))
 				continue;
 			if (user_ns != old->s_user_ns) {
@@ -611,19 +633,36 @@ retry:
 			if (!grab_super(old))
 				goto retry;
 			destroy_unused_super(s);
+
+			/*
+			 * 如果找到了，且符合要求，则直接返回
+			 */
 			return old;
 		}
 	}
+
+	/*
+	 * 如果上面没有找到已经存在的super_block，则需要分配一个
+	 */
 	if (!s) {
 		spin_unlock(&sb_lock);
+		/*
+		 * super_block中的两个引用计数都被置为了1
+		 */
 		s = alloc_super(type, (flags & ~SB_SUBMOUNT), user_ns);
 		if (!s)
 			return ERR_PTR(-ENOMEM);
+		/*
+		 * goto retry之后，上面的哈希表里其实还是找不到super_block的，
+		 * 但不会再次进入这个if了，因为此时s已经不为NULL了
+		 */
 		goto retry;
 	}
 
 	/* 
 	 * 将超级块和对应的block_device结构体关联起来
+	 *
+	 * 在mount_bdev中，这个函数是set_bdev_super
 	 */
 	err = set(s, data);
 	if (err) {
@@ -634,8 +673,15 @@ retry:
 	s->s_type = type;
 	strlcpy(s->s_id, type->name, sizeof(s->s_id));
 	list_add_tail(&s->s_list, &super_blocks);
+	/*
+	 * 这里才会将新分配的super_block结构体挂到对应的file_system_type链表上
+	 */
 	hlist_add_head(&s->s_instances, &type->fs_supers);
 	spin_unlock(&sb_lock);
+	/*
+	 * 对file_system_type增加一次引用计数，这个引用计数最终是增加到了对应的
+	 * module上
+	 */
 	get_filesystem(type);
 	register_shrinker_prepared(&s->s_shrink);
 	return s;
@@ -1442,6 +1488,9 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 		s->s_mode = mode;
 		snprintf(s->s_id, sizeof(s->s_id), "%pg", bdev);
 		sb_set_blocksize(s, block_size(bdev));
+		/*
+		 * fill_super指的是ext4_fill_super
+		 */
 		error = fill_super(s, data, flags & SB_SILENT ? 1 : 0);
 		if (error) {
 			deactivate_locked_super(s);
@@ -1571,6 +1620,8 @@ int vfs_get_tree(struct fs_context *fc)
 
 	/* Get the mountable root in fc->root, with a ref on the root and a ref
 	 * on the superblock.
+	 *
+	 * 对于传统的文件系统如ext4，这个get_tree指针指向legacy_get_tree函数
 	 */
 	error = fc->ops->get_tree(fc);
 	if (error < 0)

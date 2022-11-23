@@ -1557,7 +1557,13 @@ EXPORT_SYMBOL(down_read_trylock);
 void __sched down_write(struct rw_semaphore *sem)
 {
 	might_sleep();
+	/*
+	 * 没有配置CONFIG_LOCKDEP时，这个条件编译成空语句
+	 */ 
 	rwsem_acquire(&sem->dep_map, 0, 0, _RET_IP_);
+	/*
+	 * 没有配置CONFIG_LOCK_STAT时，这个条件编译为__down_write(sem)
+	 */
 	LOCK_CONTENDED(sem, __down_write_trylock, __down_write);
 }
 EXPORT_SYMBOL(down_write);
@@ -1664,6 +1670,9 @@ void down_read_non_owner(struct rw_semaphore *sem)
 }
 EXPORT_SYMBOL(down_read_non_owner);
 
+/*
+ * 如果没有配置CONFIG_DEBUG_LOCK_ALLOC，那么down_write_nested就是down_write
+ */
 void down_write_nested(struct rw_semaphore *sem, int subclass)
 {
 	might_sleep();

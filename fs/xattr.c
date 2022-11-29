@@ -53,6 +53,9 @@ strcmp_prefix(const char *a, const char *a_prefix)
 static const struct xattr_handler *
 xattr_resolve_name(struct inode *inode, const char **name)
 {
+	/*
+	 * 这里是ext4_xattr_handlers
+	 */
 	const struct xattr_handler **handlers = inode->i_sb->s_xattr;
 	const struct xattr_handler *handler;
 
@@ -64,6 +67,9 @@ xattr_resolve_name(struct inode *inode, const char **name)
 	for_each_xattr_handler(handlers, handler) {
 		const char *n;
 
+		/*
+		 * 这里返回的n是刨除了handler->prefix或者handler->name后的name
+		 */
 		n = strcmp_prefix(*name, xattr_prefix(handler));
 		if (n) {
 			if (!handler->prefix ^ !*n) {
@@ -71,6 +77,10 @@ xattr_resolve_name(struct inode *inode, const char **name)
 					continue;
 				return ERR_PTR(-EINVAL);
 			}
+			/*
+			 * 本函数返回后，*name中保存的也是刨除了handler->prefix
+			 * 或者handler->name后的部分
+			 */
 			*name = n;
 			return handler;
 		}
@@ -363,6 +373,9 @@ vfs_getxattr(struct dentry *dentry, const char *name, void *value, size_t size)
 	if (error)
 		return error;
 
+	/*
+	 * 对"security."进行特殊处理
+	 */
 	if (!strncmp(name, XATTR_SECURITY_PREFIX,
 				XATTR_SECURITY_PREFIX_LEN)) {
 		const char *suffix = name + XATTR_SECURITY_PREFIX_LEN;

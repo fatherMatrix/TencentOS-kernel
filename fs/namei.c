@@ -1879,6 +1879,10 @@ again:
 		 */
 		d_lookup_done(dentry);
 		if (unlikely(old)) {
+			/*
+			 * 这里面会将dentry从其parent的children list中摘除，其
+			 * 对称动作在上面的d_alloc_parallel中
+			 */
 			dput(dentry);
 			dentry = old;
 		}
@@ -1894,7 +1898,7 @@ static struct dentry *lookup_slow(const struct qstr *name,
 	struct inode *inode = dir->d_inode;
 	struct dentry *res;
 	/*
-	 * 获取了inode->i_rwsem的读锁
+	 * 获取了inode->i_rwsem的读锁，不过这里加锁对象是parent dir
 	 */
 	inode_lock_shared(inode);
 	res = __lookup_slow(name, dir, flags);
@@ -2562,6 +2566,11 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	 */
 	nd->m_seq = read_seqbegin(&mount_lock);
 	if (*s == '/') {
+		/* 
+		 * 后面的两个if分支都没有设置nd->root的值，这是处于性能考虑，因为很有可
+		 * 能用不到nd->root。但是如果在路径中遇到了/../，即向上一层目录walk，则
+		 * 会在handle_dotdot之前进行set_root()
+		 */
 		set_root(nd);
 		if (likely(!nd_jump_root(nd)))
 			return s;

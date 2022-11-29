@@ -2585,7 +2585,16 @@ struct dentry *d_alloc_parallel(struct dentry *parent,
 	struct hlist_bl_node *node;
 	/* 
 	 * 哈希表中不存在目标dentry，所以这里必须创建一个了。
+	 * 
+	 *
 	 * d_alloc中已经将新创建的dentry和parent dentry建立了父子联系
+	 * - 建立父子关系这个操作对于parent dentry来说是写操作，需要加锁互斥
+	 * - 加的锁是自旋锁parent->d_lock
+	 *
+	 * 废除父子关系的操作在dput中
+	 *
+	 *
+	 * d_alloc中将自己新建的dentry放入了lookup_hashtable
 	 */
 	struct dentry *new = d_alloc(parent, name);
 	struct dentry *dentry;
@@ -2700,6 +2709,9 @@ retry:
 	 * 在这里把新的dentry放入inlookup_hashtable 
 	 */
 	hlist_bl_add_head_rcu(&new->d_u.d_in_lookup_hash, b);
+	/*
+	 * 放进去之后才解锁
+	 */
 	hlist_bl_unlock(b);
 	return new;
 mismatch:

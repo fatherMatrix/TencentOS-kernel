@@ -294,6 +294,11 @@ xattr_find_entry(struct inode *inode, struct ext4_xattr_entry **pentry,
 			EXT4_ERROR_INODE(inode, "corrupted xattr entries");
 			return -EFSCORRUPTED;
 		}
+		/*
+		 * 对比是不是同一个name_index，其实就是在比较是不是同一个prefix
+		 * 对比name长度是否一样
+		 * 对比name内容是否一样
+		 */
 		cmp = name_index - entry->e_name_index;
 		if (!cmp)
 			cmp = name_len - entry->e_name_len;
@@ -638,6 +643,9 @@ cleanup:
  *
  * Returns a negative error number on failure, or the number of bytes
  * used / required on success.
+ *
+ * 该函数接受的name参数是刨除了handler->prefix或者handler->name之后的
+ * name
  */
 int
 ext4_xattr_get(struct inode *inode, int name_index, const char *name,

@@ -25,6 +25,7 @@
 /*
  * __ro_after_init is used to mark things that are read-only after init (i.e.
  * after mark_rodata_ro() has been called). These are effectively read-only,
+ *       ^^^^^^^^^^^^^^^^ 在此之后，这个位置处于kernel_init中
  * but may get written to during init, so can't live in .rodata (via "const").
  */
 #ifndef __ro_after_init

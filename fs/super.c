@@ -527,6 +527,9 @@ struct super_block *sget_fc(struct fs_context *fc,
 	int err;
 
 retry:
+	/*
+	 * 对全局sb_lock加锁
+	 */
 	spin_lock(&sb_lock);
 	if (test) {
 		hlist_for_each_entry(old, &fc->fs_type->fs_supers, s_instances) {
@@ -535,6 +538,9 @@ retry:
 		}
 	}
 	if (!s) {
+		/*
+		 * 如果没有找到，则释放全局锁
+		 */
 		spin_unlock(&sb_lock);
 		/*
 		 * 分配一个超级块

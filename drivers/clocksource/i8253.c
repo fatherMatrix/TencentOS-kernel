@@ -190,6 +190,10 @@ void __init clockevent_i8253_init(bool oneshot)
 	 */
 	i8253_clockevent.cpumask = cpumask_of(smp_processor_id());
 
+	/*
+	 * i8253是时钟事件设备的一种具体实现，从软件抽象层来说，各种时钟事件设
+	 * 备都会调度内核的clockevents中的注册函数进行注册
+	 */
 	clockevents_config_and_register(&i8253_clockevent, PIT_TICK_RATE,
 					0xF, 0x7FFF);
 }

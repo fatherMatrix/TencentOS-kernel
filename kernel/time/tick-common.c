@@ -343,6 +343,9 @@ void tick_check_new_device(struct clock_event_device *newdev)
 	int cpu;
 
 	cpu = smp_processor_id();
+	/*
+	 * td存储cpu本地的tick设备
+	 */
 	td = &per_cpu(tick_cpu_device, cpu);
 	curdev = td->evtdev;
 
@@ -358,15 +361,32 @@ void tick_check_new_device(struct clock_event_device *newdev)
 		return;
 
 	/*
+	 * 执行到这里，说明新设备newdev比老设备curdev更适合作为本地tick设备，进
+	 * 行更换操作
+	 *
 	 * Replace the eventually existing device by the new
 	 * device. If the current device is the broadcast device, do
 	 * not give it back to the clockevents layer !
 	 */
 	if (tick_is_broadcast_device(curdev)) {
+		/*
+		 * 如果老设备是一个广播设备，则对其进行关闭
+		 */ 
 		clockevents_shutdown(curdev);
+		/*
+		 * 如果老设备是一个广播设备，则不将其放回clockevents layer
+		 *
+		 * 移动语义
+		 */
 		curdev = NULL;
 	}
+	/*
+	 * 新老设备位置交换
+	 */
 	clockevents_exchange_device(curdev, newdev);
+	/*
+	 * 设置新设备newdev为本地tick设备
+	 */
 	tick_setup_device(td, newdev, cpu, cpumask_of(cpu));
 	if (newdev->features & CLOCK_EVT_FEAT_ONESHOT)
 		tick_oneshot_notify();

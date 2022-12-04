@@ -110,7 +110,8 @@ struct fs_context {
 	const struct cred	*cred;		/* The mounter's credentials */
 	struct fc_log		*log;		/* Logging buffer */
 	/*
-	 * 被挂载的设备，如/dev/vda、devtmpfs
+	 * 被挂载的设备，如/dev/vda、devtmpfs或selinuxfs、bibafs
+	 * 这个是在vfs_parse_fs_string -> vfs_parse_fs_param中赋值的
 	 */
 	const char		*source;	/* The source name (eg. dev path) */
 	/* 

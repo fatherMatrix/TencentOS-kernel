@@ -1400,6 +1400,9 @@ static int __init __apic_intr_mode_select(void)
 /* Select the interrupt delivery mode for the BSP */
 void __init apic_intr_mode_select(void)
 {
+	/*
+	 * Tencent CVM中，这个值等于APIC_SYMMETRIC_IO
+	 */
 	apic_intr_mode = __apic_intr_mode_select();
 }
 

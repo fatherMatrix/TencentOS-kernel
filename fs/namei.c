@@ -1851,16 +1851,18 @@ static struct dentry *__lookup_slow(const struct qstr *name,
 again:
 	/*
 	 * 要创建dentry了
+	 *
+	 * - 如果返回的dentry是由本d_alloc_parallel创建的，则中将新创建的dentry
+	 *   放入了inlookup_hashtable中
+	 * - 如果返回的dentry是由其他d_alloc_parallel创建的，则返回前等待dentry
+	 *   在inlookup_hashtable中摘除
 	 */
 	dentry = d_alloc_parallel(dir, name, &wq);
 	if (IS_ERR(dentry))
 		return dentry;
 	if (unlikely(!d_in_lookup(dentry))) {
 		/*
-		 * d_alloc_parallel中将正确分配的dentry加入了inlookup_hashtable
-		 * 并置位了inlookup flag。
-		 *
-		 * 进入到这里，说明d_alloc_parallel中出了错误
+		 * 走到这里，说明dentry不是由本d_alloc_parallel创建的
 		 */
 		if (!(flags & LOOKUP_NO_REVAL)) {
 			int error = d_revalidate(dentry, flags);
@@ -1884,10 +1886,22 @@ again:
 		 *
 		 * ext4_lookup中通过调用d_splice_alias -> __d_add将dentry放到了
 		 * dentry_hashtable中
+		 *
+		 * 会有很多内核路径同时走到这里，这个函数是可以并发的吗？
+		 * - 猜测：该函数内使用了bh cache和inode cache，这两个cache会保
+		 *   整真正的读盘操作只会由一个内核路径执行，其他的同目标的内核
+		 *   路径会在这两个cache中睡眠等待
 		 */
 		old = inode->i_op->lookup(inode, dentry, flags);
 		/*
-		 * 将dentry从inlookup_hashtable中摘下来
+		 * 如果dentry还在inlookup_hashtable中（dentry是由其他
+		 * d_alloc_parallel创建的），则将dentry从inlookup_hashtable中摘
+		 * 下来。只有在这里被摘下来，其他内核路径的d_alloc_parallel才会
+		 * 返回。
+		 *
+		 * 但其实在->lookup中的d_splice_alias -> __d_add中就调用过一次
+		 * __d_lookup_done了呀？
+		 * - 有可能走不到__d_add这个分支上
 		 */
 		d_lookup_done(dentry);
 		if (unlikely(old)) {
@@ -2078,7 +2092,16 @@ static int walk_component(struct nameidata *nd, int flags)
 		 * 存目标文件的dentry项指针
 		 *
 		 * 内部会将找到的dentry到到dentry_hashtable中（期间经历了一次放
-		 * 到inlookup_hashtable，然后从里面拿出来的过程）
+		 * 到inlookup_hashtable，然后从里面拿出来的过程），将dentry放入
+		 * dentry_hashtable的动作是在__d_add(->lookup的最后一步）中完成
+		 * 的：
+		 * 
+		 * d_alloc
+		 * list_add(inlookup_hashtable)
+		 * ->lookup
+		 *     d_add
+		 *       list_add(dentry_hashtable)
+		 * list_del(inlookup_hashtable)
  		 */ 
 		path.dentry = lookup_slow(&nd->last, nd->path.dentry,
 					  nd->flags);

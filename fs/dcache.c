@@ -2592,9 +2592,6 @@ struct dentry *d_alloc_parallel(struct dentry *parent,
 	 * - 加的锁是自旋锁parent->d_lock
 	 *
 	 * 废除父子关系的操作在dput中
-	 *
-	 *
-	 * d_alloc中将自己新建的dentry放入了lookup_hashtable
 	 */
 	struct dentry *new = d_alloc(parent, name);
 	struct dentry *dentry;
@@ -2753,6 +2750,10 @@ static inline void __d_add(struct dentry *dentry, struct inode *inode)
 	struct inode *dir = NULL;
 	unsigned n;
 	spin_lock(&dentry->d_lock);
+	/*
+	 * inlookup说明dentry就是由本内核路径的d_alloc_parallel创建的，所以我们
+	 * 有责任做好这一步的处理
+	 */ 
 	if (unlikely(d_in_lookup(dentry))) {
 		dir = dentry->d_parent->d_inode;
 		n = start_dir_add(dir);
@@ -2766,6 +2767,9 @@ static inline void __d_add(struct dentry *dentry, struct inode *inode)
 		raw_write_seqcount_end(&dentry->d_seq);
 		fsnotify_update_flags(dentry);
 	}
+	/*
+	 * 将dentry放入到dentry_hashtable中
+	 */
 	__d_rehash(dentry);
 	if (dir)
 		end_dir_add(dir, n);

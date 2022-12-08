@@ -461,8 +461,17 @@ void clockevents_register_device(struct clock_event_device *dev)
 
 	raw_spin_lock_irqsave(&clockevents_lock, flags);
 
+	/*
+	 * 将当前clock_event_device设备加入到全局clockevent_devices链表中
+	 */
 	list_add(&dev->list, &clockevent_devices);
+	/*
+	 * 检测当前设备是否适合作为当前执行CPU的本地tick设备或全局boardcast设备
+	 */
 	tick_check_new_device(dev);
+	/*
+	 * 对于被释放的设备，重新加入全局链表并做tick_check_new_device检测
+	 */
 	clockevents_notify_released();
 
 	raw_spin_unlock_irqrestore(&clockevents_lock, flags);
@@ -508,7 +517,13 @@ void clockevents_config_and_register(struct clock_event_device *dev,
 {
 	dev->min_delta_ticks = min_delta;
 	dev->max_delta_ticks = max_delta;
+	/*
+	 * 根据内部计数器频率计算相关转换参数
+	 */
 	clockevents_config(dev, freq);
+	/*
+	 *
+	 */
 	clockevents_register_device(dev);
 }
 EXPORT_SYMBOL_GPL(clockevents_config_and_register);
@@ -577,6 +592,9 @@ void clockevents_exchange_device(struct clock_event_device *old,
 		module_put(old->owner);
 		clockevents_switch_state(old, CLOCK_EVT_STATE_DETACHED);
 		list_del(&old->list);
+		/*
+		 * 将老设备放入全局clockevents_released链表中
+		 */
 		list_add(&old->list, &clockevents_released);
 	}
 

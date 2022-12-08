@@ -156,7 +156,7 @@ int vfs_parse_fs_param(struct fs_context *fc, struct fs_parameter *param)
 		if (fc->source)
 			return invalf(fc, "VFS: Multiple sources");
 		/* 
-		 * fc->source表示要被挂载的盘符，比如/dev/vdb
+		 * fc->source表示要被挂载的盘符，比如/dev/vdb或者selinuxfs
 		 */
 		fc->source = param->string;
 		param->string = NULL;
@@ -174,6 +174,11 @@ EXPORT_SYMBOL(vfs_parse_fs_param);
 int vfs_parse_fs_string(struct fs_context *fc, const char *key,
 			const char *value, size_t v_size)
 {
+	/*
+	 * key:		source
+	 * value:	file_system_type->name（针对selinuxfs等）或
+	 * 		/dev/vdb（针对磁盘文件系统）
+	 */
 	int ret;
 
 	struct fs_parameter param = {

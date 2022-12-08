@@ -527,6 +527,9 @@ struct super_block *sget_fc(struct fs_context *fc,
 	int err;
 
 retry:
+	/*
+	 * 对全局sb_lock加锁
+	 */
 	spin_lock(&sb_lock);
 	/* 
 	 * 查看当前文件系统类型file_system_type->fs_supers链表上是否已经有了目标
@@ -541,6 +544,9 @@ retry:
 		}
 	}
 	if (!s) {
+		/*
+		 * 如果没有找到，则释放全局锁
+		 */
 		spin_unlock(&sb_lock);
 		/*
 		 * 分配一个超级块

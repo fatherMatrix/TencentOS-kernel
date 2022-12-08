@@ -616,11 +616,17 @@ void __init smp_init(void)
 	int num_nodes, num_cpus;
 	unsigned int cpu;
 
+	/*
+	 * 非主CPU上idle进程的创建
+	 */
 	idle_threads_init();
 	cpuhp_threads_init();
 
 	pr_info("Bringing up secondary CPUs ...\n");
 
+	/*
+	 * 非主CPU的启动
+	 */
 	/* FIXME: This should be done in userspace --RR */
 	for_each_present_cpu(cpu) {
 		if (num_online_cpus() >= setup_max_cpus)

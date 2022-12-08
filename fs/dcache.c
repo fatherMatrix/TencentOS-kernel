@@ -3321,14 +3321,29 @@ void __init vfs_caches_init(void)
 	names_cachep = kmem_cache_create_usercopy("names_cache", PATH_MAX, 0,
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC, 0, PATH_MAX, NULL);
 
+	/*
+	 * 创建dentry_cache和dentry_hashtable
+	 */ 
 	dcache_init();
+	/*
+	 * 创建inode_cachep和inode_hashtable
+	 */
 	inode_init();
+	/*
+	 * 创建file_cache
+	 */
 	files_init();
 	files_maxfiles_init();
 	/*
 	 * 初始化mount tree相关
 	 */
 	mnt_init();
+	/*
+	 * 注册bd_type
+	 */
 	bdev_cache_init();
+	/*
+	 * 字符设备不对应文件系统
+	 */
 	chrdev_init();
 }

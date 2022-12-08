@@ -335,6 +335,8 @@ static void __init ordered_lsm_init(void)
 	 * 所以在此处分配安全域内存空间缓存。
 	 *
 	 * 这里决定了lsm的选择安装只能在内核启动时，而添加只能在编译内核前
+	 *
+	 * 这里如果缓存创建失败了怎么办？还是说这个时候默认就不会创建失败？
 	 */
 	if (blob_sizes.lbs_file)
 		lsm_file_cache = kmem_cache_create("lsm_file_cache",

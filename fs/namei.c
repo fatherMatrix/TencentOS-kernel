@@ -536,11 +536,11 @@ EXPORT_SYMBOL(path_put);
 struct nameidata {
 	struct path	path; 			/* 已解析路径(未解析分量的父目录) */
 	struct qstr	last; 			/* 需要解析的文件路径分量 */
-	struct path	root; 			/* 根目录 */
+	struct path	root; 			/* 根目录，可能是为了更换根目录？*/
 	struct inode	*inode; 		/* path.dentry.d_inode */
 	unsigned int	flags;
 	unsigned	seq, m_seq; 		/* 顺序锁
-						 * seq保护path.dentry->d_seq
+						 * seq保护path.dentry
 						 * m_seq保护mount_lock
 						 */
 	int		last_type; 		/* 下一个要解析的路径单元类型 */
@@ -899,10 +899,14 @@ static void set_root(struct nameidata *nd)
 	if (nd->flags & LOOKUP_RCU) {
 		unsigned seq;
 
+		/*
+		 * 下面的get_fs_root是直接加了自旋锁
+		 */
 		do {
 			seq = read_seqcount_begin(&fs->seq);
 			nd->root = fs->root;
 			nd->root_seq = __read_seqcount_begin(&nd->root.dentry->d_seq);
+			/* 如果不想等，则重试 */
 		} while (read_seqcount_retry(&fs->seq, seq));
 	} else {
 		/*
@@ -1610,6 +1614,8 @@ EXPORT_SYMBOL(follow_down);
 
 /*
  * Skip to top of mountpoint pile in refwalk mode for follow_dotdot()
+ *
+ * 当前(path->dentry)是一个挂载点，那么需要walk到被挂载的文件系统上
  */
 static void follow_mount(struct path *path)
 {
@@ -1619,6 +1625,12 @@ static void follow_mount(struct path *path)
 			break;
 		dput(path->dentry);
 		mntput(path->mnt);
+		/*
+		 * path中保存的是已解析路径，即待解析路径的父目录
+		 *
+		 * walk到被挂载的文件系统上的实质就是将path->dentry替换成被挂载
+		 * 文件系统根目录所对应的dentry
+		 */
 		path->mnt = mounted;
 		path->dentry = dget(mounted->mnt_root);
 	}
@@ -1914,6 +1926,7 @@ static inline int may_lookup(struct nameidata *nd)
 	if (nd->flags & LOOKUP_RCU) {
 		/*
  		 * nd->inode指向了nd->path.dentry.d_inode，即将要解析的下一个
+ 		 *                ^^^^^^^^^^^^^^^^^^^^^^^ - 谁负责更新nd->inode
  		 * 分量所在的目录。此处是用来检查父目录的访问权限。
  		 */ 
 		int err = inode_permission(nd->inode, MAY_EXEC|MAY_NOT_BLOCK);
@@ -2418,11 +2431,14 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		/* 
  		 * 此处name要后移，指向下一个路径分量。当前路径分量已经保存
  		 * 在了nd->last.name中
+ 		 *
+ 		 * hash_len中编码了当前这一段路径分量的长度
  		 */
 		name += hashlen_len(hash_len);
 		/*
 		 * 此函数本身并不要求将所有路径解析完成，当发现待解析的路径已经
-		 * 是最后一个路径分量时即可退出本函数，交由lookup_last操作
+		 * 是最后一个路径分量时即可退出本函数，交由lookup_last或do_last
+		 * 操作
 		 */ 
 		if (!*name)
 			goto OK;
@@ -2514,13 +2530,22 @@ OK:
 /* must be paired with terminate_walk() */
 static const char *path_init(struct nameidata *nd, unsigned flags)
 {
-	/* nameidata->name 是个一个 struct filename * 类型 */
+	/* 
+	 * nameidata->name 是个一个 struct filename * 类型
+	 * nameidata->name->name 是一个 char * 类型
+	 */
 	const char *s = nd->name->name;
 
+	/*
+	 * 如果s现在是个空字符串，那么取消掉LOOKUP_RCU
+	 */
 	if (!*s)
 		flags &= ~LOOKUP_RCU;
+	/* 
+	 * 对应的rcu_read_unlock()在terminate_walk()中
+	 * path_init和terminate_walk必须成对使用
+	 */
 	if (flags & LOOKUP_RCU)
-		/* 对应的rcu_read_unlock()在terminate_walk()中 */
 		rcu_read_lock();
 
 	nd->last_type = LAST_ROOT; /* if there are only slashes... */
@@ -2570,12 +2595,19 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		 * 后面的两个if分支都没有设置nd->root的值，这是处于性能考虑，因为很有可
 		 * 能用不到nd->root。但是如果在路径中遇到了/../，即向上一层目录walk，则
 		 * 会在handle_dotdot之前进行set_root()
+		 *
+		 * 设置根目录
+		 * - rcu方式
+		 * - ref方式
 		 */
 		set_root(nd);
 		if (likely(!nd_jump_root(nd)))
 			return s;
 		return ERR_PTR(-ECHILD);
 	} else if (nd->dfd == AT_FDCWD) {
+		/*
+		 * 当前目录
+		 */
 		if (flags & LOOKUP_RCU) {
 			struct fs_struct *fs = current->fs;
 			unsigned seq;
@@ -2692,10 +2724,15 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 	/* 
 	 * 如果是rcu-walk模式，在path_init()中就进行了rcu_read_lock()
 	 * 如果是ref-walk模式，在path_init()中就进行了path_get()
+	 *
+	 * 此函数的重点就是设置nd->path的起始状态
 	 */
 	const char *s = path_init(nd, flags);
 	int err;
 
+	/*
+	 * 在路径开始的点就检查是否是挂载点并walk上去
+	 */
 	if (unlikely(flags & LOOKUP_DOWN) && !IS_ERR(s)) {
 		err = handle_lookup_down(nd);
 		if (unlikely(err < 0))
@@ -2703,7 +2740,9 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 	}
 
 	/*
-	 * link_path_walk()成功后返回0
+	 * link_path_walk()成功后返回0，意味着已经解析完了。
+	 * link_path_walk()返回0后才会执行lookup_last()
+	 *
 	 * lookup_last()返回值大于0意味着是个符号链接
 	 */
 	while (!(err = link_path_walk(s, nd))

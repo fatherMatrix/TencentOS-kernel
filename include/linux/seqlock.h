@@ -165,6 +165,7 @@ static inline unsigned raw_read_seqcount_begin(const seqcount_t *s)
  */
 static inline unsigned read_seqcount_begin(const seqcount_t *s)
 {
+	/* 这个是debug相关 */
 	seqcount_lockdep_reader_access(s);
 	return raw_read_seqcount_begin(s);
 }
@@ -384,7 +385,16 @@ static inline void raw_write_seqcount_latch(seqcount_t *s)
  */
 static inline void write_seqcount_begin_nested(seqcount_t *s, int subclass)
 {
+	/*
+	 * s->seqcount加一
+	 * 在raw_write_seqcount_end()中再加一
+	 *
+	 * 综合就是写临界区内是奇数，写临界区外是偶数
+	 */
 	raw_write_seqcount_begin(s);
+	/*
+	 * LOCKDEP相关
+	 */
 	seqcount_acquire(&s->dep_map, subclass, 0, _RET_IP_);
 }
 
@@ -456,6 +466,9 @@ static inline unsigned read_seqretry(const seqlock_t *sl, unsigned start)
  */
 static inline void write_seqlock(seqlock_t *sl)
 {
+	/*
+	 * 加锁
+	 */
 	spin_lock(&sl->lock);
 	write_seqcount_begin(&sl->seqcount);
 }

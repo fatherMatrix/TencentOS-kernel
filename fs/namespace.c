@@ -999,10 +999,9 @@ struct vfsmount *vfs_kern_mount(struct file_system_type *type,
 	/*
 	 * 这里设置了/dev/vdb参数
 	 *
-	 * TODO:
 	 * 哪里设置挂载目录呢？
-	 * vfs_kern_mount仅生成mountpoint结构体，并不将其关联到mount tree上，所
-	 * 以不需要挂载目录。
+	 * - vfs_kern_mount仅生成mountpoint结构体，并不将其关联到mount tree上，
+	 *   所以不需要挂载目录。
 	 */
 	if (name)
 		ret = vfs_parse_fs_string(fc, "source",
@@ -2822,6 +2821,8 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 	/* 
 	 * 此处的name参数指的是/dev/vdb这种要挂载的设备名称，挂载点存储在path参
 	 * 数中的字段中
+	 *
+	 * 此处的name参数也可能是selinuxfs这种
 	 */
 	struct file_system_type *type;
 	struct fs_context *fc;
@@ -3142,6 +3143,9 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	if (retval)
 		return retval;
 
+	/*
+	 * 盲猜这里检查的应该是挂载点目录是否允许挂载
+	 */ 
 	retval = security_sb_mount(dev_name, &path,
 				   type_page, flags, data_page);
 	if (!retval && !may_mount())
@@ -3824,8 +3828,14 @@ void __init mnt_init(void)
 	if (!mount_hashtable || !mountpoint_hashtable)
 		panic("Failed to allocate mount hash table\n");
 
+	/*
+	 * 创建了两个缓存
+	 */
 	kernfs_init();
 
+	/*
+	 * 注册sysfs_fs_type文件系统类型
+	 */
 	err = sysfs_init();
 	if (err)
 		printk(KERN_WARNING "%s: sysfs_init error: %d\n",
@@ -3833,8 +3843,20 @@ void __init mnt_init(void)
 	fs_kobj = kobject_create_and_add("fs", NULL);
 	if (!fs_kobj)
 		printk(KERN_WARNING "%s: kobj create error\n", __func__);
+	/*
+	 * 注册shmem_fs_type文件系统类型
+	 */
 	shmem_init();
+	/*
+	 * 注册rootfs_fs_type文件系统类型
+	 * - 但这个文件系统其实是使用shmem_fs_type或者tmpfs_fs_type中的一种，
+	 *   所以init_rootfs不需要注册任何文件系统类型，只需要决定使用哪种文件
+	 *   系统类型即可
+	 */
 	init_rootfs();
+	/*
+	 * vfs_kern_mount上面的rootfs_fs_type
+	 */
 	init_mount_tree();
 }
 

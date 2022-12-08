@@ -602,6 +602,7 @@ do {									      \
  */
 static __always_inline void rcu_read_lock(void)
 {
+	/* 关抢占 */
 	__rcu_read_lock();
 	/* 代码静态检查相关 */
 	__acquire(RCU);

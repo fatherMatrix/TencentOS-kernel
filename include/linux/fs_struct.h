@@ -26,6 +26,9 @@ extern int unshare_fs_struct(void);
 
 static inline void get_fs_root(struct fs_struct *fs, struct path *root)
 {
+	/*
+	 * 这里是直接加了自旋锁
+	 */
 	spin_lock(&fs->lock);
 	*root = fs->root;
 	path_get(root);

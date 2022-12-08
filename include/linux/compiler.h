@@ -323,6 +323,9 @@ static __always_inline void __write_once_size(volatile void *p, void *res, int s
 #include <asm/barrier.h>
 #include <linux/kasan-checks.h>
 
+/*
+ * READ_ONCE主要是用来解决编译期乱序的问题，在alpha上需要解决数据依赖屏障相关
+ */
 #define __READ_ONCE(x, check)						\
 ({									\
 	union { typeof(x) __val; char __c[1]; } __u;			\

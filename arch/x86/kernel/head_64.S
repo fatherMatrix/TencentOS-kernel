@@ -163,7 +163,7 @@ ENTRY(secondary_startup_64)
 	movq	%rax, %cr0
 
 	/* Setup a boot time stack */
-	movq initial_stack(%rip), %rsp
+	movq initial_stack(%rip), %rsp	/* 0号进程的运行时栈？/
 
 	/* zero EFLAGS after setting rsp */
 	pushq $0

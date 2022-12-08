@@ -82,6 +82,11 @@ void __init hpet_time_init(void)
 			return;
 	}
 
+	/*
+	 * 完成将PIT设置为BSP的本地tick设备后，内核在setup_default_timer_irq中
+	 * 完成中断处理函数的设定并使能中断信号。之后BSP在初始化过程中有会周期
+	 * 性地收到PIT产生的0号时钟中断，并进行中断处理
+	 */
 	setup_default_timer_irq();
 }
 
@@ -93,7 +98,10 @@ static __init void x86_late_time_init(void)
 	 */
 	x86_init.irqs.intr_mode_select();
 
-	/* Setup the legacy timers */
+	/* Setup the legacy timers
+	 *
+	 * 对应hpet_time_init
+	 */
 	x86_init.timers.timer_init();
 
 	/*

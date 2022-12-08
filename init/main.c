@@ -450,6 +450,10 @@ noinline void __ref rest_init(void)
 	 */
 	schedule_preempt_disabled();
 	/* Call into cpu_idle with preempt disabled */
+	/*
+	 * 主CPU的idle进程从这里面开始
+	 * 非主CPU的idle进程从上面的kernel_init中开始
+	 */
 	cpu_startup_entry(CPUHP_ONLINE);
 }
 
@@ -630,6 +634,9 @@ asmlinkage __visible void __init start_kernel(void)
 	 */
 	setup_log_buf(0);
 	setup_mbuf();
+	/*
+	 * 初始化vfs中的缓存及哈希表
+	 */
 	vfs_caches_init_early();
 	sort_main_extable();
 	/*
@@ -705,6 +712,9 @@ asmlinkage __visible void __init start_kernel(void)
 	add_device_randomness(command_line, strlen(command_line));
 	boot_init_stack_canary();
 
+	/*
+	 * 给late_time_init函数指针赋值，会在后面调用此函数指针
+	 */
 	time_init();
 	perf_event_init();
 	profile_init();
@@ -755,6 +765,9 @@ asmlinkage __visible void __init start_kernel(void)
 	setup_per_cpu_pageset();
 	numa_policy_init();
 	acpi_early_init();
+	/*
+	 * 此函数指针在time_init中被赋值
+	 */
 	if (late_time_init)
 		late_time_init();
 	sched_clock_init();
@@ -1209,6 +1222,9 @@ static noinline void __init kernel_init_freeable(void)
 	do_pre_smp_initcalls();
 	lockup_detector_init();
 
+	/*
+	 * 非主CPU的启动
+	 */
 	smp_init();
 	sched_init_smp();
 

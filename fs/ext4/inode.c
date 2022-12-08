@@ -4905,7 +4905,10 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 	 *   I_NEW，当inode中的信息填充完成后清除
 	 *
 	 * 如果返回的inode是新分配的，那么在iget_locked中会将其放入全局的
-	 * inode_hashtable中
+	 * inode_hashtable中;
+	 * 如果返回的inode是inode_hashtable中已有的，那么在返回前会等待其
+	 * I_NEW标志位清除（因为inode一旦创建就加入到哈希表中了，直到这个
+	 * 标志位清除才意味着inode可用）
 	 *
 	 * 本函数最后一步就是清除I_NEW
 	 *

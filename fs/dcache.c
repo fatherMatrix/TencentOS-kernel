@@ -2652,6 +2652,9 @@ retry:
 	 * any potential in-lookup matches are going to stay here until
 	 * we unlock the chain.  All fields are stable in everything
 	 * we encounter.
+	 *
+	 * 在inlookup_hashtable中查找，如果查找到了，说明别人已经创建了这个dentry
+	 * 但没有插入到dentry_hashtable中，仅仅插入到了inlookup_hashtable中。
 	 */
 	hlist_bl_for_each_entry(dentry, node, b, d_u.d_in_lookup_hash) {
 		if (dentry->d_name.hash != hash)
@@ -2673,6 +2676,10 @@ retry:
 		 * wait for them to finish
 		 */
 		spin_lock(&dentry->d_lock);
+		/*
+		 * 在这里等待dentry从inlookup_hashtable中摘下来。上面的自旋锁在真正
+		 * schedule前会释放掉的，不存在自旋锁中睡眠的情况。
+		 */
 		d_wait_lookup(dentry);
 		/*
 		 * it's not in-lookup anymore; in principle we should repeat

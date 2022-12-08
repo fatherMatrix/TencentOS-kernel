@@ -2386,6 +2386,9 @@ long _do_fork(struct kernel_clone_args *args)
 			trace = 0;
 	}
 
+	/*
+	 * 拷贝进程，产生新的task_struct
+	 */
 	p = copy_process(NULL, trace, NUMA_NO_NODE, args);
 	add_latent_entropy();
 

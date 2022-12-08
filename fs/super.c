@@ -528,6 +528,12 @@ struct super_block *sget_fc(struct fs_context *fc,
 
 retry:
 	spin_lock(&sb_lock);
+	/* 
+	 * 查看当前文件系统类型file_system_type->fs_supers链表上是否已经有了目标
+	 * 超级块。
+	 * - 如果已经存在的话，则可以共享
+	 * - 如果不存在，则调用alloc_super分配一个新的
+	 */
 	if (test) {
 		hlist_for_each_entry(old, &fc->fs_type->fs_supers, s_instances) {
 			if (test(old, fc))
@@ -632,6 +638,14 @@ retry:
 			}
 			if (!grab_super(old))
 				goto retry;
+			/*
+			 * 这里的s要么为NULL，要么就是在retry之前，在下面经过
+			 * alloc_super分配的。
+			 *
+			 * 走到这里，说明在retry之前，其他的内核路径向type->fs_super
+			 * 中插入了这个super_block。所以此时要将我们分配的super_block
+			 * 释放掉，使用别人分配好的
+			 */
 			destroy_unused_super(s);
 
 			/*
@@ -645,22 +659,27 @@ retry:
 	 * 如果上面没有找到已经存在的super_block，则需要分配一个
 	 */
 	if (!s) {
+		/*
+		 * 分配super_block涉及内存分配和睡眠，这里必须把自旋锁sb_lock释
+		 * 放掉
+		 */
 		spin_unlock(&sb_lock);
 		/*
 		 * super_block中的两个引用计数都被置为了1
+		 *
+		 * alloc_super中是可以睡眠的
 		 */
 		s = alloc_super(type, (flags & ~SB_SUBMOUNT), user_ns);
 		if (!s)
 			return ERR_PTR(-ENOMEM);
 		/*
-		 * goto retry之后，上面的哈希表里其实还是找不到super_block的，
-		 * 但不会再次进入这个if了，因为此时s已经不为NULL了
+		 * goto retry之后，重新获取自旋锁sb_lock。
 		 */
 		goto retry;
 	}
 
 	/* 
-	 * 将超级块和对应的block_device结构体关联起来
+	 * 将超级块和对应的block_device结构体关联起来，并获取bdi的引用计数
 	 *
 	 * 在mount_bdev中，这个函数是set_bdev_super
 	 */
@@ -1621,7 +1640,8 @@ int vfs_get_tree(struct fs_context *fc)
 	/* Get the mountable root in fc->root, with a ref on the root and a ref
 	 * on the superblock.
 	 *
-	 * 对于传统的文件系统如ext4，这个get_tree指针指向legacy_get_tree函数
+	 * 对于传统的文件系统如ext4，这个get_tree指针指向legacy_get_tree函数。
+	 * 对于selinuxfs和bibafs，这个get_tree指针指向get_tree_single函数。
 	 */
 	error = fc->ops->get_tree(fc);
 	if (error < 0)

@@ -842,6 +842,11 @@ struct task_struct {
 	/* PID/PID hash table linkage. */
 	/* 存储除根命名空间外的其他命名空间的pid */
 	struct pid			*thread_pid;	
+	/*
+	 * 所有共享同一ID的task_struct实例都按进程存储在一个散列表中，这里是用
+	 * 于将task_struct加入散列表的节点。
+	 * 链表头是struct pid->task[PIDTYPE_MAX]。
+	 */
 	struct hlist_node		pid_links[PIDTYPE_MAX];
 	struct list_head		thread_group;
 	struct list_head		thread_node;

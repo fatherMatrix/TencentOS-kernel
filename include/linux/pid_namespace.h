@@ -23,12 +23,20 @@ enum { /* definitions for pid_namespace's hide_pid field */
 
 struct pid_namespace {
 	struct kref kref;
+	/*
+	 * 用于本pid_namespace下pid到task_struct的映射
+	 * 映射关系是使用基数树来完成的，pid是key，task_struct*是value。
+	 * 这里保存的是基数树的树根
+	 */
 	struct idr idr;
 	struct rcu_head rcu;
 	unsigned int pid_allocated;
+	/* 作用类似于全局的init进程，用于对孤儿进程调用wait4 */
 	struct task_struct *child_reaper;
 	struct kmem_cache *pid_cachep;
+	/* 命名空间级别，初始命名空间级别为0 */
 	unsigned int level;
+	/* 指向父命名空间 */
 	struct pid_namespace *parent;
 #ifdef CONFIG_PROC_FS
 	struct vfsmount *proc_mnt;

@@ -347,6 +347,11 @@ static void __init ordered_lsm_init(void)
 						    blob_sizes.lbs_inode, 0,
 						    SLAB_PANIC, NULL);
 
+	/*
+	 * 主启动CPU对应的swapper task_struct->cred->security在这里分配。
+	 * 但是分配内存后并没有填充内容，是需要在下面的initialize_lsm中
+	 * 初始化吗？
+	 */
 	lsm_early_cred((struct cred *) current->cred);
 	lsm_early_task(current);
 	for (lsm = ordered_lsms; *lsm; lsm++)

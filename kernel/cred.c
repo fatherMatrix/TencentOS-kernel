@@ -255,6 +255,9 @@ struct cred *prepare_creds(void)
 
 	validate_process_creds();
 
+	/*
+	 * 分配cred的内存
+	 */
 	new = kmem_cache_alloc(cred_jar, GFP_KERNEL);
 	if (!new)
 		return NULL;
@@ -282,6 +285,9 @@ struct cred *prepare_creds(void)
 	new->security = NULL;
 #endif
 
+	/* 
+	 * 分配cred->security的内存，并调用prepare_creds钩子进行初始化
+	 */
 	if (security_prepare_creds(new, old, GFP_KERNEL_ACCOUNT) < 0)
 		goto error;
 	validate_creds(new);
@@ -344,6 +350,9 @@ int copy_creds(struct task_struct *p, unsigned long clone_flags)
 #endif
 		clone_flags & CLONE_THREAD
 	    ) {
+		/*
+		 * 同一个进程内的线程是共享cred的
+		 */
 		p->real_cred = get_cred(p->cred);
 		get_cred(p->cred);
 		alter_cred_subscribers(p->cred, 2);

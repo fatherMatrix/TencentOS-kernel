@@ -1891,6 +1891,8 @@ again:
 		 * - 猜测：该函数内使用了bh cache和inode cache，这两个cache会保
 		 *   整真正的读盘操作只会由一个内核路径执行，其他的同目标的内核
 		 *   路径会在这两个cache中睡眠等待
+		 * 好像只有真正创建了dentry的内核路径才会走到这里，所以这里应该
+		 * 是只会执行一次。
 		 */
 		old = inode->i_op->lookup(inode, dentry, flags);
 		/*
@@ -1913,6 +1915,9 @@ again:
 			dentry = old;
 		}
 	}
+	/*
+	 * 这里应该可以用来插入inode_attach_security?
+	 */
 	return dentry;
 }
 

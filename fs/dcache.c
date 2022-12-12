@@ -2946,6 +2946,10 @@ static void __d_move(struct dentry *dentry, struct dentry *target,
 	spin_lock_nested(&dentry->d_lock, 2);
 	spin_lock_nested(&target->d_lock, 3);
 
+	/*
+	 * 这里__d_lookup_done()之后，其他在检索此文件对应dentry的内核路径
+	 * 就可以拿到dentry了呀。这合适吗？
+	 */
 	if (unlikely(d_in_lookup(target))) {
 		dir = target->d_parent->d_inode;
 		n = start_dir_add(dir);
@@ -3133,6 +3137,9 @@ struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry)
 			spin_unlock(&inode->i_lock);
 			write_seqlock(&rename_lock);
 			if (unlikely(d_ancestor(new, dentry))) {
+				/*
+				 * linux不允许文件系统中出现循环
+				 */
 				write_sequnlock(&rename_lock);
 				dput(new);
 				new = ERR_PTR(-ELOOP);
@@ -3143,6 +3150,10 @@ struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry)
 					inode->i_sb->s_type->name,
 					inode->i_sb->s_id);
 			} else if (!IS_ROOT(new)) {
+				/*
+				 * 如果找到的不是root
+				 * 此处的root指的是本文件系统内，即vfsmount->mnt_root
+				 */
 				struct dentry *old_parent = dget(new->d_parent);
 				int err = __d_unalias(inode, dentry, new);
 				write_sequnlock(&rename_lock);

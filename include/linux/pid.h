@@ -50,12 +50,17 @@ enum pid_type
  * seen in particular namespace. Later the struct pid is found with
  * find_pid_ns() using the int nr and struct pid_namespace *ns.
  */
-
+/*
+ * 所有的upid都保存在一个散列表中
+ */
 struct upid {
 	int nr;				/* 某命名空间下分配的pid */
 	struct pid_namespace *ns;	/* 对应的命名空间 */
 };
 
+/*
+ * 被task_struct中的pid字段指向
+ */
 struct pid
 {
 	refcount_t count;		/* 引用计数 */
@@ -65,7 +70,9 @@ struct pid
 	/* wait queue for pidfd notifications */
 	wait_queue_head_t wait_pidfd;
 	struct rcu_head rcu;
-	struct upid numbers[1];		/* 长度为level + 1，对应不同命名空间 */
+	struct upid numbers[1];		/* 长度为level + 1，
+					 * 对应不同命名空间的upid结构体 
+					 */
 };
 
 extern struct pid init_struct_pid;

@@ -347,8 +347,16 @@ static int suspend_prepare(suspend_state_t state)
 	if (!sleep_state_supported(state))
 		return -EPERM;
 
+	/*
+	 * 调用pm_prepare_console函数切换控制台，重新分配一个suspend模式下控制
+	 * 台，然后重定向kmsg
+	 */
 	pm_prepare_console();
 
+	/*
+	 * 通过调用pm通知链，发送PM_SUSPEND_PREPARE消息。
+	 * 收到消息的对象是那些调用了register_pm_notifier的设备
+	 */
 	error = __pm_notifier_call_chain(PM_SUSPEND_PREPARE, -1, &nr_calls);
 	if (error) {
 		nr_calls--;
@@ -356,14 +364,27 @@ static int suspend_prepare(suspend_state_t state)
 	}
 
 	trace_suspend_resume(TPS("freeze_processes"), 0, true);
+	/*
+	 * 冻结进程，包括用户态和内核态
+	 */
 	error = suspend_freeze_processes();
 	trace_suspend_resume(TPS("freeze_processes"), 0, false);
+
+	/*
+	 * 如果没有错误，这里就退出了
+	 */
 	if (!error)
 		return 0;
 
+	/*
+	 * 如果有错误，增加错误引用计数
+	 */
 	suspend_stats.failed_freeze++;
 	dpm_save_failed_step(SUSPEND_FREEZE);
  Finish:
+	/*
+	 * 恢复工作
+	 */
 	__pm_notifier_call_chain(PM_POST_SUSPEND, nr_calls, NULL);
 	pm_restore_console();
 	return error;
@@ -486,12 +507,21 @@ int suspend_devices_and_enter(suspend_state_t state)
 	if (state == PM_SUSPEND_TO_IDLE)
 		pm_set_suspend_no_platform();
 
+	/*
+	 * 调用suspend_ops->begin
+	 */
 	error = platform_suspend_begin(state);
 	if (error)
 		goto Close;
 
+	/*
+	 * 挂起控制台
+	 */
 	suspend_console();
 	suspend_test_start();
+	/*
+	 * 调用prepare和suspend回调
+	 */
 	error = dpm_suspend_start(PMSG_SUSPEND);
 	if (error) {
 		pr_err("Some devices failed to suspend, or early wake event detected\n");
@@ -502,6 +532,9 @@ int suspend_devices_and_enter(suspend_state_t state)
 		goto Recover_platform;
 
 	do {
+		/*
+		 * 使系统进入到suspend中
+		 */
 		error = suspend_enter(state, &wakeup);
 	} while (!error && !wakeup && platform_suspend_again(state));
 
@@ -556,9 +589,16 @@ static int enter_state(suspend_state_t state)
 			return -EAGAIN;
 		}
 #endif
+		/*
+		 * 通过vaild_state函数用来判断该平台是否支持该状态睡眠
+		 */
 	} else if (!valid_state(state)) {
 		return -EINVAL;
 	}
+
+	/*
+	 * 该锁用来防止在休眠的时候再次休眠
+	 */
 	if (!mutex_trylock(&system_transition_mutex))
 		return -EBUSY;
 
@@ -574,6 +614,10 @@ static int enter_state(suspend_state_t state)
 
 	pm_pr_dbg("Preparing system for sleep (%s)\n", mem_sleep_labels[state]);
 	pm_suspend_clear_flags();
+	/*
+	 * 调用suspend_prepare做进一步suspend前期准备工作，准备控制台，冻结内核
+	 * 线程等
+	 */
 	error = suspend_prepare(state);
 	if (error)
 		goto Unlock;
@@ -584,12 +628,18 @@ static int enter_state(suspend_state_t state)
 	trace_suspend_resume(TPS("suspend_enter"), state, false);
 	pm_pr_dbg("Suspending system (%s)\n", mem_sleep_labels[state]);
 	pm_restrict_gfp_mask();
+	/*
+	 * 调用suspend_devices_and_enter做设备以及系统相关的susupend操作
+	 */
 	error = suspend_devices_and_enter(state);
 	pm_restore_gfp_mask();
 
  Finish:
 	events_check_enabled = false;
 	pm_pr_dbg("Finishing wakeup.\n");
+	/* 
+	 * 调用suspend_finish做最后的恢复工作
+	 */
 	suspend_finish();
  Unlock:
 	mutex_unlock(&system_transition_mutex);

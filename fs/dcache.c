@@ -1783,17 +1783,23 @@ struct dentry *d_alloc(struct dentry * parent, const struct qstr *name)
 	struct dentry *dentry = __d_alloc(parent->d_sb, name);
 	if (!dentry)
 		return NULL;
+	/*
+	 * 锁住父节点的自旋锁
+	 */
 	spin_lock(&parent->d_lock);
 	/*
 	 * don't need child lock because it is not subject
 	 * to concurrency here
 	 */
 	__dget_dlock(parent);
-	dentry->d_parent = parent;
 	/*
 	 * 构建与parent dentry的联系
 	 */
+	dentry->d_parent = parent;
 	list_add(&dentry->d_child, &parent->d_subdirs);
+	/*
+	 * 放开父节点的自旋锁
+	 */
 	spin_unlock(&parent->d_lock);
 
 	return dentry;
@@ -2343,6 +2349,9 @@ struct dentry *d_lookup(const struct dentry *parent, const struct qstr *name)
 
 	do {
 		seq = read_seqbegin(&rename_lock);
+		/*
+		 * 在dentry_hashtable中查找
+		 */
 		dentry = __d_lookup(parent, name);
 		if (dentry)
 			break;
@@ -2603,16 +2612,26 @@ struct dentry *d_alloc_parallel(struct dentry *parent,
 retry:
 	rcu_read_lock();
 	seq = smp_load_acquire(&parent->d_inode->i_dir_seq);
-	/* 这里为什么会有一个全局锁？*/
+	/*
+	 * rename_lock
+	 */
 	r_seq = read_seqbegin(&rename_lock);
 	/*
 	 * 在dentry_hashtable中再查找一次（parent，name）
 	 *
 	 * 如果查找到了，说明另外有人已经创建了这个dentry，将上边新分配的dentry
-	 * 释放掉，然后将别人创建的dentry返回
+	 * 释放掉，然后将别人创建的dentry返回。返回的dentry及其inode已经成熟
+	 *
+	 * 新创建的dentry放入到dentry_hashtable的动作是在d_add中做的，在将
+	 * dentry放入dentry_hashtable之前，dentry本身已经可用，这包括：
+	 * - 将dentry和已成熟的inode关联
+	 * - 将dentry从inlookup_hashtable中取下
 	 */ 
 	dentry = __d_lookup_rcu(parent, name, &d_seq);
 	if (unlikely(dentry)) {
+		/*
+		 * 如果在dentry中找到了
+		 */
 		if (!lockref_get_not_dead(&dentry->d_lockref)) {
 			rcu_read_unlock();
 			goto retry;
@@ -2627,16 +2646,26 @@ retry:
 		dput(new);
 		return dentry;
 	}
+	/*
+	 * 期间有可能进行rename，要排除掉这种情况，重新在
+	 * dentry_hashtable中查找
+	 */	
 	if (unlikely(read_seqretry(&rename_lock, r_seq))) {
 		rcu_read_unlock();
 		goto retry;
 	}
 
+	/*
+	 * 这里检查parent->d_inode->i_dir_seq
+	 */
 	if (unlikely(seq & 1)) {
 		rcu_read_unlock();
 		goto retry;
 	}
 
+	/*
+	 * 锁住inlookup_hashtable中对应哈希桶的锁，此时哈希桶不会再改变
+	 */
 	hlist_bl_lock(b);
 	if (unlikely(READ_ONCE(parent->d_inode->i_dir_seq) != seq)) {
 		hlist_bl_unlock(b);
@@ -2650,8 +2679,12 @@ retry:
 	 * we unlock the chain.  All fields are stable in everything
 	 * we encounter.
 	 *
-	 * 在inlookup_hashtable中查找，如果查找到了，说明别人已经创建了这个dentry
-	 * 但没有插入到dentry_hashtable中，仅仅插入到了inlookup_hashtable中。
+	 * 在inlookup_hashtable中查找，如果查找到了，说明别人已经创建了这个
+	 * dentry但没有插入到dentry_hashtable中，仅仅插入到了
+	 * inlookup_hashtable中。
+	 *
+	 * 存在于inlookup_hashtable但不存在于dentry_hashtable，说明这个dentry已
+	 * 经被创建，但是还未装填完成，对应的inode并未成熟。
 	 */
 	hlist_bl_for_each_entry(dentry, node, b, d_u.d_in_lookup_hash) {
 		if (dentry->d_name.hash != hash)
@@ -2662,11 +2695,20 @@ retry:
 			continue;
 		hlist_bl_unlock(b);
 		/* now we can try to grab a reference */
+		/* 
+		 * 增加引用计数
+		 *
+		 * 先释放哈希桶的锁，再增加引用计数，应该是为了两个锁之间不发生
+		 * 死锁
+		 */
 		if (!lockref_get_not_dead(&dentry->d_lockref)) {
 			rcu_read_unlock();
 			goto retry;
 		}
 
+		/*
+		 * 这里出了rcu临界区，rcu_read_lock在最上面
+		 */
 		rcu_read_unlock();
 		/*
 		 * somebody is likely to be still doing lookup for it;
@@ -2674,10 +2716,19 @@ retry:
 		 */
 		spin_lock(&dentry->d_lock);
 		/*
-		 * 在这里等待dentry从inlookup_hashtable中摘下来。上面的自旋锁在真正
-		 * schedule前会释放掉的，不存在自旋锁中睡眠的情况。
+		 * 在这里等待dentry从inlookup_hashtable中摘下来。上面的自旋锁在
+		 * 真正schedule前会释放掉，在sechdule回来后会重新获取，不存在自
+		 * 旋锁中睡眠的情况。
 		 */
 		d_wait_lookup(dentry);
+		/*
+		 * 从d_wait_lookup中出来时重新获取了dentry->d_lock自旋锁
+		 *
+		 * 这也意味着，如果其他内核路径在执行d_lookup_done前获取了
+		 * dentry->d_lock自旋锁，那么这里上面的d_wait_lookup也是不能立
+		 * 即返回的。类似：d_splice_alias -> d_move
+		 */ 
+
 		/*
 		 * it's not in-lookup anymore; in principle we should repeat
 		 * everything from dcache lookup, but it's likely to be what
@@ -2688,6 +2739,14 @@ retry:
 			goto mismatch;
 		if (unlikely(dentry->d_parent != parent))
 			goto mismatch;
+		/*
+		 * 如果dentry没有加入dentry_hashtable则重试
+		 * - dentry在被从inlookup_hashtable中摘下之前，就已经放入了
+		 *   dentry_hashtable中
+		 *
+		 * waoh，那岂不是说明，从d_alloc_parallel返回的其他内核路径创建
+		 * 的dentry都是已经存在于dentry_hashtable中的？
+		 */
 		if (unlikely(d_unhashed(dentry)))
 			goto mismatch;
 		if (unlikely(!d_same_name(dentry, parent, name)))
@@ -2729,14 +2788,23 @@ void __d_lookup_done(struct dentry *dentry)
 {
 	struct hlist_bl_head *b = in_lookup_hash(dentry->d_parent,
 						 dentry->d_name.hash);
-	hlist_bl_lock(b);
-	dentry->d_flags &= ~DCACHE_PAR_LOOKUP;
 	/*
-	 * 将dentry从inlookup_hashtable中摘下来
+	 * 对inlookup_hashtable中目标桶加自旋锁
 	 */
+	hlist_bl_lock(b);
+	/*
+	 * 将dentry的LOOKUP标志清除，并将其从inlookup_hashtable中摘下来
+	 */
+	dentry->d_flags &= ~DCACHE_PAR_LOOKUP;
 	__hlist_bl_del(&dentry->d_u.d_in_lookup_hash);
+	/*
+	 * 唤醒所有等待dentry从inlookup_hash中摘下来的进程
+	 */
 	wake_up_all(dentry->d_wait);
 	dentry->d_wait = NULL;
+	/*
+	 * 对inlookup_hashtable中目标桶放自旋锁
+	 */
 	hlist_bl_unlock(b);
 	INIT_HLIST_NODE(&dentry->d_u.d_alias);
 	INIT_LIST_HEAD(&dentry->d_lru);
@@ -2761,9 +2829,21 @@ static inline void __d_add(struct dentry *dentry, struct inode *inode)
 	}
 	if (inode) {
 		unsigned add_flags = d_flags_for_inode(inode);
+		/*
+		 * 将dentry->d_u.d_alias挂到inode->i_dentry链表上
+		 */
 		hlist_add_head(&dentry->d_u.d_alias, &inode->i_dentry);
+		/* 
+		 * 开始写顺序锁
+		 */
 		raw_write_seqcount_begin(&dentry->d_seq);
+		/*
+		 * 内部会将dentry->inode指针指向inode
+		 */ 
 		__d_set_inode_and_type(dentry, inode, add_flags);
+		/*
+		 * 关闭写顺序锁
+		 */
 		raw_write_seqcount_end(&dentry->d_seq);
 		fsnotify_update_flags(dentry);
 	}
@@ -3129,11 +3209,17 @@ struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry)
 		goto out;
 
 	security_d_instantiate(dentry, inode);
+	/*
+	 * 加自旋锁
+	 */
 	spin_lock(&inode->i_lock);
 	if (S_ISDIR(inode->i_mode)) {
 		struct dentry *new = __d_find_any_alias(inode);
 		if (unlikely(new)) {
 			/* The reference to new ensures it remains an alias */
+			/*
+			 * 放自旋锁
+			 */
 			spin_unlock(&inode->i_lock);
 			write_seqlock(&rename_lock);
 			if (unlikely(d_ancestor(new, dentry))) {
@@ -3163,6 +3249,10 @@ struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry)
 				}
 				dput(old_parent);
 			} else {
+				/*
+				 * 如果此处找到的是root
+				 * 此处root含义同上
+				 */
 				__d_move(new, dentry, false);
 				write_sequnlock(&rename_lock);
 			}
@@ -3171,6 +3261,9 @@ struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry)
 		}
 	}
 out:
+	/*
+	 * 内部最后会放inode->i_lock自旋锁
+	 */
 	__d_add(dentry, inode);
 	return NULL;
 }

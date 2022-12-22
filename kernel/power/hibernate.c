@@ -391,9 +391,6 @@ int hibernation_snapshot(int platform_mode)
 	if (error || hibernation_test(TEST_DEVICES))
 		platform_recover(platform_mode);
 	else
-		/*
-		 * 正常的hibernate进入create_image后是不再返回的，直接关机了
-		 */
 		error = create_image(platform_mode);
 
 	/*
@@ -899,6 +896,10 @@ static int software_resume(void)
 		goto Close_Finish;
 	}
 
+	/*
+	 * 上面将新启动的内核休眠
+	 * 在这里恢复image
+	 */
 	error = load_image_and_restore();
 	thaw_processes();
  Finish:

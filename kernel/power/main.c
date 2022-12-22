@@ -602,6 +602,9 @@ static ssize_t state_store(struct kobject *kobj, struct kobj_attribute *attr,
 	suspend_state_t state;
 	int error;
 
+	/*
+	 * 锁住autosleep_lock
+	 */
 	error = pm_autosleep_lock();
 	if (error)
 		return error;

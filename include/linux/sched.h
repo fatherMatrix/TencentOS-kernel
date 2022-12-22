@@ -454,6 +454,9 @@ struct sched_entity {
 	/* For load-balancing: */
 	struct load_weight		load;
 	unsigned long			runnable_weight;
+	/*
+	 * 标准的树节点，用于在红黑树上排序
+	 */
 	struct rb_node			run_node;
 	struct list_head		group_node;
 	unsigned int			on_rq;

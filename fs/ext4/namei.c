@@ -1689,6 +1689,13 @@ static struct dentry *ext4_lookup(struct inode *dir, struct dentry *dentry, unsi
 	bh = ext4_lookup_entry(dir, dentry, &de);
 	if (IS_ERR(bh))
 		return ERR_CAST(bh);
+	/*
+	 * 如果bh不为NULL，则说明磁盘上存在此文件，既而读出对应inode，填充
+	 * vfs inode。
+	 * 如果bh为NULL，则说明磁盘上不存在此文件，则将inode置为NULL，跳过下面
+	 * 的if分支，直接以NULL inode和dentry连接。此时本函数返回的dentry是负状
+	 * 态的。
+	 */
 	inode = NULL;
 	if (bh) {
 		/* 找到对应的索引节点号 
@@ -2641,6 +2648,9 @@ retry:
 		inode->i_op = &ext4_file_inode_operations;
 		inode->i_fop = &ext4_file_operations;
 		ext4_set_aops(inode);
+		/*
+		 * 里面会调用d_instantiate_new
+		 */
 		err = ext4_add_nondir(handle, dentry, inode);
 		if (!err && IS_DIRSYNC(dir))
 			ext4_handle_sync(handle);

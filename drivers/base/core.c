@@ -2190,6 +2190,9 @@ int device_add(struct device *dev)
 	error = dpm_sysfs_add(dev);
 	if (error)
 		goto DPMError;
+	/*
+	 * 将设备加入到dpm_list链表，用于电源管理
+	 */
 	device_pm_add(dev);
 
 	if (MAJOR(dev->devt)) {

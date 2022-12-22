@@ -1872,12 +1872,19 @@ int dpm_suspend(pm_message_t state)
 	mutex_lock(&dpm_list_mtx);
 	pm_transition = state;
 	async_error = 0;
+	/*
+	 * 对dpm_prepared_list中的元素进行操作，该链表中的元素是prepare阶段添加
+	 * 的
+	 */
 	while (!list_empty(&dpm_prepared_list)) {
 		struct device *dev = to_device(dpm_prepared_list.prev);
 
 		get_device(dev);
 		mutex_unlock(&dpm_list_mtx);
 
+		/*
+		 * 调用suspend
+		 */
 		error = device_suspend(dev);
 
 		mutex_lock(&dpm_list_mtx);
@@ -1887,6 +1894,10 @@ int dpm_suspend(pm_message_t state)
 			put_device(dev);
 			break;
 		}
+		/*
+		 * 将该元素从dpm_prepared_list上拿下来，放到dpm_suspend_list链
+		 * 表上
+		 */
 		if (!list_empty(&dev->power.entry))
 			list_move(&dev->power.entry, &dpm_suspended_list);
 		put_device(dev);
@@ -2008,6 +2019,9 @@ int dpm_prepare(pm_message_t state)
 	device_block_probing();
 
 	mutex_lock(&dpm_list_mtx);
+	/*
+	 * dpm_list链表上的元素是设备注册时，device_add -> device_pm_add添加的
+	 */
 	while (!list_empty(&dpm_list)) {
 		struct device *dev = to_device(dpm_list.next);
 
@@ -2015,6 +2029,9 @@ int dpm_prepare(pm_message_t state)
 		mutex_unlock(&dpm_list_mtx);
 
 		trace_device_pm_callback_start(dev, "", state.event);
+		/*
+		 * 调用prepare
+		 */
 		error = device_prepare(dev, state);
 		trace_device_pm_callback_end(dev, error);
 
@@ -2031,6 +2048,9 @@ int dpm_prepare(pm_message_t state)
 			break;
 		}
 		dev->power.is_prepared = true;
+		/*
+		 * 将该元素从dpm_list上取下来，放入dpm_prepared_list上
+		 */
 		if (!list_empty(&dev->power.entry))
 			list_move_tail(&dev->power.entry, &dpm_prepared_list);
 		put_device(dev);
@@ -2052,11 +2072,17 @@ int dpm_suspend_start(pm_message_t state)
 	ktime_t starttime = ktime_get();
 	int error;
 
+	/*
+	 * 调用prepare
+	 */
 	error = dpm_prepare(state);
 	if (error) {
 		suspend_stats.failed_prepare++;
 		dpm_save_failed_step(SUSPEND_PREPARE);
 	} else
+		/*
+		 * 调用suspend
+		 */ 
 		error = dpm_suspend(state);
 	dpm_show_time(starttime, state, error, "start");
 	return error;

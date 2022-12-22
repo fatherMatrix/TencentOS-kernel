@@ -670,6 +670,15 @@ struct fsnotify_mark_connector;
  * the RCU path lookup and 'stat' data) fields at the beginning
  * of the 'struct inode'
  */
+
+/*
+ * inode有三种状态：
+ * - inode存在于内存中，未关联到任何文件，也不处于活动使用状态
+ * - inode存在于内存中，正在由一个或多个进程使用，通常表示一个文件。且从上一次
+ *   与存储介质同步以来，该inode没有改变过
+ * - inode处于活动状态，其数据内容已经改变，与存储介质上的内容不同。这种状态的
+ *   inode被称为脏的
+ */
 struct inode {
 
 	umode_t			i_mode;

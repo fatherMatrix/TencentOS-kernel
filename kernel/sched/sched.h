@@ -910,13 +910,22 @@ struct rq {
 	 */
 	unsigned long		nr_uninterruptible;
 
+	/*
+	 * 指向当前运行进程的task_struct实例
+	 */
 	struct task_struct	*curr;
+	/*
+	 * 指向idle进程的task_struct实例
+	 */
 	struct task_struct	*idle;
 	struct task_struct	*stop;
 	unsigned long		next_balance;
 	struct mm_struct	*prev_mm;
 
 	unsigned int		clock_update_flags;
+	/*
+	 * 用于实现就绪队列自身的时钟
+	 */
 	u64			clock;
 	/* Ensure that all clocks are in the same cache line */
 	u64			clock_task ____cacheline_aligned;

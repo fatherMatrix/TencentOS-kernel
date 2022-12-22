@@ -1720,6 +1720,12 @@ static struct dentry *__lookup_hash(const struct qstr *name,
 	return dentry;
 }
 
+/*
+ * 返回值：
+ * ret >  0	表示成功找到
+ * ret == 0	表示内存中没有
+ * ret <  0	表示错误
+ */
 static int lookup_fast(struct nameidata *nd,
 		       struct path *path, struct inode **inode,
 		       unsigned *seqp)
@@ -1855,7 +1861,9 @@ again:
 	 * - 如果返回的dentry是由本d_alloc_parallel创建的，则中将新创建的dentry
 	 *   放入了inlookup_hashtable中
 	 * - 如果返回的dentry是由其他d_alloc_parallel创建的，则返回前等待dentry
-	 *   在inlookup_hashtable中摘除
+	 *   在inlookup_hashtable中摘除。值得注意的是，dentry在从
+	 *   inlookup_hashtable中摘除之前，会插入到dentry_hashtable中。也就是如
+	 *   此返回的dentry，已经成熟
 	 */
 	dentry = d_alloc_parallel(dir, name, &wq);
 	if (IS_ERR(dentry))
@@ -1863,6 +1871,8 @@ again:
 	if (unlikely(!d_in_lookup(dentry))) {
 		/*
 		 * 走到这里，说明dentry不是由本d_alloc_parallel创建的
+		 * - 因为如果是本d_alloc_parallel创建的，那么此时dentry的状态肯
+		 *   定是in_lookup的
 		 */
 		if (!(flags & LOOKUP_NO_REVAL)) {
 			int error = d_revalidate(dentry, flags);
@@ -1887,12 +1897,16 @@ again:
 		 * ext4_lookup中通过调用d_splice_alias -> __d_add将dentry放到了
 		 * dentry_hashtable中
 		 *
-		 * 会有很多内核路径同时走到这里，这个函数是可以并发的吗？
+		 * 会有多个内核路径同时走到这里，这个函数是可以并发的吗？
 		 * - 猜测：该函数内使用了bh cache和inode cache，这两个cache会保
 		 *   整真正的读盘操作只会由一个内核路径执行，其他的同目标的内核
 		 *   路径会在这两个cache中睡眠等待
-		 * 好像只有真正创建了dentry的内核路径才会走到这里，所以这里应该
-		 * 是只会执行一次。
+		 * 更正：
+		 * - 好像只会有一个内核路径进入到这里，就是真正创建了dentry
+		 *   的内核路径。
+		 * - 如果dentry是由其他内核路径创建的，那么在退出
+		 *   d_alloc_parallel之前，该dentry就已经加入了dentry_hashtable
+		 *   且离开了inlookup_hashtable。此时应该进入上面的if分支。
 		 */
 		old = inode->i_op->lookup(inode, dentry, flags);
 		/*
@@ -1910,14 +1924,24 @@ again:
 			/*
 			 * 这里面会将dentry从其parent的children list中摘除，其
 			 * 对称动作在上面的d_alloc_parallel中
+			 *
+			 * 如果上面的几个d_lookup_done使得最上面的
+			 * d_alloc_parallel返回了本内核路径创建的dentry，但此
+			 * dentry又在此处dput，会如何？
+			 * - 不会出现这种情况：
+			 *   o 对于文件，上面返回的old之可能是NULL，根本不会进
+			 *     入当前的if分支
+			 *   o 对于目录，如果old不会NULL，那么本内核路径创建的
+			 *     dentry也根本不会插入到dentry_hashtable中，所以也
+			 *     不会被其他内核路径的d_alloc_parallel返回
 			 */
 			dput(dentry);
 			dentry = old;
 		}
+		/*
+		 * 这里应该可以用来插入inode_attach_security?
+		 */
 	}
-	/*
-	 * 这里应该可以用来插入inode_attach_security?
-	 */
 	return dentry;
 }
 
@@ -2129,6 +2153,9 @@ static int walk_component(struct nameidata *nd, int flags)
 		if (unlikely(err < 0))
 			return err;
 
+		/*
+		 * 如果上面返回的dentry是负状态的，则返回错误
+		 */
 		if (unlikely(d_is_negative(path.dentry))) {
 			path_to_nameidata(&path, nd);
 			return -ENOENT;
@@ -3643,15 +3670,24 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 	for (;;) {
 		if (!dentry) {
 			/*
-			 * 内部将分配好的dentry放入了inlookup_hashtable
+			 * 如果dentry_hashtable中没有找到目标dentry：
 			 *
+			 * 内部将分配好的dentry放入了inlookup_hashtable
 			 * 在后面的d_lookup_done中将其从inlookup_hashtable中取
 			 * 下来
 			 */
 			dentry = d_alloc_parallel(dir, &nd->last, &wq);
+			/*
+			 * d_alloc_parallel返回时，dentry已经存在于
+			 * dentry_hashtable中
+			 */
 			if (IS_ERR(dentry))
 				return PTR_ERR(dentry);
 		}
+
+		/*
+		 * 只有真正分配了此dentry的内核路径d_in_lookup判断才为真。
+		 */
 		if (d_in_lookup(dentry))
 			break;
 
@@ -3667,7 +3703,10 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 	if (dentry->d_inode) {
 		/* Cached positive dentry: will open in f_op->open 
 		 *
-		 * 说明已经有对应的inode了
+		 * 说明已经有对应的inode了，发生在返回的dentry为非本内核路径创
+		 * 建的情况中。
+		 * 因为如果返回的是其他内核路径创建的dentry，那么这个dentry在返
+		 * 回之前，dentry和对应inode已经成熟。
 		 */
 		goto out_no_open;
 	}
@@ -3719,6 +3758,8 @@ no_open:
 	if (d_in_lookup(dentry)) {
 		/*
 		 * 文件系统的查找inode操作
+		 *
+		 * 返回的dentry有可能是负状态的，即dentry不对应inode
 		 */
 		struct dentry *res = dir_inode->i_op->lookup(dir_inode, dentry,
 							     nd->flags);
@@ -3734,6 +3775,9 @@ no_open:
 			dput(dentry);
 			dentry = res;
 		}
+		/*
+		 * 走到这里的dentry有可能是负状态的
+		 */
 	}
 
 	/* Negative dentry, just create the file */
@@ -3747,6 +3791,8 @@ no_open:
 		/*
 		 * 文件系统的创建inode操作
 		 * 创建新的inode
+		 *
+		 * 其中会调用d_instantiate_new将dentry和inode联系起来
 		 */
 		error = dir_inode->i_op->create(dir_inode, dentry, mode,
 						open_flag & O_EXCL);
@@ -3798,7 +3844,7 @@ static int do_last(struct nameidata *nd,
 
 	if (!(open_flag & O_CREAT)) {
 		/*
-		 * 正常的open过程，即文件已存在，不需要CREAT
+		 * 无O_CREAT标志，正常的open过程
 		 */
 		if (nd->last.name[nd->last.len])
 			nd->flags |= LOOKUP_FOLLOW | LOOKUP_DIRECTORY;
@@ -3823,6 +3869,9 @@ static int do_last(struct nameidata *nd,
 		BUG_ON(nd->inode != dir->d_inode);
 		BUG_ON(nd->flags & LOOKUP_RCU);
 	} else {
+		/*
+		 * 有O_CREAT标志，需要创建目标文件
+		 */
 		/* create side of things */
 		/*
 		 * This will *only* deal with leaving RCU mode - LOOKUP_JUMPED

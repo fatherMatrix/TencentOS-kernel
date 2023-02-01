@@ -120,6 +120,9 @@ struct dentry {
 
 	/* Ref lookup also touches following */
 	struct lockref d_lockref;	/* per-dentry lock and refcount */
+	/* 
+	 * dentry的操作方法 
+	 */
 	const struct dentry_operations *d_op;
 	struct super_block *d_sb;	/* The root of the dentry tree */
 	unsigned long d_time;		/* used by d_revalidate */
@@ -136,11 +139,13 @@ struct dentry {
 		wait_queue_head_t *d_wait;	/* in-lookup ones only */
 	};
 	/*
-	 * 第三个链表
+	 * 将该dentry作为链表元素链入父亲dentry的d_subdirs头上
 	 */ 
 	struct list_head d_child;	/* child of parent list */
 	/*
-	 * 第四个链表
+	 * 第三个链表，表示该dentry的孩子dentry。
+	 * 但要注意，这里是已经拉取到内存中的孩子dentry，有可能还有很多孩子
+	 * dentry没有被拉到内存中来。
 	 */ 
 	struct list_head d_subdirs;	/* our children */
 	/*
@@ -148,8 +153,6 @@ struct dentry {
 	 */
 	union {
 		/*
-		 * 第五个链表
-		 *
 		 * 链入相关inode的i_dentry链表
 		 */
 		struct hlist_node d_alias;	/* inode alias list */

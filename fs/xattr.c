@@ -54,11 +54,16 @@ static const struct xattr_handler *
 xattr_resolve_name(struct inode *inode, const char **name)
 {
 	/*
-	 * 这里是ext4_xattr_handlers
+	 * 这里是ext4_xattr_handlers，是个数组。里面包含了多套xattr_handler，用
+	 * 于不同的场景（普通场景、security前缀场景）
 	 */
 	const struct xattr_handler **handlers = inode->i_sb->s_xattr;
 	const struct xattr_handler *handler;
 
+	/*
+	 * 如果没有IOP_XATTR标志位，则表示不支持此操作。
+	 * sockfs现在是有此标志位的，sockfs在xattr操作中有可能返回-EAGAIN
+	 */
 	if (!(inode->i_opflags & IOP_XATTR)) {
 		if (unlikely(is_bad_inode(inode)))
 			return ERR_PTR(-EIO);
@@ -150,6 +155,10 @@ __vfs_setxattr(struct dentry *dentry, struct inode *inode, const char *name,
 {
 	const struct xattr_handler *handler;
 
+	/*
+	 * name此时是个局部变量，xattr_resolve_name中对其的修改不影响外面name的
+	 * 值
+	 */
 	handler = xattr_resolve_name(inode, &name);
 	if (IS_ERR(handler))
 		return PTR_ERR(handler);
@@ -188,6 +197,9 @@ int __vfs_setxattr_noperm(struct dentry *dentry, const char *name,
 	if (issec)
 		inode->i_flags &= ~S_NOSEC;
 	if (inode->i_opflags & IOP_XATTR) {
+		/*
+		 * 对于sockfs，这里会返回-EAGAIN
+		 */
 		error = __vfs_setxattr(dentry, inode, name, value, size, flags);
 		if (!error) {
 			fsnotify_xattr(dentry);
@@ -201,6 +213,13 @@ int __vfs_setxattr_noperm(struct dentry *dentry, const char *name,
 	if (error == -EAGAIN) {
 		error = -EOPNOTSUPP;
 
+		/*
+		 * 对于sockfs：
+		 * - 当是security.xxx属性时，尝试调用LSM hooks进行一次处理；
+		 * - 如果不是security.xxx，直接拒绝
+		 *
+		 * 只有sockfs会进入到这里吗？
+		 */
 		if (issec) {
 			const char *suffix = name + XATTR_SECURITY_PREFIX_LEN;
 
@@ -531,6 +550,12 @@ setxattr(struct dentry *d, const char __user *name, const void __user *value,
 		}
 	}
 
+	/*
+	 * 这个位置可以用来添加一个拒绝name的过滤hook，拒绝一些我们不想让用户设
+	 * 置的拓展属性名称。
+	 *
+	 * 其实在内核中实现biba policy的解析是最好的，失策失策！
+	 */
 	error = vfs_setxattr(d, kname, kvalue, size, flags);
 out:
 	kvfree(kvalue);
@@ -618,6 +643,9 @@ getxattr(struct dentry *d, const char __user *name, void __user *value,
 			return -ENOMEM;
 	}
 
+	/*
+	 * 这里也可以添加用来过滤不想让用户使用的拓展属性名，直接返回。
+	 */
 	error = vfs_getxattr(d, kname, kvalue, size);
 	if (error > 0) {
 		if ((strcmp(kname, XATTR_NAME_POSIX_ACL_ACCESS) == 0) ||

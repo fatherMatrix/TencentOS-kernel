@@ -1856,14 +1856,16 @@ static struct dentry *__lookup_slow(const struct qstr *name,
 		return ERR_PTR(-ENOENT);
 again:
 	/*
-	 * 要创建dentry了
+	 * 要创建dentry了，返回的dentry已经和parent dentry建立了父子关系。
 	 *
 	 * - 如果返回的dentry是由本d_alloc_parallel创建的，则中将新创建的dentry
 	 *   放入了inlookup_hashtable中
 	 * - 如果返回的dentry是由其他d_alloc_parallel创建的，则返回前等待dentry
 	 *   在inlookup_hashtable中摘除。值得注意的是，dentry在从
 	 *   inlookup_hashtable中摘除之前，会插入到dentry_hashtable中。也就是如
-	 *   此返回的dentry，已经成熟
+	 *   此返回的dentry，已经成熟（但这里面包括负状态的dentry，即去磁盘上转
+	 *   了一圈，发现没有对应的inode，也算是成熟了，因为至少确定了此dentry
+	 *   就是不应该对应inode）
 	 */
 	dentry = d_alloc_parallel(dir, name, &wq);
 	if (IS_ERR(dentry))
@@ -1893,6 +1895,8 @@ again:
 		 * 根据Documentation/filesystems/vfs.txt中的要求，此回调函数内
 		 * 1. 必须调用d_add()将inode与dentry建立联系
 		 * 2. 必须对inode->i_count加一
+		 * 3. 必须调用d_add将找到的inode和dentry建立联系。如果目标inode
+		 *    不存在，则插入一个NULL inode。
 		 *
 		 * ext4_lookup中通过调用d_splice_alias -> __d_add将dentry放到了
 		 * dentry_hashtable中
@@ -2062,6 +2066,9 @@ static inline int step_into(struct nameidata *nd, struct path *path,
 	if (likely(!d_is_symlink(path->dentry)) ||
 	   !(flags & WALK_FOLLOW || nd->flags & LOOKUP_FOLLOW)) {
 		/* not a symlink or should not follow */
+		/*
+		 * 移进
+		 */
 		path_to_nameidata(path, nd);
 		nd->inode = inode;
 		nd->seq = seq;
@@ -2103,6 +2110,10 @@ static int walk_component(struct nameidata *nd, int flags)
 	/*
 	 * 快速查找————依赖于缓存。根据「父目录、名称」查找
 	 * 疑问：为什么不直接通过parent dentry的d_child链表来查找呢？
+	 * - 首先，这个问题应该是为什么不通过parent dentry的d_subdirs链表来查找
+	 *   孩子dentry。因为d_child字段是做为链表元素链入作为链表头的d_subdirs
+	 *   字段的。
+	 * - 其次，那么到底是为什么呢？
 	 *
  	 * 进行路径名的查找，目标存放在nd->last中，查找结果存放在inode和path中
  	 * 返回出来
@@ -2157,6 +2168,12 @@ static int walk_component(struct nameidata *nd, int flags)
 		 * 如果上面返回的dentry是负状态的，则返回错误
 		 */
 		if (unlikely(d_is_negative(path.dentry))) {
+			/*
+			 * 在负状态的dentry返回错误前，nd迈入了负状态的dentry，
+			 * 这意味着即便是负状态的dentry，也不会在查找操作返回失
+			 * 败前free掉，而是cache了起来。这有助于下次目录查找时
+			 * 的加速
+			 */
 			path_to_nameidata(&path, nd);
 			return -ENOENT;
 		}
@@ -2799,6 +2816,7 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 	 * link_path_walk()返回0后才会执行lookup_last()
 	 *
 	 * lookup_last()返回值大于0意味着是个符号链接
+	 * lookup_last()等于0意味着已经解析完成
 	 */
 	while (!(err = link_path_walk(s, nd))
 		/*
@@ -3759,6 +3777,10 @@ no_open:
 		/*
 		 * 文件系统的查找inode操作
 		 *
+		 * dentry是返回的最重要的东西。相反，返回值res并没有那么重要，
+		 * 其与d_splice_alias相关。对于非目录的文件，返回的res总是为
+		 * NULL
+		 *
 		 * 返回的dentry有可能是负状态的，即dentry不对应inode
 		 */
 		struct dentry *res = dir_inode->i_op->lookup(dir_inode, dentry,
@@ -3904,6 +3926,9 @@ static int do_last(struct nameidata *nd,
 		inode_lock_shared(dir->d_inode);
 	/*
 	 * 查找对应的inode，如果没有就创建一个新的
+	 *
+	 * 如果确实没有这个文件，这里会将一个NULL inode和对应的dentry连接，即返
+	 * 回之后dentry是个负状态的
 	 */
 	error = lookup_open(nd, &path, file, op, got_write);
 	if (open_flag & O_CREAT)
@@ -3997,6 +4022,8 @@ finish_open:
 finish_open_created:
 	/*
 	 * 检查是否有打开权限
+	 *
+	 * 如果是个负状态的dentry，会在这里面返回-ENOENT
 	 */
 	error = may_open(&nd->path, acc_mode, open_flag);
 	if (error)

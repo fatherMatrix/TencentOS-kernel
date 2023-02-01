@@ -634,6 +634,7 @@ retry:
 		hlist_for_each_entry(old, &type->fs_supers, s_instances) {
 			/*
 			 * 在mount_bdev中，这个函数是test_bdev_super
+			 * 在mount_nodev中，这个函数是NULL
 			 */
 			if (!test(old, data))
 				continue;
@@ -688,6 +689,7 @@ retry:
 	 * 将超级块和对应的block_device结构体关联起来，并获取bdi的引用计数
 	 *
 	 * 在mount_bdev中，这个函数是set_bdev_super
+	 * 在mount_nodev中，这个函数是set_anon_super
 	 */
 	err = set(s, data);
 	if (err) {

@@ -320,6 +320,9 @@ static inline void __d_set_inode_and_type(struct dentry *dentry,
 
 	dentry->d_inode = inode;
 	flags = READ_ONCE(dentry->d_flags);
+	/*
+	 * 消除DCACHE_ENTRY_TYPE后dentry就不是负状态了
+	 */
 	flags &= ~(DCACHE_ENTRY_TYPE | DCACHE_FALLTHRU);
 	flags |= type_flags;
 	WRITE_ONCE(dentry->d_flags, flags);
@@ -1742,6 +1745,9 @@ struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 	dentry->d_flags = 0;
 	spin_lock_init(&dentry->d_lock);
 	seqcount_init(&dentry->d_seq);
+	/*
+	 * 此时还没有对应的inode
+	 */
 	dentry->d_inode = NULL;
 	dentry->d_parent = dentry;
 	dentry->d_sb = sb;
@@ -1752,6 +1758,9 @@ struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 	INIT_LIST_HEAD(&dentry->d_subdirs);
 	INIT_HLIST_NODE(&dentry->d_u.d_alias);
 	INIT_LIST_HEAD(&dentry->d_child);
+	/*
+	 * 设置dentry的dentry_operations
+	 */
 	d_set_d_op(dentry, dentry->d_sb->s_d_op);
 
 	if (dentry->d_op && dentry->d_op->d_init) {
@@ -1817,6 +1826,9 @@ struct dentry *d_alloc_cursor(struct dentry * parent)
 	struct dentry *dentry = d_alloc_anon(parent->d_sb);
 	if (dentry) {
 		dentry->d_flags |= DCACHE_DENTRY_CURSOR;
+		/*
+		 * 这个引用计数什么时候放掉？
+		 */
 		dentry->d_parent = dget(parent);
 	}
 	return dentry;
@@ -2594,7 +2606,6 @@ struct dentry *d_alloc_parallel(struct dentry *parent,
 	struct hlist_bl_node *node;
 	/* 
 	 * 哈希表中不存在目标dentry，所以这里必须创建一个了。
-	 * 
 	 *
 	 * d_alloc中已经将新创建的dentry和parent dentry建立了父子联系
 	 * - 建立父子关系这个操作对于parent dentry来说是写操作，需要加锁互斥

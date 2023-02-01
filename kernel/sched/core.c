@@ -35,6 +35,9 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(pelt_irq_tp);
 EXPORT_TRACEPOINT_SYMBOL_GPL(pelt_se_tp);
 EXPORT_TRACEPOINT_SYMBOL_GPL(sched_overutilized_tp);
 
+/*
+ * 每个CPU一个rq
+ */
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 #ifdef CONFIG_SCHED_DEBUG
@@ -2620,6 +2623,9 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		success = 1;
 		cpu = task_cpu(p);
 		trace_sched_waking(p);
+		/*
+		 * 直接设置状态为TASK_RUNNING
+		 */
 		p->state = TASK_RUNNING;
 		trace_sched_wakeup(p);
 		goto out;

@@ -370,6 +370,9 @@ asmlinkage __visible void do_softirq(void)
 	if (in_interrupt())
 		return;
 
+	/*
+	 * softirq的执行还是在关中断的情况下执行的呀
+	 */
 	local_irq_save(flags);
 
 	pending = local_softirq_pending();

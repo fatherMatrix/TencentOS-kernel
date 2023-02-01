@@ -72,6 +72,9 @@ do_wait_for_common(struct completion *x,
 	if (!x->done) {
 		DECLARE_WAITQUEUE(wait, current);
 
+		/*
+		 * 进入do_wait_for_common前已经获取了x->wait.lock自旋锁
+		 */
 		__add_wait_queue_entry_tail_exclusive(&x->wait, &wait);
 		do {
 			if (signal_pending_state(state, current)) {
@@ -80,7 +83,14 @@ do_wait_for_common(struct completion *x,
 			}
 			__set_current_state(state);
 			spin_unlock_irq(&x->wait.lock);
+			/*
+			 * action指向schedule_timeout函数，该函数睡眠timeout时
+			 * 间。因为要调度出去，所以上面释放了x->wait.lock自旋锁
+			 */
 			timeout = action(timeout);
+			/*
+			 * 重新获取自旋锁
+			 */
 			spin_lock_irq(&x->wait.lock);
 		} while (!x->done && timeout);
 		__remove_wait_queue(&x->wait, &wait);

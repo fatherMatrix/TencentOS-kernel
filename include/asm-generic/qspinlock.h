@@ -75,9 +75,28 @@ static __always_inline void queued_spin_lock(struct qspinlock *lock)
 {
 	u32 val = 0;
 
+	/*
+	 * 如果当前三元组为(0, 0, 0)，则将其原子设置为（0, 0, 1)后返回。即当前
+	 * cpu成功获取到锁。
+	 *
+	 * atomic_try_cmpxchg_acquire()伪代码：
+	 * int atomic_try_cmpxchg_acquire(*a, *b, c) {
+	 * 	if (*a == *b) {
+	 * 		*a = _Q_LOCKED_VAL
+	 * 		return true;
+	 * 	} else {
+	 * 		*b = *a;
+	 * 		return false;
+	 * 	}
+	 * }
+	 */
 	if (likely(atomic_try_cmpxchg_acquire(&lock->val, &val, _Q_LOCKED_VAL)))
 		return;
 
+	/*
+	 * 没有成功获取到锁的cpu会进入到这里
+	 * 要注意此时val已经改变，其中保存的是lock->val
+	 */
 	queued_spin_lock_slowpath(lock, val);
 }
 

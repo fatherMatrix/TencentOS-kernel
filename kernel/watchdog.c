@@ -374,9 +374,17 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 	/* kick the hardlockup detector */
 	watchdog_interrupt_count();
 
-	/* kick the softlockup detector */
+	/* kick the softlockup detector 
+	 * 大概就是如果softlockup_fn已经执行过了，那么这里再启动一次。
+	 * 如果还没有执行过，就跳过这个if分支。
+	 */
 	if (completion_done(this_cpu_ptr(&softlockup_completion))) {
 		reinit_completion(this_cpu_ptr(&softlockup_completion));
+		/*
+		 * 通过stop机制启动softlockup_fn，该机制还需仔细研究。
+		 *
+		 * 以前的实现是启动一个watchdog/N内核线程
+		 */
 		stop_one_cpu_nowait(smp_processor_id(),
 				softlockup_fn, NULL,
 				this_cpu_ptr(&softlockup_stop_work));

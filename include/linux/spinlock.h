@@ -177,6 +177,9 @@ do {								\
 #else
 static inline void do_raw_spin_lock(raw_spinlock_t *lock) __acquires(lock)
 {
+	/*
+	 * 如果没有定义__CHECHKER__，这一句是空语句
+	 */
 	__acquire(lock);
 	arch_spin_lock(&lock->raw_lock);
 	mmiowb_spin_lock();

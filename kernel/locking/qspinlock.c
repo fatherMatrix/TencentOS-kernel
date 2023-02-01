@@ -103,6 +103,8 @@ struct qnode {
  * Exactly fits one 64-byte cacheline on a 64-bit architecture.
  *
  * PV doubles the storage and uses the second cacheline for PV state.
+ *
+ * 每个cpu一个数组，每个数组包含4个元素，对应4种上下文。
  */
 static DEFINE_PER_CPU_ALIGNED(struct qnode, qnodes[MAX_NODES]);
 
@@ -330,18 +332,36 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	 * number of spins so that we guarantee forward progress.
 	 *
 	 * 0,1,0 -> 0,0,1
+	 *
+	 * 如果此时状态为(0, 1, 0)，这是一个临时状态。即cpu a获取了锁后cpu b设
+	 * 置了pending位，在自旋等待locked变为0(0, 1, 1)。然后cpu a释放了锁，形
+	 * 成了(0, 1, 0)。
+	 * 这是一个临时状态，因此当前cpu需要自旋，直到该临时状态消失或者自旋次
+	 * 数耗尽（自旋次数等于1 << 9）。
+	 * 会不会出现自旋次数耗尽但临时状态仍未消失的情况？
 	 */
 	if (val == _Q_PENDING_VAL) {
 		int cnt = _Q_PENDING_LOOPS;
+		/*
+		 * 一直读，直到条件为真。
+		 * 即：临时状态(0, 1, 0)消失或自旋次数耗尽。
+		 */
 		val = atomic_cond_read_relaxed(&lock->val,
 					       (VAL != _Q_PENDING_VAL) || !cnt--);
 	}
 
 	/*
 	 * If we observe any contention; queue.
+	 *
+	 * 如果val的非locked字段中有不为0的位，则意味着有pending或者tail，即有
+	 * cpu在排队。
 	 */
 	if (val & ~_Q_LOCKED_MASK)
 		goto queue;
+
+	/*
+	 * 到这里说明前边发现并没有cpu在排队，我们可以尝试获取一下锁
+	 */
 
 	/*
 	 * trylock || pending

@@ -756,6 +756,9 @@ static int do_dentry_open(struct file *f,
 	 * 增加了引用计数
 	 */ 
 	path_get(&f->f_path);
+	/*
+	 * 这意思是inode肯定不为NULL了？
+	 */
 	f->f_inode = inode;
 	f->f_mapping = inode->i_mapping;
 
@@ -791,6 +794,7 @@ static int do_dentry_open(struct file *f,
 		f->f_mode |= FMODE_ATOMIC_POS;
 
 	/*
+	 * 设置file->f_op
 	 * file结构体中的f_op是根据inode结构体中的i_fop中得到的
 	 */
 	f->f_op = fops_get(inode->i_fop);
@@ -925,6 +929,9 @@ EXPORT_SYMBOL(file_path);
  */
 int vfs_open(const struct path *path, struct file *file)
 {
+	/*
+	 * 此处的path来源于nd，且是将最终路径保存到nd->path中的nd
+	 */
 	file->f_path = *path;
 	return do_dentry_open(file, d_backing_inode(path->dentry), NULL);
 }

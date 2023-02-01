@@ -138,8 +138,17 @@ static inline void __raw_spin_lock_bh(raw_spinlock_t *lock)
 
 static inline void __raw_spin_lock(raw_spinlock_t *lock)
 {
+	/*
+	 * 关抢占
+	 */
 	preempt_disable();
+	/*
+	 * 如果没有定义CONFIG_LOCKDEP，这一句是空语句
+	 */
 	spin_acquire(&lock->dep_map, 0, 0, _RET_IP_);
+	/*
+	 * 如果没有定义CONFIG_LOCK_STAT，这里直接调用do_raw_spin_lock
+	 */
 	LOCK_CONTENDED(lock, do_raw_spin_trylock, do_raw_spin_lock);
 }
 
@@ -149,6 +158,9 @@ static inline void __raw_spin_unlock(raw_spinlock_t *lock)
 {
 	spin_release(&lock->dep_map, 1, _RET_IP_);
 	do_raw_spin_unlock(lock);
+	/*
+	 * 开抢占
+	 */
 	preempt_enable();
 }
 

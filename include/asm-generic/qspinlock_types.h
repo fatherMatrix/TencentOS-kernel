@@ -19,6 +19,43 @@
 #include <linux/atomic.h>
 #endif
 
+/*
+ * 内存大小只需要32bit，4个字节
+ *
+ *  0      7     8     9    15 16  17 18            31
+ * +--------+---------+-------+------+----------------+
+ * | locked | pending |   x   | tail |    tail cpu    |
+ * +--------+---------+-------+------+----------------+
+ *     8b        1b              2b    
+ *
+ * locked:	表示qspinlock是否加锁。0表示未加锁，其余值表示已加锁。
+ *        	- _Q_LOCKED_VAL == 1
+ *         	- _Q_SLOW_VAL == 3 （用于pv场景）
+ *
+ * pending: 	第一个等待锁的cpu需要先设置pending位，后续等待锁的cpu则全部进入
+ * 		mcs队列自旋等待。
+ * 		最初Waiman Long的patch并未包含该位，引入该位后，第一个等待者可
+ * 		以避免与访问自己的mcs数组相关的缓存未命中惩罚
+ *
+ * tail:	2个bit位，每个cpu在同一时刻可能存在4中不同的上下文：Normal、
+ * 		SoftIRQ、IRQ、NMI。因此每个cpu的per-cpu mcs spinlock需要包含一
+ * 		组共4个mcs，每个mcs对应一个上下文场景。
+ * 		参考pre-cpu全局数组qnodes。
+ *
+ * tail cpu: 	队尾的cpu编号+1，将编号加一是为了和没有cpu排队的情况区分开。
+ *
+ * 排队的几个位置：
+ * - 第一个锁等待者在将pending位置1后，就在qspinlock结构的locked上自旋，直到锁
+ *   持有者将锁释放（将pending位置0）
+ * - 第二个锁等待者需要将自己放入mcs队列尾部，因为其是mcs队列的头，所以其在
+ *   qspinlock结构的pending | locked上自旋，直到qspinlock的pending和locked均变
+ *   为0
+ * - 第三个及以后的锁等待者将自己放入mcs队列尾部，并在自己的per-cpu mcs上自旋，
+ *   直到到达队列头部，然后退化为第二种情况。
+ *
+ *
+ * (tail, pending, locked)初始时为(0, 0, 0)
+ */
 typedef struct qspinlock {
 	union {
 		atomic_t val;

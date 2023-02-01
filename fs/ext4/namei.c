@@ -1716,8 +1716,10 @@ static struct dentry *ext4_lookup(struct inode *dir, struct dentry *dentry, unsi
 		}
 		/*
 		 * 1. 在icache中查找已存在的inode
-		 * 2. 若icache中不能存在inode，则去磁盘上找，并将磁盘上的inode
+		 * 2. 若icache中不存在inode，则去磁盘上找，并将磁盘上的inode
 		 *    读到内存中
+		 * 3. 若磁盘上不存在inode，猜测返回的应该是个NULL才对?
+		 * 4. 参考__lookup_slow中关于inode->i_op->lookup的注释
 		 *
 		 * 返回的inode是携带了本次的引用计数的
 		 */

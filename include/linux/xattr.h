@@ -63,6 +63,10 @@ ssize_t vfs_getxattr_alloc(struct dentry *dentry, const char *name,
 
 static inline const char *xattr_prefix(const struct xattr_handler *handler)
 {
+	/*
+	 * 如果prefix不为NULL，则返回prefix；
+	 * 如果prefix为NULL，则返回name
+	 */
 	return handler->prefix ?: handler->name;
 }
 

@@ -891,6 +891,8 @@ struct rq {
 
 	/*
 	 * 不同的调度队列
+	 *
+	 * 进程并不是由
 	 */
 	struct cfs_rq		cfs;
 	struct rt_rq		rt;

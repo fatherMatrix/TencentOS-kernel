@@ -88,6 +88,12 @@ void mcs_spin_lock(struct mcs_spinlock **lock, struct mcs_spinlock *node)
 		 */
 		return;
 	}
+	/*
+	 * 这个位置会引入一个时间窗，此时mcs lock的next指针不为NULL，但当前cpu
+	 * 上的mcs node的next指针为NULL。
+	 * 此时当前cpu需要自旋一会儿，等待另一个cpu（mcs lock的next指针指向的
+	 * cpu）通过下面的WRITE_ONCE来设置当前cpu上mcs node的next值。
+	 */
 	WRITE_ONCE(prev->next, node);
 
 	/* Wait until the lock holder passes the lock down. */
@@ -109,7 +115,10 @@ void mcs_spin_unlock(struct mcs_spinlock **lock, struct mcs_spinlock *node)
 		 */
 		if (likely(cmpxchg_release(lock, node, NULL) == node))
 			return;
-		/* Wait until the next pointer is set */
+		/* 
+		 * Wait until the next pointer is set
+		 * 这里对应上面的小时间窗的睡眠
+		 */
 		while (!(next = READ_ONCE(node->next)))
 			cpu_relax();
 	}

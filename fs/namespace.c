@@ -2848,8 +2848,10 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 	}
 
 	/*
-	 * 分配并初始化fs_context结构体，
-	 * 主要通过file_system_type->init_fs_context()回调函数进行
+	 * 分配并初始化fs_context结构体，初始化动作主要通过文件系统自定义的
+	 * file_system_type->init_fs_context()回调函数进行。
+	 * 如果该文件系统没有定义init_fs_context()回调函数，则通过内核默认的
+	 * legacy_init_fs_context进行初始化。
 	 */
 	fc = fs_context_for_mount(type, sb_flags);
 	put_filesystem(type);
@@ -2879,7 +2881,8 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 	if (!err)
 		err = vfs_get_tree(fc);
 	/*
-	 * 进行真正的mount操作
+	 * 进行真正的mount操作，主要关注mount结构体中各字段的填充以及整棵mount
+	 * 树的结构
 	 */
 	if (!err)
 		err = do_new_mount_fc(fc, path, mnt_flags);

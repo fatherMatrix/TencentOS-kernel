@@ -145,6 +145,13 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	 * 引用计数设置为1
 	 */
 	atomic_set(&inode->i_count, 1);
+	/*
+	 * 此处只是对新分配的inode进行一般化的初始化，所以设置的i_ops及i_fops都
+	 * 是不可用的（但不会导致内核crash，只是返回给调用者失败）。
+	 *
+	 * 真正赋值可用的操作结构体是在各文件系统拿到init inode后，再进行相应的
+	 * 设置。比如：ext4_iget、kernfs_init_inode等
+	 */
 	inode->i_op = &empty_iops;
 	inode->i_fop = &no_open_fops;
 	/*
@@ -251,6 +258,9 @@ static struct inode *alloc_inode(struct super_block *sb)
 		 */
 		inode = ops->alloc_inode(sb);
 	else
+		/*
+		 * kernfs没有定义此方法，所以是直接分配一个内存中的inode
+		 */
 		inode = kmem_cache_alloc(inode_cachep, GFP_KERNEL);
 
 	if (!inode)

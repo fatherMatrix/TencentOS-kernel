@@ -1612,6 +1612,16 @@ struct super_block {
 	 */
 	const char *s_subtype;
 
+	/*
+	 * 文件系统中文件对应dentry新建时的默认dentry_operations。
+	 *
+	 * super_block中没有保存inode_operations和file_operations。
+	 * - 首先，file->file_operations来自于inode->i_fop
+	 * - 其次，inode->i_op和inode->i_fop是在inode生成的时候被初始化的。但
+	 *   inode的生成是文件系统特定的，都是在文件系统特定函数中调用，比如
+	 *   ext4_lookup和ext4_fill_super等。在这些地方我们是有机会自定义inode
+	 *   的i_op和i_fop字段的。
+	 */
 	const struct dentry_operations *s_d_op; /* default d_op for dentries */
 
 	/*

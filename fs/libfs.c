@@ -64,6 +64,13 @@ EXPORT_SYMBOL(simple_dentry_operations);
  */
 struct dentry *simple_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
+	/*
+	 * 只有在dentry_hashtable中查不到目标dentry时才会调用对应inode的
+	 * inode->i_op->lookup方法。
+	 * 因为simplefs在添加inode节点时已经将对应dentry放入到了
+	 * dentry_hashtable中，所以不会走到这里。一旦走到这里，说明目标inode本
+	 * 身是不存在的。
+	 */
 	if (dentry->d_name.len > NAME_MAX)
 		return ERR_PTR(-ENAMETOOLONG);
 	if (!dentry->d_sb->s_d_op)
@@ -75,6 +82,9 @@ EXPORT_SYMBOL(simple_lookup);
 
 int dcache_dir_open(struct inode *inode, struct file *file)
 {
+	/*
+	 * file->f_path代表其真正的位置
+	 */
 	file->private_data = d_alloc_cursor(file->f_path.dentry);
 
 	return file->private_data ? 0 : -ENOMEM;

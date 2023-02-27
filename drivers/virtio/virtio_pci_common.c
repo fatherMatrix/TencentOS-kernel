@@ -549,6 +549,9 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 
 	pci_set_master(pci_dev);
 
+	/*
+	 * 将这个virtio-pci设备的virtio部分注册到virtio bus上
+	 */
 	rc = register_virtio_device(&vp_dev->vdev);
 	reg_dev = vp_dev;
 	if (rc)

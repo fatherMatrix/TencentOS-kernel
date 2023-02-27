@@ -415,6 +415,9 @@ noinline void __ref rest_init(void)
 	 * We need to spawn init first so that it obtains pid 1, however
 	 * the init task will end up wanting to create kthreads, which, if
 	 * we schedule it before we create kthreadd, will OOPS.
+	 *
+	 * kernel_thread是直接调用do_fork进行task的创建
+	 * kthread_create是通过内核线程创建新的内核线程
 	 */
 	pid = kernel_thread(kernel_init, NULL, CLONE_FS);
 	/*
@@ -590,6 +593,11 @@ asmlinkage __visible void __init start_kernel(void)
 
 	cgroup_init_early();
 
+	/*
+	 * 这里关闭了中断，这种终端关闭是清空IF标志位，使cpu不响应外部中断源发
+	 * 送的中断请求。其实这个时候，kernel还没有建立起对中断控制器的有效驱动
+	 * 程序
+	 */
 	local_irq_disable();
 	early_boot_irqs_disabled = true;
 
@@ -640,7 +648,7 @@ asmlinkage __visible void __init start_kernel(void)
 	vfs_caches_init_early();
 	sort_main_extable();
 	/*
-	 * 中断初始化
+	 * 异常初始化
 	 */
 	trap_init();
 	mm_init();
@@ -690,6 +698,9 @@ asmlinkage __visible void __init start_kernel(void)
 
 	context_tracking_init();
 	/* init some links before init_ISA_irqs() */
+	/*
+	 * 中断初始化
+	 */
 	early_irq_init();
 	init_IRQ();
 	tick_init();
@@ -812,7 +823,11 @@ asmlinkage __visible void __init start_kernel(void)
 	arch_post_acpi_subsys_init();
 	sfi_init_late();
 
-	/* Do the rest non-__init'ed, we're now alive */
+	/* 
+	 * Do the rest non-__init'ed, we're now alive
+	 *
+	 * 内部会进行非主cpu的启动
+	 */
 	arch_call_rest_init();
 
 	prevent_tail_call_optimization();
@@ -1058,12 +1073,20 @@ static void __init do_initcalls(void)
 static void __init do_basic_setup(void)
 {
 	cpuset_init_smp();
+	/*
+	 * 准备/sys/相关的内容
+	 */
 	driver_init();
 	init_irq_proc();
 	do_ctors();
 	usermodehelper_enable();
 	/*
 	 * 调用__initcall(xxx)
+	 *
+	 * 其中包括pci_driver_init，这个函数会开启pci总线，后面就会有各种设备调
+	 * 用device_add，继而向上面初始化的/sys中填充内容
+	 *
+	 * 那么休眠的唤醒应该也是在这里调用的了？
 	 */
 	do_initcalls();
 }
@@ -1143,6 +1166,7 @@ static int __ref kernel_init(void *unused)
 {
 	int ret;
 
+	/* initcall在这里面 */
 	kernel_init_freeable();
 	/* need to finish all async __init code before freeing the memory */
 	async_synchronize_full();
@@ -1165,6 +1189,9 @@ static int __ref kernel_init(void *unused)
 
 	rcu_end_inkernel_boot();
 
+	/*
+	 * 这个变量在kernel_init_freeable中被设置为了/init
+	 */
 	if (ramdisk_execute_command) {
 		ret = run_init_process(ramdisk_execute_command);
 		if (!ret)
@@ -1192,6 +1219,9 @@ static int __ref kernel_init(void *unused)
 	    !try_to_run_init_process("/bin/sh"))
 		return 0;
 
+	/*
+	 * 上面的用户态init进程只要有一个execve成功了，都不会再回到这里
+	 */
 	panic("No working init found.  Try passing init= option to kernel. "
 	      "See Linux Documentation/admin-guide/init.rst for guidance.");
 }
@@ -1232,6 +1262,9 @@ static noinline void __init kernel_init_freeable(void)
 	/* Initialize page ext after all struct pages are initialized. */
 	page_ext_init();
 
+	/*
+	 * 包含了设备的初始化和__initcall相关的内容
+	 */
 	do_basic_setup();
 
 	/* Open the /dev/console on the rootfs, this should never fail */
@@ -1245,6 +1278,10 @@ static noinline void __init kernel_init_freeable(void)
 	 * the work
 	 */
 
+	/*
+	 * waw，这里就是系统启动的时候调用的initramfs中的systemd，这是个傻逼软
+	 * 件，贼他妈麻烦的傻逼。
+	 */
 	if (!ramdisk_execute_command)
 		ramdisk_execute_command = "/init";
 

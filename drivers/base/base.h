@@ -29,14 +29,26 @@
 struct subsys_private {
 	struct kset subsys;
 	struct kset *devices_kset;
+	/*
+	 * subsys_interface的链表头
+	 */
 	struct list_head interfaces;
 	struct mutex mutex;
 
 	struct kset *drivers_kset;
+	/*
+	 * 总线上的设备链表
+	 */
 	struct klist klist_devices;
+	/*
+	 * 总线上的驱动链表
+	 */
 	struct klist klist_drivers;
 	struct blocking_notifier_head bus_notifier;
 	unsigned int drivers_autoprobe:1;
+	/*
+	 * 反指回总线
+	 */
 	struct bus_type *bus;
 
 	struct kset glue_dirs;

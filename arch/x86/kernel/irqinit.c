@@ -87,6 +87,8 @@ void __init init_IRQ(void)
 	 * these IRQ's are handled by more mordern controllers like IO-APIC,
 	 * then this vector space can be freed and re-used dynamically as the
 	 * irq's migrate etc.
+	 *
+	 * 0x30~0x3f中断向量对应于0~15中断号
 	 */
 	for (i = 0; i < nr_legacy_irqs(); i++)
 		per_cpu(vector_irq, 0)[ISA_IRQ_VECTOR(i)] = irq_to_desc(i);
@@ -102,6 +104,9 @@ void __init init_IRQ(void)
 void __init native_init_IRQ(void)
 {
 	/* Execute any quirks before the call gates are initialised: */
+	/*
+	 * 对应init_ISA_irqs
+	 */
 	x86_init.irqs.pre_vector_init();
 
 	idt_setup_apic_and_irq_gates();

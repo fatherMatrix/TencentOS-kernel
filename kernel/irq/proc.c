@@ -501,6 +501,9 @@ int show_interrupts(struct seq_file *p, void *v)
 					*per_cpu_ptr(desc->kstat_irqs, j) : 0);
 
 	raw_spin_lock_irqsave(&desc->lock, flags);
+	/*
+	 * 这里输出irq_chip->name，包含IO-APIC、PCI-MSI等内容
+	 */
 	if (desc->irq_data.chip) {
 		if (desc->irq_data.chip->irq_print_chip)
 			desc->irq_data.chip->irq_print_chip(&desc->irq_data, p);
@@ -511,6 +514,9 @@ int show_interrupts(struct seq_file *p, void *v)
 	} else {
 		seq_printf(p, " %8s", "None");
 	}
+	/*
+	 * 这里是硬件中断号
+	 */
 	if (desc->irq_data.domain)
 		seq_printf(p, " %*d", prec, (int) desc->irq_data.hwirq);
 	else
@@ -518,6 +524,9 @@ int show_interrupts(struct seq_file *p, void *v)
 #ifdef CONFIG_GENERIC_IRQ_SHOW_LEVEL
 	seq_printf(p, " %-8s", irqd_is_level_type(&desc->irq_data) ? "Level" : "Edge");
 #endif
+	/*
+	 * 电流层处理程序的名称
+	 */
 	if (desc->name)
 		seq_printf(p, "-%-8s", desc->name);
 

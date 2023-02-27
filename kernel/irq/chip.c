@@ -785,10 +785,19 @@ EXPORT_SYMBOL_GPL(handle_fasteoi_nmi);
  */
 void handle_edge_irq(struct irq_desc *desc)
 {
+	/*
+	 * 这里虽然加了自旋锁，但是在调用的handle_irq_event(desc)函数中，实际调
+	 * 用ISR前是开了锁的。并且在开锁之前，设置了inprogress标志。
+	 */
 	raw_spin_lock(&desc->lock);
 
 	desc->istate &= ~(IRQS_REPLAY | IRQS_WAITING);
 
+	/*
+	 * 如果desc已经在处理了，那么这里就设置一个IRQS_PENDING标识，直接返回。
+	 * 正在处理该irq的cpu看到这里设置的IRQS_PENDING后，会循环处理，直到没有
+	 * IRQS_PENDING
+	 */
 	if (!irq_may_run(desc)) {
 		desc->istate |= IRQS_PENDING;
 		mask_ack_irq(desc);
@@ -820,6 +829,11 @@ void handle_edge_irq(struct irq_desc *desc)
 		 * When another irq arrived while we were handling
 		 * one, we could have masked the irq.
 		 * Renable it, if it was not disabled in meantime.
+		 *
+		 * 如果屏蔽了该中断，在这里打开。
+		 * 走到这里说明我们已经循环过来处理由另一个cpu设置了pending的中
+		 * 断。另一个cpu设置pending时mask了硬件中断源，这里要打开才可以
+		 * 继续接收中断。
 		 */
 		if (unlikely(desc->istate & IRQS_PENDING)) {
 			if (!irqd_irq_disabled(&desc->irq_data) &&
@@ -827,6 +841,9 @@ void handle_edge_irq(struct irq_desc *desc)
 				unmask_irq(desc);
 		}
 
+		/*
+		 * 主要的中断处理流程
+		 */
 		handle_irq_event(desc);
 
 	} while ((desc->istate & IRQS_PENDING) &&

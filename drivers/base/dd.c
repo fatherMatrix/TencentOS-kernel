@@ -550,6 +550,10 @@ re_probe:
 			goto probe_failed;
 	}
 
+	/*
+	 * 如果bus定义了probe函数，则调用bus的；
+	 * 如果bus没有定义probe函数，则调用driver的
+	 */
 	if (dev->bus->probe) {
 		ret = dev->bus->probe(dev);
 		if (ret)
@@ -823,6 +827,9 @@ static int __device_attach_driver(struct device_driver *drv, void *_data)
 		return ret;
 	} /* ret > 0 means positive match */
 
+	/*
+	 * 走到这里，说明driver和device已经match上了
+	 */
 	async_allowed = driver_allows_async_probing(drv);
 
 	if (async_allowed)
@@ -831,6 +838,9 @@ static int __device_attach_driver(struct device_driver *drv, void *_data)
 	if (data->check_async && async_allowed != data->want_async)
 		return 0;
 
+	/*
+	 * 如果match上了，则掉用driver的probe函数
+	 */
 	return driver_probe_device(drv, dev);
 }
 

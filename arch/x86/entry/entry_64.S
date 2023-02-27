@@ -600,6 +600,13 @@ END(common_spurious)
 _ASM_NOKPROBE(common_spurious)
 
 /* common_interrupt is a hotpath. Align it */
+/*
+ * 不论vector id是多少，idt都会跳到这里。
+ * 难道idt中所有的目标都指向了这里？
+ * - 不是的。common_interrupt仅接手外部IRQ中断，中断向量表的相关服务程序先压栈对应
+ *   的irq，再调用common_interrupt。
+ *   非irq中断不会走到这里，在中断向量那里就由其他服务程序接手了。
+ */
 	.p2align CONFIG_X86_L1_CACHE_SHIFT
 common_interrupt:
 	addq	$-0x80, (%rsp)			/* Adjust vector to [-256, -1] range */
@@ -608,6 +615,10 @@ common_interrupt:
 	call	do_IRQ	/* rdi points to pt_regs */
 	/* 0(%rsp): old RSP */
 ret_from_intr:
+	/*
+	 * 在非paravirt场景下，直接调用cli指令关中断；
+	 * 在paravirt场景下，
+	 */
 	DISABLE_INTERRUPTS(CLBR_ANY)
 	TRACE_IRQS_OFF
 

@@ -2184,6 +2184,9 @@ int device_add(struct device *dev)
 	error = device_add_attrs(dev);
 	if (error)
 		goto AttrsError;
+	/*
+	 * 将设备加入总线的设备链表
+	 */
 	error = bus_add_device(dev);
 	if (error)
 		goto BusError;
@@ -2215,6 +2218,9 @@ int device_add(struct device *dev)
 					     BUS_NOTIFY_ADD_DEVICE, dev);
 
 	kobject_uevent(&dev->kobj, KOBJ_ADD);
+	/*
+	 * 给设备探测合适的驱动
+	 */
 	bus_probe_device(dev);
 	if (parent)
 		klist_add_tail(&dev->p->knode_parent,
@@ -2622,15 +2628,26 @@ EXPORT_SYMBOL_GPL(device_find_child_by_name);
 
 int __init devices_init(void)
 {
+	/*
+	 * 对应/sys/devices
+	 *
+	 * 为什么这里用kset而下面的block和char都用kobject？
+	 */
 	devices_kset = kset_create_and_add("devices", &device_uevent_ops, NULL);
 	if (!devices_kset)
 		return -ENOMEM;
 	dev_kobj = kobject_create_and_add("dev", NULL);
 	if (!dev_kobj)
 		goto dev_kobj_err;
+	/*
+	 * 对应/sys/dev/block
+	 */
 	sysfs_dev_block_kobj = kobject_create_and_add("block", dev_kobj);
 	if (!sysfs_dev_block_kobj)
 		goto block_kobj_err;
+	/*
+	 * 对应/sys/dev/char
+	 */
 	sysfs_dev_char_kobj = kobject_create_and_add("char", dev_kobj);
 	if (!sysfs_dev_char_kobj)
 		goto char_kobj_err;

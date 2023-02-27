@@ -374,6 +374,8 @@ struct pci_dev {
 	/*
 	 * Instead of touching interrupt line and base address registers
 	 * directly, use the values stored here. They might be different!
+	 *
+	 * 这里应该是中断向量吧？
 	 */
 	unsigned int	irq;
 	struct resource resource[DEVICE_COUNT_RESOURCE]; /* I/O and memory regions + expansion ROMs */
@@ -498,6 +500,9 @@ static inline int pci_channel_offline(struct pci_dev *pdev)
 
 struct pci_host_bridge {
 	struct device	dev;
+	/*
+	 * 0号pci总线
+	 */
 	struct pci_bus	*bus;		/* Root bus */
 	struct pci_ops	*ops;
 	void		*sysdata;
@@ -575,11 +580,26 @@ struct pci_bus_resource {
 #define PCI_REGION_FLAG_MASK	0x0fU	/* These bits of resource flags tell us the PCI region flags */
 
 struct pci_bus {
+	/*
+	 * 链入父bus的children字段
+	 */
 	struct list_head node;		/* Node in list of buses */
+	/*
+	 * 指向父bus
+	 */
 	struct pci_bus	*parent;	/* Parent bus this bridge is on */
+	/*
+	 * 孩子总线的链表头，链表节点是孩子节点的node字段
+	 */
 	struct list_head children;	/* List of child buses */
+	/*
+	 * 这个链表和bus_type->subsys_private->klist_devices功能上的区别？
+	 */
 	struct list_head devices;	/* List of devices on this bus */
 	struct pci_dev	*self;		/* Bridge device as seen by parent */
+	/*
+	 * 总线插槽的链表头，链表节点是pci_slot->list字段
+	 */
 	struct list_head slots;		/* List of slots on this bus;
 					   protected by pci_slot_mutex */
 	struct resource *resource[PCI_BRIDGE_RESOURCE_NUM];

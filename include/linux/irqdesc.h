@@ -57,6 +57,13 @@ struct irq_desc {
 	struct irq_common_data	irq_common_data;
 	struct irq_data		irq_data;
 	unsigned int __percpu	*kstat_irqs;
+	/*
+	 * 电流层处理函数
+	 *
+	 * 对于级联的中断控制器，父中断控制器上对应irq的handle_irq会使用函数
+	 * irq_set_chained_handler来配置，用于递归调用子中断控制器上对应的电流
+	 * 处理函数
+	 */
 	irq_flow_handler_t	handle_irq;
 #ifdef CONFIG_IRQ_PREFLOW_FASTEOI
 	irq_preflow_handler_t	preflow_handler;

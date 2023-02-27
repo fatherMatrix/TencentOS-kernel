@@ -282,6 +282,9 @@ void __init pci_direct_init(int type)
 
 int __init pci_direct_probe(void)
 {
+	/*
+	 * 听说现在已经放弃使用type2了
+	 */
 	if ((pci_probe & PCI_PROBE_CONF1) == 0)
 		goto type2;
 	if (!request_region(0xCF8, 8, "PCI conf1"))

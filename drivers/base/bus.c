@@ -459,6 +459,9 @@ int bus_add_device(struct device *dev)
 				&dev->bus->p->subsys.kobj, "subsystem");
 		if (error)
 			goto out_subsys;
+		/*
+		 * 将设备加入总线的设备链表
+		 */
 		klist_add_tail(&dev->p->knode_bus, &bus->p->klist_devices);
 	}
 	return 0;
@@ -486,6 +489,9 @@ void bus_probe_device(struct device *dev)
 	if (!bus)
 		return;
 
+	/*
+	 * 如果设置了drivers_autoprobe，则进行相关操作
+	 */
 	if (bus->p->drivers_autoprobe)
 		device_initial_probe(dev);
 
@@ -616,7 +622,13 @@ int bus_add_driver(struct device_driver *drv)
 	if (error)
 		goto out_unregister;
 
+	/*
+	 * 加入bus的驱动链表
+	 */
 	klist_add_tail(&priv->knode_bus, &bus->p->klist_drivers);
+	/*
+	 * 如果新增driver可以自动探测对应device，则进行探测
+	 */
 	if (drv->bus->p->drivers_autoprobe) {
 		error = driver_attach(drv);
 		if (error)
@@ -1051,6 +1063,9 @@ int subsys_interface_register(struct subsys_interface *sif)
 
 	mutex_lock(&subsys->p->mutex);
 	list_add_tail(&sif->node, &subsys->p->interfaces);
+	/*
+	 * 对subsys_interface_register之前就已经添加的device进行作用
+	 */
 	if (sif->add_dev) {
 		subsys_dev_iter_init(&iter, subsys, NULL, NULL);
 		while ((dev = subsys_dev_iter_next(&iter)))

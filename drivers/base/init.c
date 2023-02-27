@@ -20,11 +20,29 @@
 void __init driver_init(void)
 {
 	/* These are the core pieces */
+	/*
+	 * 注册devtmpfs文件系统
+	 */
 	devtmpfs_init();
+	/*
+	 * 创建/sys/devices目录
+	 */
 	devices_init();
+	/*
+	 * 创建/sys/bus目录
+	 */
 	buses_init();
+	/*
+	 * 创建/sys/class目录
+	 */
 	classes_init();
+	/*
+	 * 创建/sys/firmware目录
+	 */
 	firmware_init();
+	/*
+	 * 创建/sys/hypervisor目录
+	 */
 	hypervisor_init();
 
 	/* These are also core pieces, but must come after the

@@ -2038,6 +2038,9 @@ int request_threaded_irq(unsigned int irq, irq_handler_t handler,
 	    ((irqflags & IRQF_NO_SUSPEND) && (irqflags & IRQF_COND_SUSPEND)))
 		return -EINVAL;
 
+	/*
+	 * irq和irq_desc是通过基数树关联起来的
+	 */
 	desc = irq_to_desc(irq);
 	if (!desc)
 		return -EINVAL;

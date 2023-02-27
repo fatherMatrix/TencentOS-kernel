@@ -543,6 +543,9 @@ int driver_deferred_probe_check_state_continue(struct device *dev);
 struct subsys_interface {
 	const char *name;
 	struct bus_type *subsys;
+	/*
+	 * 链入subsys_private中的链表头
+	 */
 	struct list_head node;
 	int (*add_dev)(struct device *dev, struct subsys_interface *sif);
 	void (*remove_dev)(struct device *dev, struct subsys_interface *sif);

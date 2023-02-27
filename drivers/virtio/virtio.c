@@ -431,6 +431,16 @@ EXPORT_SYMBOL_GPL(virtio_device_restore);
 
 static int virtio_init(void)
 {
+	/*
+	 * 注册virtio总线，这只是一条虚拟的总线。
+	 *
+	 * 但仔细想想，虚拟机的pcie总线何尝不是虚拟的呢？猜测虚拟机这边对总线的
+	 * 操作都是读写总线控制器（例如Host Bridge或Root Complex）的配置空间时
+	 * 触发vm exit，然后在host侧组织数据并返回vm。
+	 * 类比于物理机的pci配置空间所在内存地址（对于MMIO）来源于BIOS这一事实，
+	 * 虚拟机看到的MMIO地址应该是物理机早就组织好，通过seabios传递给虚拟机
+	 * 的。
+	 */
 	if (bus_register(&virtio_bus) != 0)
 		panic("virtio bus registration failed");
 	return 0;

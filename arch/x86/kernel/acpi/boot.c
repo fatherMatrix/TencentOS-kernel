@@ -1583,6 +1583,8 @@ int __init early_acpi_boot_init(void)
 
 	/*
 	 * Process the Multiple APIC Description Table (MADT), if present
+	 *
+	 * IOAPIC相关
 	 */
 	early_acpi_process_madt();
 

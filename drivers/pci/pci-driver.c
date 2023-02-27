@@ -1730,15 +1730,24 @@ struct bus_type pcie_port_bus_type = {
 EXPORT_SYMBOL_GPL(pcie_port_bus_type);
 #endif
 
+/*
+ * 主要进行pci和pcie总线的注册，优先级是2
+ */
 static int __init pci_driver_init(void)
 {
 	int ret;
 
+	/*
+	 * pci总线
+	 */
 	ret = bus_register(&pci_bus_type);
 	if (ret)
 		return ret;
 
 #ifdef CONFIG_PCIEPORTBUS
+	/*
+	 * pcie总线
+	 */
 	ret = bus_register(&pcie_port_bus_type);
 	if (ret)
 		return ret;

@@ -247,6 +247,9 @@ __visible unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
 		if (IS_ENABLED(CONFIG_X86_32))
 			handle_irq(desc, regs);
 		else
+			/*
+			 * 直接调用irq_desc->handle_irq，其会调用irqaction
+			 */
 			generic_handle_irq_desc(desc);
 	} else {
 		ack_APIC_irq();

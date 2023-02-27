@@ -20,6 +20,9 @@ static __init int pci_arch_init(void)
 	if (x86_init.pci.arch_init && !x86_init.pci.arch_init())
 		return 0;
 
+/*
+ * x86_64 long mode已经不支持PCI_BIOS选项了
+ */
 #ifdef CONFIG_PCI_BIOS
 	pci_pcbios_init();
 #endif

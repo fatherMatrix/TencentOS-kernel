@@ -134,6 +134,9 @@ static int __init acpi_parse_madt(struct acpi_table_header *table)
 	}
 
 	if (madt->address) {
+		/*
+		 * 获取LAPIC的默认地址放入全局变量acpi_lapic_addr中
+		 */
 		acpi_lapic_addr = (u64) madt->address;
 
 		printk(KERN_DEBUG PREFIX "Local APIC address 0x%08x\n",
@@ -1263,6 +1266,10 @@ static void __init acpi_process_madt(void)
 #ifdef CONFIG_X86_LOCAL_APIC
 	int error;
 
+	/*
+	 * acpi_table_parse会调用acpi_parse_madt函数解析LAPIC的默认物理地址，并
+	 * 放入全局变量中
+	 */
 	if (!acpi_table_parse(ACPI_SIG_MADT, acpi_parse_madt)) {
 
 		/*
@@ -1616,6 +1623,8 @@ int __init acpi_boot_init(void)
 
 	/*
 	 * Process the Multiple APIC Description Table (MADT), if present
+	 *
+	 * 这里解析MADT表，从BIOS给出的信息中获取中断控制器和中断源的相关信息
 	 */
 	acpi_process_madt();
 

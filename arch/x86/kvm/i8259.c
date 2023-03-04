@@ -588,7 +588,7 @@ int kvm_pic_init(struct kvm *kvm)
 	int ret;
 
 	/*
-	 * 创建kvm_pic结构体
+	 * 创建kvm_pic结构体，一个kvm_pic结构体包含两片级联的i8259a
 	 */
 	s = kzalloc(sizeof(struct kvm_pic), GFP_KERNEL_ACCOUNT);
 	if (!s)

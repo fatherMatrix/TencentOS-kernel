@@ -345,6 +345,10 @@ int notify_change(struct dentry * dentry, struct iattr * attr, struct inode **de
 	if (error)
 		return error;
 
+	/*
+	 * 对于chmod这种类似的操作，是通过文件的普通属性(setattr)进行存储的；
+	 * 对于ACL，是通过文件的拓展属性(setxattr)进行存储的；
+	 */
 	if (inode->i_op->setattr)
 		error = inode->i_op->setattr(dentry, attr);
 	else

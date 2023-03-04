@@ -112,6 +112,9 @@ void __init native_init_IRQ(void)
 	idt_setup_apic_and_irq_gates();
 	lapic_assign_system_vectors();
 
+	/*
+	 * 这里难道是对2号irq做特殊处理？
+	 */
 	if (!acpi_ioapic && !of_ioapic && nr_legacy_irqs())
 		setup_irq(2, &irq2);
 }

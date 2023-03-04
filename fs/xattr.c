@@ -553,6 +553,8 @@ setxattr(struct dentry *d, const char __user *name, const void __user *value,
 	/*
 	 * 这个位置可以用来添加一个拒绝name的过滤hook，拒绝一些我们不想让用户设
 	 * 置的拓展属性名称。
+	 * - 不能这么做，用户态的cp命令要拷贝这些xattr，一旦某些xattr被拒绝，cp
+	 *   命令会报错。
 	 *
 	 * 其实在内核中实现biba policy的解析是最好的，失策失策！
 	 */

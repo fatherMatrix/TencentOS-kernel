@@ -4945,6 +4945,9 @@ set_identity_unlock:
 
 		r = -EEXIST;
 		if (irqchip_in_kernel(kvm))
+			/*
+			 * 走到这里，说明前面已经在kvm中创建的模拟的芯片
+			 */ 
 			goto create_irqchip_unlock;
 
 		r = -EINVAL;
@@ -4968,7 +4971,9 @@ set_identity_unlock:
 		}
 
 		/*
-		 * 设置默认中断路由
+		 * 设置默认中断路由。
+		 *
+		 * 中断路由表是用来给kvm选择一个中断交由哪个模拟中断控制器处理
 		 */
 		r = kvm_setup_default_irq_routing(kvm);
 		if (r) {
@@ -7700,6 +7705,9 @@ static int inject_pending_event(struct kvm_vcpu *vcpu)
 		kvm_x86_ops->set_nmi(vcpu);
 	} else if (kvm_cpu_has_injectable_intr(vcpu)) {
 		/*
+		 * kvm_cpu_has_injectable_intr判断当前vcpu是否有中断需要注入
+		 */
+		/*
 		 * Because interrupts can be injected asynchronously, we are
 		 * calling check_nested_events again here to avoid a race condition.
 		 * See https://lkml.org/lkml/2014/7/2/60 for discussion about this
@@ -7711,9 +7719,19 @@ static int inject_pending_event(struct kvm_vcpu *vcpu)
 			if (r != 0)
 				return r;
 		}
+		/*
+		 * 判断当前vcpu是否允许中断注入
+		 */
 		if (kvm_x86_ops->interrupt_allowed(vcpu)) {
+			/*
+			 * 如果允许中断注入，则将需要注入的中断向量号写入到
+			 * vcpu->arch.interrupt中
+			 */
 			kvm_queue_interrupt(vcpu, kvm_cpu_get_interrupt(vcpu),
 					    false);
+			/*
+			 * 进行实际的中断注入动作，对应的函数是vmx_inject_irq
+			 */
 			kvm_x86_ops->set_irq(vcpu);
 		}
 	}

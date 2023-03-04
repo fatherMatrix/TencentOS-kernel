@@ -4384,12 +4384,24 @@ static void enable_nmi_window(struct kvm_vcpu *vcpu)
 	exec_controls_setbit(to_vmx(vcpu), CPU_BASED_VIRTUAL_NMI_PENDING);
 }
 
+/*
+ * 在进入VMX non-root之前，kvm会调用vcpu_enter_guest函数检查其中pending的
+ * request，如果发现有KVM_REQ_EVENT请求，就会调用inject_pending_event函数进行事
+ * 件注入，这类事件中就有设备中断。inject_pending_event中会调用本函数。
+ */
 static void vmx_inject_irq(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
 	uint32_t intr;
 	/*
 	 * 获取中断向量号
+	 *
+	 * 这个应该是有其他人把中断发给了vcpu，然后vcpu在arch.interrupt中记录下
+	 * 来。等待合适的时机调用本函数进行中断注入。
+	 * - 负责做这个动作的就是inject_pending_event中先于set_irq调用的
+	 *   kvm_queue_interrupt函数
+	 *
+	 * 那么问题来了，所有的中断注入都需要VMM的干预才行吗？
 	 */
 	int irq = vcpu->arch.interrupt.nr;
 
@@ -8036,6 +8048,10 @@ static int __init vmx_init(void)
 	int r, cpu;
 
 #if IS_ENABLED(CONFIG_HYPERV)
+	/*
+	 * enlightened vmcs用于在hyper-v上嵌套虚拟化场景下的kvm优化。
+	 * 具体见：https://lwn.net/Articles/748090/
+	 */
 	/*
 	 * Enlightened VMCS usage should be recommended and the host needs
 	 * to support eVMCS v1 or above. We can also disable eVMCS support

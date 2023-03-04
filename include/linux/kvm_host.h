@@ -319,7 +319,12 @@ struct kvm_vcpu {
 #endif
 	bool preempted;
 	bool ready;
-	/* 体系结构相关的字段，包括常规寄存器和cr寄存器等 */
+	/* 
+	 * 体系结构相关的字段，包括
+	 * - 常规寄存器
+	 * - cr寄存器等
+	 * - 中断和异常相关
+	 */
 	struct kvm_vcpu_arch arch;
 	struct dentry *debugfs_dentry;
 };
@@ -402,11 +407,22 @@ struct kvm_kernel_irq_routing_entry {
 
 #ifdef CONFIG_HAVE_KVM_IRQ_ROUTING
 struct kvm_irq_routing_table {
+	/*
+	 * 这是一个二维数组：
+	 * - 第一维表示master PIC、slave PIC和IOAPIC三个芯片
+	 * - 第二维表示芯片对应引脚的gsi
+	 */
 	int chip[KVM_NR_IRQCHIPS][KVM_IRQCHIP_NUM_PINS];
+	/*
+	 * 保存了map数组的长度
+	 */
 	u32 nr_rt_entries;
 	/*
 	 * Array indexed by gsi. Each entry contains list of irq chips
 	 * the gsi is connected to.
+	 *
+	 * 这是一个以gsi为index的哈希链表组数。第N个哈希链表组织了所有gsi == N
+	 * 的kvm_kernel_irq_route_entry链表，链接元素是该结构体的link字段。
 	 */
 	struct hlist_head map[0];
 };

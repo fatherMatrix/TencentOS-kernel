@@ -851,6 +851,9 @@ void __init setup_arch(char **cmdline_p)
 	 */
 	memblock_reserve(0, PAGE_SIZE);
 
+	/*
+	 * 为initramfs保留空间
+	 */
 	early_reserve_initrd();
 
 	/*
@@ -892,6 +895,12 @@ void __init setup_arch(char **cmdline_p)
 	 */
 	olpc_ofw_detect();
 
+	/*
+	 * 设置早期的异常，这里只有很少的几个异常:
+	 * - debug
+	 * - int3
+	 * - page fault（if CONFIG_X86_32)(那64位呢?)
+	 */
 	idt_setup_early_traps();
 	early_cpu_init();
 	arch_init_ideal_nops();
@@ -935,6 +944,9 @@ void __init setup_arch(char **cmdline_p)
 	x86_init.oem.arch_setup();
 
 	iomem_resource.end = (1ULL << boot_cpu_data.x86_phys_bits) - 1;
+	/*
+	 * 在e820表中抠出保留的部分
+	 */
 	e820__memory_setup();
 	parse_setup_data();
 
@@ -1243,6 +1255,9 @@ void __init setup_arch(char **cmdline_p)
 
 	/*
 	 * Read APIC and some other early information from ACPI tables.
+	 *
+	 * 在ACPI表中读取相关硬件信息，其中包括mdat表（用于记录ioapic和lapic的
+	 * 相关信息）
 	 */
 	acpi_boot_init();
 	sfi_init();

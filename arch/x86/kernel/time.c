@@ -107,6 +107,8 @@ static __init void x86_late_time_init(void)
 	/*
 	 * After PIT/HPET timers init, set up the final interrupt mode for
 	 * delivering IRQs.
+	 *
+	 * 这里面会配置LAPIC和IOAPIC，这里apic_intr_mode_init
 	 */
 	x86_init.irqs.intr_mode_init();
 	tsc_init();

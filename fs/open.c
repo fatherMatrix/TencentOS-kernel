@@ -570,6 +570,9 @@ retry_deleg:
  	 * ATTR_MODE代表要改变mode，ATTR_CTIME代表要改变ChangeTime
  	 */
 	newattrs.ia_valid = ATTR_MODE | ATTR_CTIME;
+	/*
+	 * 真正的修改操作在这里面
+	 */
 	error = notify_change(path->dentry, &newattrs, &delegated_inode);
 out_unlock:
 	inode_unlock(inode);

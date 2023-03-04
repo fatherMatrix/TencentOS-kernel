@@ -107,6 +107,9 @@ static int kvm_cpu_get_extint(struct kvm_vcpu *v)
 	}
 
 	if (!lapic_in_kernel(v))
+		/*
+		 * 这种情况对kvm_queue_interrupt来说不是白白转了一圈吗？
+		 */
 		return v->arch.interrupt.nr;
 
 	if (irqchip_split(v->kvm)) {

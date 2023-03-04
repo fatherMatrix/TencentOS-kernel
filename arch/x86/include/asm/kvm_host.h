@@ -865,8 +865,18 @@ struct kvm_hv {
 };
 
 enum kvm_irqchip_mode {
+	/*
+	 * 由qemu模拟全部
+	 */
 	KVM_IRQCHIP_NONE,
+	/*
+	 * 由kvm模拟全部
+	 */
 	KVM_IRQCHIP_KERNEL,       /* created with KVM_CREATE_IRQCHIP */
+	/*
+	 * 由qemu模拟pic和ioapic；
+	 * 由kvm模拟lapic
+	 */
 	KVM_IRQCHIP_SPLIT,        /* created with KVM_CAP_SPLIT_IRQCHIP */
 };
 

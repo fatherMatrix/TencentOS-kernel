@@ -360,6 +360,9 @@ EXPORT_SYMBOL_GPL(kvm_intr_is_single_vcpu);
 	IOAPIC_ROUTING_ENTRY(irq), PIC_ROUTING_ENTRY(irq)
 
 static const struct kvm_irq_routing_entry default_routing[] = {
+	/*
+	 * 前16个成员既有PIC又有IOAPIC
+	 */
 	ROUTING_ENTRY2(0), ROUTING_ENTRY2(1),
 	ROUTING_ENTRY2(2), ROUTING_ENTRY2(3),
 	ROUTING_ENTRY2(4), ROUTING_ENTRY2(5),
@@ -368,6 +371,9 @@ static const struct kvm_irq_routing_entry default_routing[] = {
 	ROUTING_ENTRY2(10), ROUTING_ENTRY2(11),
 	ROUTING_ENTRY2(12), ROUTING_ENTRY2(13),
 	ROUTING_ENTRY2(14), ROUTING_ENTRY2(15),
+	/*
+	 * 后面8个只有IOAPIC
+	 */
 	ROUTING_ENTRY1(16), ROUTING_ENTRY1(17),
 	ROUTING_ENTRY1(18), ROUTING_ENTRY1(19),
 	ROUTING_ENTRY1(20), ROUTING_ENTRY1(21),

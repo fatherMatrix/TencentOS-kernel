@@ -614,6 +614,11 @@ asmlinkage __visible void __init start_kernel(void)
 	 * 目的是为了对下面setup_arch中的某些操作进行安全检查
 	 */
 	early_security_init();
+	/*
+	 * 设置体系结构相关的数据结构，包括：
+	 * - 解析MADT表，获取中断控制器和中断源的拓扑信息
+	 * - 
+	 */
 	setup_arch(&command_line);
 	setup_command_line(command_line);
 	setup_nr_cpu_ids();
@@ -778,6 +783,9 @@ asmlinkage __visible void __init start_kernel(void)
 	acpi_early_init();
 	/*
 	 * 此函数指针在time_init中被赋值
+	 *
+	 * 在x86中是x86_late_time_init，里面不仅包含了时间子系统的初始化，还包
+	 * 含了IOAPIC和LAPIC的初始化。
 	 */
 	if (late_time_init)
 		late_time_init();

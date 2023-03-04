@@ -81,11 +81,21 @@ int kvm_set_irq(struct kvm *kvm, int irq_source_id, u32 irq, int level,
 	 * writes to the unused one.
 	 */
 	idx = srcu_read_lock(&kvm->irq_srcu);
+	/*
+	 * 返回的i是此irq对应的芯片数量（因为前16个中断PIC和IOAPIC都有）；
+	 * 对应的中断路由表项存储到irq_set中
+	 */
 	i = kvm_irq_map_gsi(kvm, irq_set, irq);
 	srcu_read_unlock(&kvm->irq_srcu, idx);
 
+	/*
+	 * 对上面返回的所有可能的irqchip都调用一次set回调；
+	 */
 	while (i--) {
 		int r;
+		/*
+		 * 对于PIC，该set函数为kvm_pic_set_irq；
+		 */
 		r = irq_set[i].set(&irq_set[i], kvm, irq_source_id, level,
 				   line_status);
 		if (r < 0)
@@ -210,6 +220,11 @@ int kvm_set_irq_routing(struct kvm *kvm,
 				goto free_entry;
 			break;
 		}
+		/*
+		 * 将kvm_irq_routing_entry转换为kvm_kernel_irq_routing_entry，
+		 * 包括set回调的设置；并将后者链入kvm_irq_route_table的map数组
+		 * 中。
+		 */
 		r = setup_routing_entry(kvm, new, e, ue);
 		if (r)
 			goto free_entry;

@@ -1462,6 +1462,9 @@ void __init apic_intr_mode_init(void)
 {
 	bool upmode = IS_ENABLED(CONFIG_UP_LATE_INIT);
 
+	/*
+	 * 切换进对应的IOAPIC模式
+	 */
 	switch (apic_intr_mode) {
 	case APIC_PIC:
 		pr_info("APIC: Keep in PIC mode(8259)\n");
@@ -1615,6 +1618,8 @@ static void setup_local_APIC(void)
 	/*
 	 * If this comes from kexec/kcrash the APIC might be enabled in
 	 * SPIV. Soft disable it before doing further initialization.
+	 *
+	 * 设置伪中断相关
 	 */
 	value = apic_read(APIC_SPIV);
 	value &= ~APIC_SPIV_APIC_ENABLED;
@@ -1639,6 +1644,8 @@ static void setup_local_APIC(void)
 	 * Intel recommends to set DFR, LDR and TPR before enabling
 	 * an APIC.  See e.g. "AP-388 82489DX User's Manual" (Intel
 	 * document number 292116).  So here it goes...
+	 *
+	 * 设置Local destination register
 	 */
 	apic->init_apic_ldr();
 
@@ -2576,8 +2583,14 @@ static void __init apic_bsp_setup(bool upmode)
 	connect_bsp_APIC();
 	if (upmode)
 		apic_bsp_up_setup();
+	/*
+	 * 调用体系结构自定义的方法设置LAPIC中的多个寄存器
+	 */
 	setup_local_APIC();
 
+	/*
+	 * 使能并设置IOAPIC
+	 */
 	enable_IO_APIC();
 	end_local_APIC_setup();
 	irq_remap_enable_fault_handling();

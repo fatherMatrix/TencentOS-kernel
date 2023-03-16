@@ -77,15 +77,30 @@ static void __init setup_default_timer_irq(void)
 /* Default timer init function */
 void __init hpet_time_init(void)
 {
+	/*
+	 * 反正devcloud中的内核是开启hpet的
+	 *
+	 * 如果hpet使能成功，返回1，直接跳过分支，不再设置pit；
+	 * 如果hpet使能失败，返回0，进入此分支，设置pit；
+	 */
 	if (!hpet_enable()) {
+		/*
+		 * 如果pit初始化成功，返回true，继续往下走；
+		 * 如果pit初始化失败，返回false，直接返回；
+		 */
 		if (!pit_timer_init())
 			return;
 	}
 
 	/*
-	 * 完成将PIT设置为BSP的本地tick设备后，内核在setup_default_timer_irq中
-	 * 完成中断处理函数的设定并使能中断信号。之后BSP在初始化过程中有会周期
-	 * 性地收到PIT产生的0号时钟中断，并进行中断处理
+	 * 上面本质上就是在HPET和PIT中选出一个可以用的--时钟事件源--赋值给全局
+	 * 变量global_clock_event
+	 */
+
+	/*
+	 * 完成将HPET或PIT设置为BSP的本地tick设备后，内核在
+	 * setup_default_timer_irq中完成中断处理函数的设定并使能中断信号。之后
+	 * BSP在初始化过程中有会周期性地收到0号时钟中断，并进行中断处理
 	 */
 	setup_default_timer_irq();
 }
@@ -95,6 +110,13 @@ static __init void x86_late_time_init(void)
 	/*
 	 * Before PIT/HPET init, select the interrupt mode. This is required
 	 * to make the decision whether PIT should be initialized correct.
+	 *
+	 * 这里面会选择irq的模式：
+	 * - PIC
+	 * - virtual wire
+	 * - symmetric
+	 *
+	 * 对应apic_intr_mode_select
 	 */
 	x86_init.irqs.intr_mode_select();
 
@@ -108,7 +130,9 @@ static __init void x86_late_time_init(void)
 	 * After PIT/HPET timers init, set up the final interrupt mode for
 	 * delivering IRQs.
 	 *
-	 * 这里面会配置LAPIC和IOAPIC，这里apic_intr_mode_init
+	 * 这里面会配置LAPIC和IOAPIC
+	 * 
+	 * 对应apic_intr_mode_init
 	 */
 	x86_init.irqs.intr_mode_init();
 	tsc_init();

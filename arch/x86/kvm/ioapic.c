@@ -214,6 +214,10 @@ static int ioapic_set_irq(struct kvm_ioapic *ioapic, unsigned int irq,
 		}
 	}
 
+	/*
+	 * 前面都是进行硬件规范规定的一些检查，当检查通过后，说明的确需要分发一
+	 * 个中断，此时调用ioapic_service函数
+	 */
 	ret = ioapic_service(ioapic, irq, line_status);
 
 out:
@@ -591,6 +595,9 @@ static void kvm_ioapic_reset(struct kvm_ioapic *ioapic)
 	cancel_delayed_work_sync(&ioapic->eoi_inject);
 	for (i = 0; i < IOAPIC_NUM_PINS; i++)
 		ioapic->redirtbl[i].fields.mask = 1;
+	/*
+	 * 设置MMIO地址，这个地址常量是个默认的地址常量
+	 */
 	ioapic->base_address = IOAPIC_DEFAULT_BASE_ADDRESS;
 	ioapic->ioregsel = 0;
 	ioapic->irr = 0;
@@ -610,16 +617,28 @@ int kvm_ioapic_init(struct kvm *kvm)
 	struct kvm_ioapic *ioapic;
 	int ret;
 
+	/*
+	 * 分配内存空间
+	 */
 	ioapic = kzalloc(sizeof(struct kvm_ioapic), GFP_KERNEL_ACCOUNT);
 	if (!ioapic)
 		return -ENOMEM;
 	spin_lock_init(&ioapic->lock);
 	INIT_DELAYED_WORK(&ioapic->eoi_inject, kvm_ioapic_eoi_inject_work);
 	kvm->arch.vioapic = ioapic;
+	/*
+	 * 说是reset，但其实就是初始化
+	 */
 	kvm_ioapic_reset(ioapic);
+	/*
+	 * 设置针对io设备的读函数和写函数
+	 */
 	kvm_iodevice_init(&ioapic->dev, &ioapic_mmio_ops);
 	ioapic->kvm = kvm;
 	mutex_lock(&kvm->slots_lock);
+	/*
+	 * 将该设备注册到KVM_MMIO总线上
+	 */
 	ret = kvm_io_bus_register_dev(kvm, KVM_MMIO_BUS, ioapic->base_address,
 				      IOAPIC_MEM_LENGTH, &ioapic->dev);
 	mutex_unlock(&kvm->slots_lock);

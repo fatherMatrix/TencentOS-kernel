@@ -7731,6 +7731,9 @@ static int inject_pending_event(struct kvm_vcpu *vcpu)
 					    false);
 			/*
 			 * 进行实际的中断注入动作，对应的函数是vmx_inject_irq
+			 *
+			 * 这里写入的是VM-entry interrupt information field，这
+			 * 是最原始的一种中断注入方式
 			 */
 			kvm_x86_ops->set_irq(vcpu);
 		}
@@ -8201,6 +8204,7 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 
 		/*
 		 * 进行中断注入
+		 * - 如果顺利注入，则返回0
 		 */
 		if (inject_pending_event(vcpu) != 0)
 			req_immediate_exit = true;
@@ -8229,6 +8233,9 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 			WARN_ON(vcpu->arch.exception.pending);
 		}
 
+		/*
+		 *
+		 */ 
 		if (kvm_lapic_enabled(vcpu)) {
 			update_cr8_intercept(vcpu);
 			kvm_lapic_sync_to_vapic(vcpu);
@@ -8279,6 +8286,18 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 	/*
 	 * This handles the case where a posted interrupt was
 	 * notified with kvm_vcpu_kick.
+	 *
+	 * 对应kvm_vcpu_trigger_posted_interrupt函数返回-1的情况，因为APICv中仅
+	 * 设置了pir但没有设置irr，所以这里需要做一下同步操作，将pir同步到v-irr
+	 * 中。
+	 *
+	 * 这里的sync_pir_to_irr对应的是vmx_sync_pir_to_irr函数
+	 *
+	 * 里面其实就是根据pir中的内容更新了v-irr中相应的位，然后为了符合规则，
+	 * 也顺便更新了v-rvi中的内容。
+	 * 之所以可以这样做，是因为这个时候该vmcs对应的vcpu是没有在guest态运行
+	 * 的，所以该修改是安全且有效的；如果对已经处于guest态vcpu的vmcs如此操
+	 * 作则会触发未定义行为(intel sdm v3 24.11.4)；
 	 */
 	if (kvm_lapic_enabled(vcpu) && vcpu->arch.apicv_active)
 		kvm_x86_ops->sync_pir_to_irr(vcpu);
@@ -9360,6 +9379,12 @@ void kvm_vcpu_reset(struct kvm_vcpu *vcpu, bool init_event)
 
 	vcpu->arch.ia32_xss = 0;
 
+	/*
+	 * 调用vmx_vcpu_reset，包括：
+	 * - ...
+	 * - 设置virtual-APIC page
+	 * - ...
+	 */
 	kvm_x86_ops->vcpu_reset(vcpu, init_event);
 }
 
@@ -9557,6 +9582,9 @@ int kvm_arch_vcpu_init(struct kvm_vcpu *vcpu)
 
 	if (irqchip_in_kernel(vcpu->kvm)) {
 		vcpu->arch.apicv_active = kvm_x86_ops->get_enable_apicv(vcpu);
+		/*
+		 * 创建LAPIC
+		 */
 		r = kvm_create_lapic(vcpu, lapic_timer_advance_ns);
 		if (r < 0)
 			goto fail_mmu_destroy;

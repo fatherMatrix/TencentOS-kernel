@@ -53,6 +53,9 @@ static struct irqaction irq2 = {
 	.flags = IRQF_NO_THREAD,
 };
 
+/*
+ * 每个中断号各自对应的irq_desc结构体的指针
+ */
 DEFINE_PER_CPU(vector_irq_t, vector_irq) = {
 	[0 ... NR_VECTORS - 1] = VECTOR_UNUSED,
 };
@@ -67,11 +70,16 @@ void __init init_ISA_irqs(void)
 	 *
 	 * On some 32-bit UP machines, whose APIC has been disabled by BIOS
 	 * and then got re-enabled by "lapic", it hangs at boot time without this.
+	 *
+	 * 这里是先设置virtual-wire mode
 	 */
 	init_bsp_APIC();
 
 	legacy_pic->init(0);
 
+	/*
+	 * 对isa中断源设置电流层处理函数
+	 */
 	for (i = 0; i < nr_legacy_irqs(); i++)
 		irq_set_chip_and_handler(i, chip, handle_level_irq);
 }
@@ -89,6 +97,9 @@ void __init init_IRQ(void)
 	 * irq's migrate etc.
 	 *
 	 * 0x30~0x3f中断向量对应于0~15中断号
+	 *
+	 * irq_to_desc是从基数树中获取irq_desc结构体的指针；vector_irq中也是包含
+	 * 了irq(index)到irq_desc指针(item)的映射；
 	 */
 	for (i = 0; i < nr_legacy_irqs(); i++)
 		per_cpu(vector_irq, 0)[ISA_IRQ_VECTOR(i)] = irq_to_desc(i);
@@ -109,6 +120,14 @@ void __init native_init_IRQ(void)
 	 */
 	x86_init.irqs.pre_vector_init();
 
+	/*
+	 * 设置idt表中对应的项：
+	 * - LAPIC中的
+	 *   x 时钟中断
+	 *   x ...
+	 * - IOAPIC中的
+	 *   x ...
+	 */
 	idt_setup_apic_and_irq_gates();
 	lapic_assign_system_vectors();
 

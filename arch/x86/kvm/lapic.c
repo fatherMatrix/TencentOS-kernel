@@ -1058,6 +1058,12 @@ static int __apic_accept_irq(struct kvm_lapic *apic, int delivery_mode,
 						       apic->regs + APIC_TMR);
 		}
 
+		/*
+		 * 如果APICv虚拟化没有开启，则下面会返回-1，走kick的路线注入中断;
+		 * 如果APICv虚拟化开启了，但是系统不是SMP，而是UP，那么这里返回
+		 * 的也是0；只不过在返回0之前调用了kick，在vcpu_enter_guest中实
+		 * 际进入non-root mode前，做了pir向irr的同步工作；
+		 */
 		if (kvm_x86_ops->deliver_posted_interrupt(vcpu, vector)) {
 			kvm_lapic_set_irr(vector, apic);
 			kvm_make_request(KVM_REQ_EVENT, vcpu);
@@ -2290,6 +2296,9 @@ int kvm_create_lapic(struct kvm_vcpu *vcpu, int timer_advance_ns)
 
 	vcpu->arch.apic = apic;
 
+	/*
+	 * 分配virtual-APIC page
+	 */
 	apic->regs = (void *)get_zeroed_page(GFP_KERNEL_ACCOUNT);
 	if (!apic->regs) {
 		printk(KERN_ERR "malloc apic regs error for vcpu %x\n",
@@ -2577,10 +2586,20 @@ void kvm_lapic_sync_to_vapic(struct kvm_vcpu *vcpu)
 	if (!test_bit(KVM_APIC_CHECK_VAPIC, &vcpu->arch.apic_attention))
 		return;
 
+	/*
+	 * task priority register相关
+	 * 从virtual-APIC page中读取TPR寄存器的值
+	 */
 	tpr = kvm_lapic_get_reg(apic, APIC_TASKPRI) & 0xff;
+	/*
+	 * 从virtual-APIC page中读取IRR寄存器中最大的那个中断向量
+	 */
 	max_irr = apic_find_highest_irr(apic);
 	if (max_irr < 0)
 		max_irr = 0;
+	/*
+	 * 从virtual-APIC page中读取ISR寄存器中最大的那个中断向量
+	 */
 	max_isr = apic_find_highest_isr(apic);
 	if (max_isr < 0)
 		max_isr = 0;

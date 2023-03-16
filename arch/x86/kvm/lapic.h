@@ -54,6 +54,8 @@ struct kvm_lapic {
 	 * APIC register page.  The layout matches the register layout seen by
 	 * the guest 1:1, because it is accessed by the vmx microcode.
 	 * Note: Only one register, the TPR, is used by the microcode.
+	 *
+	 * 这个指向virtual-APIC page
 	 */
 	void *regs;
 	gpa_t vapic_addr;

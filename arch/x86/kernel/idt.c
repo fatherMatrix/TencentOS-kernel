@@ -70,6 +70,11 @@ static const __initconst struct idt_data early_idts[] = {
  * set up TSS.
  */
 static const __initconst struct idt_data def_idts[] = {
+/*
+ * 这里面的符号都是在arch/x86/entry/entry_64.S中通过idtentry宏定义的
+ *
+ * 这里面包含的都是exception相关的最直接的处理函数
+ */
 	INTG(X86_TRAP_DE,		divide_error),
 	INTG(X86_TRAP_NMI,		nmi),
 	INTG(X86_TRAP_BR,		bounds),
@@ -108,6 +113,10 @@ static const __initconst struct idt_data def_idts[] = {
  * The APIC and SMP idt entries
  */
 static const __initconst struct idt_data apic_idts[] = {
+/*
+ * 这里面包含的都是LAPIC上中断源最直接的处理函数
+ * - IOAPIC上的处理函数是common_interrupt，跟LAPIC走的不是同一个路径
+ */
 #ifdef CONFIG_SMP
 	INTG(RESCHEDULE_VECTOR,		reschedule_interrupt),
 	INTG(CALL_FUNCTION_VECTOR,	call_function_interrupt),
@@ -309,14 +318,51 @@ void __init idt_setup_apic_and_irq_gates(void)
 	int i = FIRST_EXTERNAL_VECTOR;
 	void *entry;
 
+	/*
+	 * 此函数用于设置idt表中的项，主要是处理函数（最直接的处理函数）的地址，
+	 * 这些处理函数的声明都在arch/x86/entry/entry_64.S中。包括：
+	 * - LAPIC中的
+	 * - IOAPIC中的
+	 * - 异常？
+	 *   x 异常当然是在trap_init中啊
+	 */
+
+	/*
+	 * 这里对LAPIC中的一些中断源的idt项进行设置；
+	 *       ^^^^^
+	 *
+	 * 值得注意的是，这里面并不包含IOAPIC那边的中断源；IOAPIC的在下面；
+	 */
 	idt_setup_from_table(idt_table, apic_idts, ARRAY_SIZE(apic_idts), true);
 
+	/*
+	 * 这里对IOAPIC连接的中断源的idt项进行设置；
+	 *       ^^^^^^
+	 *
+	 * irq_entries_start是汇编声明的，其中对外部的中断循环依次声明了idt中对
+	 * 应的处理函数（最直接的那个处理函数，其实是个包裹函数，用于压栈vector
+	 * 并调用通用的common_interrupt）。这里需要把该处理函数的地址依次设置给
+	 * 对应的irq
+	 *
+	 * 值得注意的是，对于外部中断，通用的过程就是：
+	 * hardware interrupt
+	 *   push ~vector + 0x80	// 位于irq_entries_start + i * 8
+	 *   common_interrupt
+	 *
+	 * 这里的i代表的是vector
+	 * - 要仔细区分vector，irq，gsi，pin
+	 */
 	for_each_clear_bit_from(i, system_vectors, FIRST_SYSTEM_VECTOR) {
 		entry = irq_entries_start + 8 * (i - FIRST_EXTERNAL_VECTOR);
 		set_intr_gate(i, entry);
 	}
 
 #ifdef CONFIG_X86_LOCAL_APIC
+	/*
+	 * 这里不要慌，因为处于spurious_entries_start范围（参见其定义）内的一些
+	 * idt项已经在上面IOAPIC部分被设置了，所以该位置的system_vectors不满足
+	 * for循环的条件，因此不会进入；也就是说，相关的处理函数声明了，但未使用
+	 */
 	for_each_clear_bit_from(i, system_vectors, NR_VECTORS) {
 		/*
 		 * Don't set the non assigned system vectors in the

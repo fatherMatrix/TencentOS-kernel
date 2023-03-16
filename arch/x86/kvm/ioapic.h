@@ -61,7 +61,19 @@ struct rtc_status {
 union kvm_ioapic_redirect_entry {
 	u64 bits;
 	struct {
+		/*
+		 * 该中断对应的中断向量号
+		 */
 		u8 vector;
+		/*
+		 * 决定该中断怎么发送到cpu，取值为：
+		 * - APIC_DM_LOWEST
+		 * - APIC_DM_FIXED
+		 * - APIC_DM_NMI
+		 * - ...
+		 *
+		 * 这几个取值的含义可以看intel的文档，有详细说明
+		 */
 		u8 delivery_mode:3;
 		u8 dest_mode:1;
 		u8 delivery_status:1;
@@ -76,14 +88,38 @@ union kvm_ioapic_redirect_entry {
 };
 
 struct kvm_ioapic {
+	/*
+	 * 表示IOAPIC设备的MMIO地址
+	 */
 	u64 base_address;
 	u32 ioregsel;
 	u32 id;
 	u32 irr;
 	u32 pad;
+	/*
+	 * IOAPIC的重定向表，包括：
+	 * - 中断向量号
+	 * - 触发模式
+	 * - 发送到LAPIC的id
+	 * - ...
+	 *
+	 * PIC的中断号与中断向量是固定映射，通过ICW1寄存器配置IRQ0的中断向量，
+	 * 其余IRQ的中断向量在IRQ0的中断向量基础上线性增加。
+	 * IOAPCI的每一个中断号（即每一个引脚）都可以通过中断重定向表单独配置其
+	 * 对应的中断向量。
+	 */
 	union kvm_ioapic_redirect_entry redirtbl[IOAPIC_NUM_PINS];
+	/*
+	 * 表示中断线的状态
+	 */
 	unsigned long irq_states[IOAPIC_NUM_PINS];
+	/*
+	 * 表示IOAPIC对应的设备
+	 */
 	struct kvm_io_device dev;
+	/*
+	 * 表示对应的虚拟机
+	 */
 	struct kvm *kvm;
 	void (*ack_notifier)(void *opaque, int irq);
 	spinlock_t lock;

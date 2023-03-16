@@ -20,6 +20,9 @@
 static struct apic apic_physflat;
 static struct apic apic_flat;
 
+/*
+ * 全局apic结构
+ */
 struct apic *apic __ro_after_init = &apic_flat;
 EXPORT_SYMBOL_GPL(apic);
 

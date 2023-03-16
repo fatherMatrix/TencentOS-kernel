@@ -322,8 +322,9 @@ struct kvm_vcpu {
 	/* 
 	 * 体系结构相关的字段，包括
 	 * - 常规寄存器
-	 * - cr寄存器等
-	 * - 中断和异常相关
+	 * - cr寄存器
+	 * - LAPIC的寄存器
+	 * - ...
 	 */
 	struct kvm_vcpu_arch arch;
 	struct dentry *debugfs_dentry;

@@ -102,6 +102,9 @@ struct mp_ioapic_gsi {
 	u32 gsi_end;
 };
 
+/*
+ * 所有IOAPIC都会保存在这个数组中
+ */
 static struct ioapic {
 	/*
 	 * # of IRQ routing registers
@@ -177,7 +180,11 @@ int nr_ioapics;
 /* The one past the highest gsi number used */
 u32 gsi_top;
 
-/* MP IRQ source entries */
+/* 
+ * MP IRQ source entries
+ *
+ * 通过MADT表获得的中断源信息数组
+ */
 struct mpc_intsrc mp_irqs[MAX_IRQ_SOURCES];
 
 /* # of MP IRQ source entries */
@@ -1086,6 +1093,10 @@ static int mp_map_pin_to_irq(u32 gsi, int idx, int ioapic, int pin,
 
 static int pin_2_irq(int idx, int ioapic, int pin, unsigned int flags)
 {
+	/*
+	 * 将管脚号转换为gsi
+	 * - 因为pin是在某个芯片上的管脚，gsi是该pin所属芯片的base+pin。
+	 */
 	u32 gsi = mp_pin_to_gsi(ioapic, pin);
 
 	/*
@@ -1224,6 +1235,9 @@ static void __init setup_IO_APIC_irqs(void)
 	apic_printk(APIC_VERBOSE, KERN_DEBUG "init IO_APIC IRQs\n");
 
 	for_each_ioapic_pin(ioapic, pin) {
+		/*
+		 * idx是pin对应的IRQ在mp_irqs数组中的下标
+		 */
 		idx = find_irq_entry(ioapic, pin, mp_INT);
 		if (idx < 0)
 			apic_printk(APIC_VERBOSE,
@@ -2388,7 +2402,14 @@ void __init setup_IO_APIC(void)
          */
 	x86_init.mpparse.setup_ioapic_ids();
 
+	/*
+	 * 如果系统使用的是APIC BUS（P6 family），该函数广播一个Level触发、类型
+	 * 为INIT的IPI，将各LAPIC的Arb同步为其自身的LAPIC ID
+	 */
 	sync_Arb_IDs();
+	/*
+	 * 重中之重，设置PRT表（中断重定向表）
+	 */
 	setup_IO_APIC_irqs();
 	init_IO_APIC_traps();
 	if (nr_legacy_irqs())

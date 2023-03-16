@@ -3851,13 +3851,49 @@ static int vmx_deliver_posted_interrupt(struct kvm_vcpu *vcpu, int vector)
 	if (!vcpu->arch.apicv_active)
 		return -1;
 
+	/*
+	 * 对vmx->pi_desc中pir的第vector位置1，并返回该位原来的值
+	 */
 	if (pi_test_and_set_pir(vector, &vmx->pi_desc))
 		return 0;
 
-	/* If a previous notification has sent the IPI, nothing to do.  */
+	/* 
+	 * If a previous notification has sent the IPI, nothing to do.
+	 *
+	 * 这里设置的是vmx->pi_desc->control，这里对应的是posted-interrupt desc
+	 * 中的Outstanding notification位。intel sdm v3中对该位的描述为：
+	 * - If this bit is set, there is a notification outstanding for one or
+	 *   more posted interrupts in bits 255:0
+	 *
+	 * 如果原来该位是0，说明LAPIC已经接收过正确的IPI中断，cpu硬件上对该位置0
+	 * 了（详见intel sdm v3 29.6）。这意味着我们刚才设置的pir还没有被guest
+	 * 注意到，需要继续往下走；
+	 *
+	 * 如果原来该位是1，说明:
+	 * - LAPIC还没有接收过正确的IPI中断(posted-interrupt notification vector)
+	 * - 此时还有另外的一个内核路径已经往pir中填写了中断并已经执行完了下面的
+	 *   set_on动作（即这个返回的1是另一个内核路径设置完成的）；
+	 * 此时我们当前的内核路径只管返回即可，因为另一个已经执行完下面set_on动
+	 * 作的内核路径的set_on动作返回的肯定是0，所以另一个内核路径会继续往下
+	 * 走，执行posted-interrupt的注入动作，并稍带着将我们设置的pir也带进去。
+	 */
 	if (pi_test_and_set_on(&vmx->pi_desc))
 		return 0;
 
+	/*
+	 * kvm_vcpu_trigger_posted_interrupt主要的工作就是向目标cpu发送特定的IPI
+	 * 中断（posted-interrupt notification vector）。
+	 * - 如果发送成功，则返回true，此时不会执行kick操作，走到最下面返回0；
+	 * - 如果发送失败，则返回false，此时执行kick操作，将cpu退回root mode;
+	 *   x 这种情况的发生意味着当前系统不是SMP，无法发送IPI中断，只能使唯一
+	 *     的cpu退出到root mode。
+	 *   x 要注意的是，这种情况下在vcpu_enter_guest前，并没有调用
+	 *     kvm_lapic_set_irr，而是通过sync_pir_to_irr机制将PIR中的内容同步
+	 *     给IRR;
+	 *   x 之所以在这种情况下没有采用VM-entry interrupt information field进
+	 *     行中断注入，或许是因为pir中可能有多个中断，而VM-entry interrupt
+	 *     information每次只能注入一个中断；
+	 */
 	if (!kvm_vcpu_trigger_posted_interrupt(vcpu, false))
 		kvm_vcpu_kick(vcpu);
 
@@ -4424,6 +4460,27 @@ static void vmx_inject_irq(struct kvm_vcpu *vcpu)
 		intr |= INTR_TYPE_EXT_INTR;
 	/*
 	 * 将32位的intr变量写入VM-entry interruption-information区域
+	 *
+	 * +---------+------------------------------------------------------+
+	 * |  0 ~ 7  | Vector of interrupt or exception                     |
+	 * +---------+------------------------------------------------------+ 
+	 * |  8 ~ 10 | Interruption type:                                   |
+	 * |         |  0: External interrupt                               |
+	 * |         |  1: Reserved                                         |
+	 * |         |  2: Non-maskable interrupt (NMI)                     |
+	 * |         |  3: Hardware exception (e.g,. #PF)                   |
+	 * |         |  4: Software interrupt (INT n)                       |
+	 * |         |  5: Privileged software exception (INT1)             |
+	 * |         |  6: Software exception (INT3 or INTO) 7: Other event |
+	 * +---------+------------------------------------------------------+
+	 * |   11    | Deliver error code                                   |
+	 * |         |  0: do not deliver                                   |
+	 * |         |  1: deliver                                          |
+	 * +---------+------------------------------------------------------+
+	 * | 30 ~ 12 | Reserved                                             |
+	 * +---------+------------------------------------------------------+
+	 * |   31    | Valid                                                |
+	 * +---------+------------------------------------------------------+
 	 */
 	vmcs_write32(VM_ENTRY_INTR_INFO_FIELD, intr);
 

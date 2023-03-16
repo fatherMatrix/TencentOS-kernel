@@ -117,8 +117,8 @@ struct mpc_intsrc {
 	unsigned short irqflag;
 	unsigned char srcbus;
 	unsigned char srcbusirq;
-	unsigned char dstapic;
-	unsigned char dstirq;
+	unsigned char dstapic;		/* 该中断连接到的IOAPIC */
+	unsigned char dstirq;		/* 该中断连接到IOAPIC的管脚号 */
 };
 
 enum mp_irq_source_types {

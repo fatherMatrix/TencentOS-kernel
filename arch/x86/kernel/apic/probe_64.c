@@ -21,6 +21,9 @@ void __init default_setup_apic_routing(void)
 
 	enable_IR_x2apic();
 
+	/*
+	 * 这里就开始匹配apic对应的驱动了？
+	 */
 	for (drv = __apicdrivers; drv < __apicdrivers_end; drv++) {
 		if ((*drv)->probe && (*drv)->probe()) {
 			if (apic != *drv) {

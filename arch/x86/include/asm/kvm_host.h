@@ -545,6 +545,13 @@ struct kvm_vcpu_arch {
 	 * rip and regs accesses must go through
 	 * kvm_{register,rip}_{read,write} functions.
 	 */
+
+	/*
+	 * regs中是常规寄存器
+	 * - rax, r8, ...
+	 * - rsp, rbp, ...
+	 * - rip
+	 */
 	unsigned long regs[NR_VCPU_REGS];
 	u32 regs_avail;
 	u32 regs_dirty;

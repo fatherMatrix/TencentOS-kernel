@@ -858,6 +858,9 @@ void __init trap_init(void)
 	/* Init cpu_entry_area before IST entries are set up */
 	setup_cpu_entry_areas();
 
+	/*
+	 * 设置idt中的exception部分
+	 */
 	idt_setup_traps();
 
 	/*
@@ -876,6 +879,9 @@ void __init trap_init(void)
 
 	idt_setup_ist_traps();
 
+	/*
+	 * 对应x86_init_noop，屁都没做
+	 */
 	x86_init.irqs.trap_init();
 
 	idt_setup_debugidt_traps();

@@ -1392,9 +1392,16 @@ void __init enable_IO_APIC(void)
 	int i8259_apic, i8259_pin;
 	int apic, pin;
 
+	/*
+	 * 如果设置了noapic，则会将nr_ioapics设置为0，这在后面setup_IO_APIC中会
+	 * 使其直接退出；
+	 */
 	if (skip_ioapic_setup)
 		nr_ioapics = 0;
 
+	/*
+	 * 如果使能了noapic，这里就直接退出了
+	 */
 	if (!nr_legacy_irqs() || !nr_ioapics)
 		return;
 
@@ -2393,6 +2400,9 @@ void __init setup_IO_APIC(void)
 {
 	int ioapic;
 
+	/*
+	 * 使能了noapic后，这里直接退出了，没有设置中断重定向表
+	 */
 	if (skip_ioapic_setup || !nr_ioapics)
 		return;
 

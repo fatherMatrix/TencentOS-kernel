@@ -1623,6 +1623,9 @@ static void setup_local_APIC(void)
 	int cpu = smp_processor_id();
 	unsigned int value;
 
+	/*
+	 * 
+	 */
 	if (disable_apic) {
 		disable_ioapic_support();
 		return;
@@ -1751,6 +1754,9 @@ static void setup_local_APIC(void)
 	 * TODO: set up through-local-APIC from through-I/O-APIC? --macro
 	 */
 	value = apic_read(APIC_LVT0) & APIC_LVT_MASKED;
+	/*
+	 * 只对0号cpu起作用，其实就是对0号cpu的pic mode开放LAPIC LVT LINT0
+	 */
 	if (!cpu && (pic_mode || !value || skip_ioapic_setup)) {
 		value = APIC_DM_EXTINT;
 		apic_printk(APIC_VERBOSE, "enabled ExtINT on CPU#%d\n", cpu);
@@ -2604,6 +2610,9 @@ static void __init apic_bsp_setup(bool upmode)
 {
 	/*
 	 * 该函数只对32位cpu生效，那64位的怎么办？
+	 * - 32位上才有imcr寄存器，用于控制cpu的中断引脚接收PIC还是LAPIC；
+	 * - 64位上pic mode也是接到LAPIC上的，不想用pic mode就直接把bsp LAPIC的
+	 *   LVT LINT0的mask位置1就可以了；
 	 */
 	connect_bsp_APIC();
 	if (upmode)

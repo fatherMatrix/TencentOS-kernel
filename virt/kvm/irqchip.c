@@ -153,8 +153,14 @@ static int setup_routing_entry(struct kvm *kvm,
 		if (ei->type != KVM_IRQ_ROUTING_IRQCHIP ||
 		/* 上一句通过了，说明这个gsi对应的handler链表已有元素且不为IRQCHIP */
 		    ue->type != KVM_IRQ_ROUTING_IRQCHIP ||
+		/* 上一句通过了，说明用户传递过来的项不是IRQCHIP */
 		    ue->u.irqchip.irqchip == ei->irqchip.irqchip)
+		/* 上一句通过了，说明两个项都不是IRQCHIP且芯片相同，比如完全重复的MSI */
 			return -EINVAL;
+
+	/*
+	 * 同一个GSI，一个是IRQCHIP，一个是MSI，是合法的；-- kvmtool就是这样的
+	 */
 
 	e->gsi = gsi;
 	e->type = ue->type;

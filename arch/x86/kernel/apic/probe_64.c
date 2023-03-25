@@ -35,6 +35,9 @@ void __init default_setup_apic_routing(void)
 		}
 	}
 
+	/*
+	 * 对应kvm_apic_init
+	 */
 	if (x86_platform.apic_post_init)
 		x86_platform.apic_post_init();
 }

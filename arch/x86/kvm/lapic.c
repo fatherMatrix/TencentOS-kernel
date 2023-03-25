@@ -1039,6 +1039,9 @@ static int __apic_accept_irq(struct kvm_lapic *apic, int delivery_mode,
 			break;
 
 		/* FIXME add logic for vcpu on reset */
+		/*
+		 * 如果这里还没有开启，则直接退出，因为这个时候guest还处于pic mode
+		 */
 		if (unlikely(!apic_enabled(apic)))
 			break;
 
@@ -2353,6 +2356,13 @@ int kvm_apic_accept_pic_intr(struct kvm_vcpu *vcpu)
 
 	if (!kvm_apic_hw_enabled(vcpu->arch.apic))
 		r = 1;
+	/*
+	 * 多核系统上只会有一个核对应的LAPIC的LVT0的delivery mode设置为了
+	 * EXTINT模式，用于模拟8259a
+	 *
+	 * 这里会检查LAPIC海要不要接受pic的中断，如果不接受，本函数会返回0，外
+	 * 面就不会执行kvm_make_request和kvm_vcpu_kick；
+	 */
 	if ((lvt0 & APIC_LVT_MASKED) == 0 &&
 	    GET_APIC_DELIVERY_MODE(lvt0) == APIC_MODE_EXTINT)
 		r = 1;

@@ -351,6 +351,8 @@ struct apic {
  * Pointer to the local APIC driver in use on this system (there's
  * always just one such driver in use - the kernel decides via an
  * early probing process which one it picks - and then sticks to it):
+ *
+ * 腾讯云上crash看到的是apic_x2apic_phys;
  */
 extern struct apic *apic;
 

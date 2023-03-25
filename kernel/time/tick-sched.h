@@ -9,6 +9,9 @@ enum tick_device_mode {
 	TICKDEV_MODE_ONESHOT,
 };
 
+/*
+ * 这是对时钟事件源设备的一层包装
+ */
 struct tick_device {
 	struct clock_event_device *evtdev;
 	enum tick_device_mode mode;

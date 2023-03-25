@@ -293,6 +293,9 @@ asmlinkage __visible void __softirq_entry __do_softirq(void)
 	 */
 	current->flags &= ~PF_MEMALLOC;
 
+	/*
+	 * 这里获取当前cpu上pending的软中断位图
+	 */
 	pending = local_softirq_pending();
 	account_irq_enter_time(current);
 

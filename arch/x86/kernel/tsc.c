@@ -1129,6 +1129,8 @@ static struct clocksource clocksource_tsc_early = {
  * Must mark VALID_FOR_HRES early such that when we unregister tsc_early
  * this one will immediately take over. We will only register if TSC has
  * been found good.
+ *
+ * 听说是x86上最好的时钟了
  */
 static struct clocksource clocksource_tsc = {
 	.name                   = "tsc",

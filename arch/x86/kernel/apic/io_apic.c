@@ -2175,8 +2175,13 @@ static inline void __init check_timer(void)
 	 * watchdog as that APIC treats NMIs as level-triggered.
 	 * The AEOI mode will finish them in the 8259A
 	 * automatically.
+	 *
+	 * 这里会屏蔽掉LVT LINT0上的中断（即屏蔽了8259a ?）。
 	 */
 	apic_write(APIC_LVT0, APIC_LVT_MASKED | APIC_DM_EXTINT);
+	/*
+	 * 这里会对pic mask all然后restore，可能还是依赖上面对LVT LINT0的屏蔽；
+	 */
 	legacy_pic->init(1);
 
 	pin1  = find_isa_irq_pin(0, mp_INT);

@@ -64,6 +64,10 @@ int kvm_irq_delivery_to_apic(struct kvm *kvm, struct kvm_lapic *src,
 	memset(dest_vcpu_bitmap, 0, sizeof(dest_vcpu_bitmap));
 
 	kvm_for_each_vcpu(i, vcpu, kvm) {
+		/*
+		 * 当guest处于pic mode时，这里就直接退出了，不通过ioapic进行任
+		 * 何实质性的中断注入；
+		 */
 		if (!kvm_apic_present(vcpu))
 			continue;
 

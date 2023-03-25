@@ -116,7 +116,8 @@ void __init native_init_IRQ(void)
 {
 	/* Execute any quirks before the call gates are initialised: */
 	/*
-	 * 对应init_ISA_irqs
+	 * 对应init_ISA_irqs;
+	 * 这里面会设置APIC为virtual-wire mode
 	 */
 	x86_init.irqs.pre_vector_init();
 

@@ -348,7 +348,13 @@ static inline int kvm_vcpu_exiting_guest_mode(struct kvm_vcpu *vcpu)
 #define KVM_MEM_MAX_NR_PAGES ((1UL << 31) - 1)
 
 struct kvm_memory_slot {
+	/*
+	 * HPA
+	 */
 	gfn_t base_gfn;
+	/*
+	 * 长度
+	 */
 	unsigned long npages;
 	unsigned long *dirty_bitmap;
 	struct kvm_arch_memory_slot arch;
@@ -423,7 +429,7 @@ struct kvm_irq_routing_table {
 	 * the gsi is connected to.
 	 *
 	 * 这是一个以gsi为index的哈希链表组数。第N个哈希链表组织了所有gsi == N
-	 * 的kvm_kernel_irq_route_entry链表，链接元素是该结构体的link字段。
+	 * 的kvm_kernel_irq_routing_entry链表，链接元素是该结构体的link字段。
 	 */
 	struct hlist_head map[0];
 };
@@ -661,6 +667,11 @@ static inline struct kvm_memslots *kvm_vcpu_memslots(struct kvm_vcpu *vcpu)
 	return __kvm_memslots(vcpu->kvm, as_id);
 }
 
+/*
+ * 从kvm_memslots结构体中内嵌的kvm_memory_slot数组中获取相应的kvm_memory_slot的
+ * 地址；要注意的是内嵌数组并没有进行某种形式的排序，而是根据id_to_index映射表
+ * 进行定位；
+ */
 static inline struct kvm_memory_slot *
 id_to_memslot(struct kvm_memslots *slots, int id)
 {

@@ -617,6 +617,7 @@ asmlinkage __visible void __init start_kernel(void)
 	/*
 	 * 设置体系结构相关的数据结构，包括：
 	 * - 解析MADT表，获取中断控制器和中断源的拓扑信息
+	 * - 初始化虚拟化环境
 	 * - 
 	 */
 	setup_arch(&command_line);
@@ -708,9 +709,18 @@ asmlinkage __visible void __init start_kernel(void)
 	 */
 	early_irq_init();
 	init_IRQ();
+	/*
+	 * 初始化tick子系统
+	 */
 	tick_init();
 	rcu_init_nohz();
+	/*
+	 * 初始化普通定时器
+	 */
 	init_timers();
+	/*
+	 * 初始化高精度定时器的基础结构
+	 */
 	hrtimers_init();
 	softirq_init();
 	timekeeping_init();

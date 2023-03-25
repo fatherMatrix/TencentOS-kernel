@@ -117,8 +117,15 @@ enum hrtimer_restart {
 struct hrtimer {
 	struct timerqueue_node		node;
 	ktime_t				_softexpires;
+	/*
+	 * 定时器到期时的回调函数
+	 */
 	enum hrtimer_restart		(*function)(struct hrtimer *);
 	struct hrtimer_clock_base	*base;
+	/*
+	 * HRTIMER_STATE_INACTIVE: 未激活
+	 * HRTIMER_STATE_ENQUEUED: 已激活（入列）
+	 */ 
 	u8				state;
 	u8				is_rel;
 	u8				is_soft;
@@ -154,18 +161,41 @@ struct hrtimer_sleeper {
  * @active:		red black tree root node for the active timers
  * @get_time:		function to retrieve the current time of the clock
  * @offset:		offset of this clock to the monotonic base
+ *
+ * 高分辨率定时器的时钟基础（基类），内核提供了多种时钟：
+ * - 单调时钟：在系统启动时从0开始，单调递增
+ * - 实际时钟：表示系统的实际时间，在更改系统时间时发生跳跃
+ * - ...
+ *
+ * 该数据结构都从属于hrtimer_cpu_base(per-cpu)，由hrtimer_cpu_base组织起来
  */
 struct hrtimer_clock_base {
+	/*
+	 * 返指回所属的hrtimer_cpu_base结构体;
+	 * hrtimer_clock_base本身是作为数组元素嵌入到hrtimer_cpu_base中的字段的
+	 */
 	struct hrtimer_cpu_base	*cpu_base;
+	/*
+	 * 区分本hrtimer_clock_base所属的类别
+	 */
 	unsigned int		index;
 	clockid_t		clockid;
 	seqcount_t		seq;
 	struct hrtimer		*running;
+	/*
+	 * 红黑树根节点
+	 * 其中的元素是hrtimer结构体；链接元素是rb_node node;
+	 */
 	struct timerqueue_head	active;
 	ktime_t			(*get_time)(void);
 	ktime_t			offset;
 } __hrtimer_clock_base_align;
 
+/*
+ * 表示高精度定时器的类型，其中又分为两类：
+ * - 不带SOFT的表示硬定时器，都在中断处理函数中处理；
+ * - 带SOFT的表示软定时器，都在软中断中处理
+ */
 enum  hrtimer_base_type {
 	HRTIMER_BASE_MONOTONIC,
 	HRTIMER_BASE_REALTIME,

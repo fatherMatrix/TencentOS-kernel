@@ -58,6 +58,15 @@ static void pic_unlock(struct kvm_pic *s)
 
 	if (wakeup) {
 		kvm_for_each_vcpu(i, vcpu, s->kvm) {
+			/*
+			 * 这里选出BSP；
+			 *
+			 * 要注意的是，如果guest中将LVT LINT0给mask掉了，会通过
+			 * vmexit -> handle_exit -> kvm_lapic_reg_write修改
+			 * kvm_lapic的regs（LVT LINT0）；这将导致下面的判断会返
+			 * 回0，从而跳过本分支，不会继续执行kvm_make_request和
+			 * kvm_vcpu_kick函数；
+			 */
 			if (kvm_apic_accept_pic_intr(vcpu)) {
 				kvm_make_request(KVM_REQ_EVENT, vcpu);
 				kvm_vcpu_kick(vcpu);

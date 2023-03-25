@@ -64,6 +64,8 @@
  * into the timer bases by the hrtimer_base_type enum. When trying
  * to reach a base using a clockid, hrtimer_clockid_to_base()
  * is used to convert from clockid to the proper hrtimer_base_type.
+ *
+ * 全局per-cpu的hrtimer_cpu_base结构体
  */
 DEFINE_PER_CPU(struct hrtimer_cpu_base, hrtimer_bases) =
 {
@@ -1650,12 +1652,18 @@ retry:
 	 */
 	cpu_base->expires_next = KTIME_MAX;
 
+	/*
+	 * 如果当前时间now晚于softirq_expires_next，则触发HRTIMER_SOFTIRQ软中断
+	 */
 	if (!ktime_before(now, cpu_base->softirq_expires_next)) {
 		cpu_base->softirq_expires_next = KTIME_MAX;
 		cpu_base->softirq_activated = 1;
 		raise_softirq_irqoff(HRTIMER_SOFTIRQ);
 	}
 
+	/*
+	 * 处理所有到期的硬定时器
+	 */
 	__hrtimer_run_queues(cpu_base, now, flags, HRTIMER_ACTIVE_HARD);
 
 	/* Reevaluate the clock bases for the [soft] next expiry */
@@ -1745,6 +1753,10 @@ void hrtimer_run_queues(void)
 	unsigned long flags;
 	ktime_t now;
 
+	/*
+	 * 如果现在就是在高精度模式了，就不再需要使用低分辨率时钟仿真了，直接退
+	 * 出即可
+	 */
 	if (__hrtimer_hres_active(cpu_base))
 		return;
 
@@ -2106,7 +2118,13 @@ int hrtimers_dead_cpu(unsigned int scpu)
 
 void __init hrtimers_init(void)
 {
+	/*
+	 * 初始化当前cpu的hrtimer_cpu_base结构体
+	 */
 	hrtimers_prepare_cpu(smp_processor_id());
+	/*
+	 * 设置高精度定时器的软中断处理函数
+	 */
 	open_softirq(HRTIMER_SOFTIRQ, hrtimer_run_softirq);
 }
 

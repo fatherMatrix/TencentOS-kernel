@@ -94,7 +94,8 @@ int kvm_set_irq(struct kvm *kvm, int irq_source_id, u32 irq, int level,
 	while (i--) {
 		int r;
 		/*
-		 * 对于PIC，该set函数为kvm_pic_set_irq；
+		 * 对于PIC，该set函数为kvm_set_pic_irq；
+		 * 对于IOAPIC，该set函数为kvm_set_ioapic_irq;
 		 */
 		r = irq_set[i].set(&irq_set[i], kvm, irq_source_id, level,
 				   line_status);
@@ -150,6 +151,7 @@ static int setup_routing_entry(struct kvm *kvm,
 	 */
 	hlist_for_each_entry(ei, &rt->map[gsi], link)
 		if (ei->type != KVM_IRQ_ROUTING_IRQCHIP ||
+		/* 上一句通过了，说明这个gsi对应的handler链表已有元素且不为IRQCHIP */
 		    ue->type != KVM_IRQ_ROUTING_IRQCHIP ||
 		    ue->u.irqchip.irqchip == ei->irqchip.irqchip)
 			return -EINVAL;
@@ -224,6 +226,7 @@ int kvm_set_irq_routing(struct kvm *kvm,
 		 * 将kvm_irq_routing_entry转换为kvm_kernel_irq_routing_entry，
 		 * 包括set回调的设置；并将后者链入kvm_irq_route_table的map数组
 		 * 中。
+		 * - set回调的设置是根据不同的irqchip类型决定的
 		 */
 		r = setup_routing_entry(kvm, new, e, ue);
 		if (r)

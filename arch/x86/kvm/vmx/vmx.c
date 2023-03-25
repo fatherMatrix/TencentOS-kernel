@@ -6707,6 +6707,9 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 	vmx->nested.nested_run_pending = 0;
 	vmx->idt_vectoring_info = 0;
 
+	/*
+	 * 获取退出原因
+	 */
 	vmx->exit_reason = vmx->fail ? 0xdead : vmcs_read32(VM_EXIT_REASON);
 	if ((u16)vmx->exit_reason == EXIT_REASON_MCE_DURING_VMENTRY)
 		kvm_machine_check();

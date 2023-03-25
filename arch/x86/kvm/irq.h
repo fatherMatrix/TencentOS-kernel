@@ -32,11 +32,21 @@ struct kvm_kpic_state {
 	u8 imr;		/* interrupt mask register */
 	u8 isr;		/* interrupt service register */
 	u8 priority_add;	/* highest irq priority */
+	/*
+	 * 用于将irq_n转换为vector_n:
+	 * - vector_n = irq_base + irq_n
+	 */
 	u8 irq_base;
+	/*
+	 * 选择要读取的寄存器
+	 */
 	u8 read_reg_select;
 	u8 poll;
 	u8 special_mask;
 	u8 init_state;
+	/*
+	 * 是否设置了auto eoi
+	 */
 	u8 auto_eoi;
 	u8 rotate_on_auto_eoi;
 	u8 special_fully_nested_mode;

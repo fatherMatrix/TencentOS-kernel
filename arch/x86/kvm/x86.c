@@ -3649,14 +3649,24 @@ static int kvm_vcpu_ready_for_interrupt_injection(struct kvm_vcpu *vcpu)
 static int kvm_vcpu_ioctl_interrupt(struct kvm_vcpu *vcpu,
 				    struct kvm_interrupt *irq)
 {
+	/*
+	 * 诶，这里为什么不可以使用Posted interrupt呢？
+	 */
 	if (irq->irq >= KVM_NR_INTERRUPTS)
 		return -EINVAL;
 
+	/*
+	 * 如果内核里什么都没有，都在qemu中模拟的，会进入下面的分支；
+	 */
 	if (!irqchip_in_kernel(vcpu->kvm)) {
 		kvm_queue_interrupt(vcpu, irq->irq, false);
 		kvm_make_request(KVM_REQ_EVENT, vcpu);
 		return 0;
 	}
+
+	/*
+	 * 走到这里，说明中断控制器是在kvm模拟的
+	 */
 
 	/*
 	 * With in-kernel LAPIC, we only use this to inject EXTINT, so
@@ -4573,6 +4583,9 @@ static int kvm_vm_ioctl_set_tss_addr(struct kvm *kvm, unsigned long addr)
 
 	if (addr > (unsigned int)(-3 * PAGE_SIZE))
 		return -EINVAL;
+	/*
+	 * 对应vmx_set_tss_addr
+	 */
 	ret = kvm_x86_ops->set_tss_addr(kvm, addr);
 	return ret;
 }
@@ -4811,6 +4824,15 @@ int kvm_vm_ioctl_clear_dirty_log(struct kvm *kvm, struct kvm_clear_dirty_log *lo
 int kvm_vm_ioctl_irq_line(struct kvm *kvm, struct kvm_irq_level *irq_event,
 			bool line_status)
 {
+	/*
+	 * 这里判断中断控制器是否完全在qemu中模拟(KVM_IRQCHIP_NONE)，如果完全在
+	 * qemu中模拟，则返回错误;
+	 * - irqchip_in_kernel返回是否**不是**KVM_IRQCHIP_NONE；如果**不是**
+	 *   KVM_IRQCHIP_NONE，则返回真；即如果中断控制器有在kvm中的部分，则返
+	 *   回真；
+	 * - 如果中断控制器有在kvm中的部分，则继续往下走；如果中断控制器没有在
+	 *   kvm中的部分，则返回错误；
+	 */
 	if (!irqchip_in_kernel(kvm))
 		return -ENXIO;
 
@@ -4843,6 +4865,9 @@ int kvm_vm_ioctl_enable_cap(struct kvm *kvm,
 			goto split_irqchip_unlock;
 		if (kvm->created_vcpus)
 			goto split_irqchip_unlock;
+		/*
+		 * 设置空的irq routing
+		 */
 		r = kvm_setup_empty_irq_routing(kvm);
 		if (r)
 			goto split_irqchip_unlock;
@@ -4946,7 +4971,8 @@ set_identity_unlock:
 		r = -EEXIST;
 		if (irqchip_in_kernel(kvm))
 			/*
-			 * 走到这里，说明前面已经在kvm中创建的模拟的芯片
+			 * 走到这里，说明应该在qemu中模拟PIC，IOAPIC和LAPIC；这
+			 * 里啥都不要做；
 			 */ 
 			goto create_irqchip_unlock;
 
@@ -4973,7 +4999,8 @@ set_identity_unlock:
 		/*
 		 * 设置默认中断路由。
 		 *
-		 * 中断路由表是用来给kvm选择一个中断交由哪个模拟中断控制器处理
+		 * 中断路由表是用来给kvm选择一个中断交由哪个模拟中断控制器处理;
+		 * 因为kvm同时实现了pic和ioapic
 		 */
 		r = kvm_setup_default_irq_routing(kvm);
 		if (r) {

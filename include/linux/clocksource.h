@@ -76,6 +76,9 @@ struct module;
  * clocksource into your own struct. Depending on the amount of
  * information you need you should consider to cache line align that
  * structure.
+ *
+ * 实现计时功能，用来提供时间
+ * 区别于clock_event_device，用来提供定时功能
  */
 struct clocksource {
 	u64 (*read)(struct clocksource *cs);
@@ -88,8 +91,17 @@ struct clocksource {
 	struct arch_clocksource_data archdata;
 #endif
 	u64 max_cycles;
+	/*
+	 * 名字
+	 */
 	const char *name;
+	/*
+	 * 链接到全局的
+	 */
 	struct list_head list;
+	/*
+	 * 表示时钟的质量
+	 */
 	int rating;
 	int (*enable)(struct clocksource *cs);
 	void (*disable)(struct clocksource *cs);

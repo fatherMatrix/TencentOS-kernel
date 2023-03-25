@@ -101,6 +101,9 @@ struct clock_event_device {
 	void			(*event_handler)(struct clock_event_device *);
 	int			(*set_next_event)(unsigned long evt, struct clock_event_device *);
 	int			(*set_next_ktime)(ktime_t expires, struct clock_event_device *);
+	/*
+	 * 下次事件触发的绝对时间
+	 */
 	ktime_t			next_event;
 	u64			max_delta_ns;
 	u64			min_delta_ns;
@@ -124,9 +127,16 @@ struct clock_event_device {
 
 	const char		*name;
 	int			rating;
+	/*
+	 * 对于非cpu本地的时钟时间源设备，这个表示irq号；
+	 * 对于cpu本地的时钟时间源设备，这个不用；
+	 */
 	int			irq;
 	int			bound_on;
 	const struct cpumask	*cpumask;
+	/*
+	 * 挂入clockevent_devices链表头
+	 */
 	struct list_head	list;
 	struct module		*owner;
 } ____cacheline_aligned;

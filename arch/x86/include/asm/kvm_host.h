@@ -785,6 +785,9 @@ struct kvm_vcpu_arch {
 	} pv;
 
 	int pending_ioapic_eoi;
+	/*
+	 * 这个和interrupt.nr间有什么关系？
+	 */
 	int pending_external_vector;
 
 	/* GPA available */
@@ -818,7 +821,7 @@ struct kvm_arch_memory_slot {
 	struct kvm_rmap_head *rmap[KVM_NR_PAGE_SIZES];
 	/*
 	 * 2MB和1GB页面称为大页，lpage_info保存的是大页的信息，所以lpage_info的
-	 * 元素个数比rmap元素个数少1
+	 * 元素个数比rmap元素个数少1（少了4KB的页信息）
 	 */
 	struct kvm_lpage_info *lpage_info[KVM_NR_PAGE_SIZES - 1];
 	unsigned short *gfn_track[KVM_PAGE_TRACK_MAX];

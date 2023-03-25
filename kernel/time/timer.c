@@ -196,20 +196,49 @@ EXPORT_SYMBOL(jiffies_64);
 
 struct timer_base {
 	raw_spinlock_t		lock;
+	/*
+	 * 当前CPU正在处理的定时器所对应的timer_list结构;
+	 * - 因为本结构体本身是被定义为per-cpu的
+	 */
 	struct timer_list	*running_timer;
 #ifdef CONFIG_PREEMPT_RT
 	spinlock_t		expiry_lock;
 	atomic_t		timer_waiters;
 #endif
+	/*
+	 * 当前timer_base经过的jiffies值，用来确定所管理的timer_list是否超时
+	 */
 	unsigned long		clk;
+	/*
+	 * 指向当前cpu下一个将要超时的timer的到期时间
+	 */
 	unsigned long		next_expiry;
+	/*
+	 * 所属cpu编号
+	 */
 	unsigned int		cpu;
+	/*
+	 * 是否处于空闲模式，NO_HZ下会用到
+	 */
 	bool			is_idle;
 	bool			must_forward_clk;
+	/*
+	 * 一个位图，用于表示vectors字段是否有tiemr存在
+	 */
 	DECLARE_BITMAP(pending_map, WHEEL_SIZE);
+	/*
+	 * 桶子，每个桶是一个链表，链接timer_list
+	 */
 	struct hlist_head	vectors[WHEEL_SIZE];
 } ____cacheline_aligned;
 
+/*
+ * per-cpu变量timer_base按照类型区分，每个CPU上有两种类型：
+ * - BASE_STD: Standard
+ * - BASE_DEF: Deferrable
+ *
+ * 当未配置NO_HZ时，上面两个合二为一
+ */
 static DEFINE_PER_CPU(struct timer_base, timer_bases[NR_BASES]);
 
 #ifdef CONFIG_NO_HZ_COMMON
@@ -497,6 +526,10 @@ static inline unsigned calc_index(unsigned expires, unsigned lvl)
 
 static int calc_wheel_index(unsigned long expires, unsigned long clk)
 {
+	/*
+	 * 计算过期时间和当前timer_base->clk的差值，用以决定把timer_list放到
+	 * timer_base中的哪个桶
+	 */
 	unsigned long delta = expires - clk;
 	unsigned int idx;
 
@@ -886,6 +919,13 @@ get_target_base(struct timer_base *base, unsigned tflags)
 
 static inline void forward_timer_base(struct timer_base *base)
 {
+/*
+ * 只有在配置了NO_HZ时该函数才有意义。因为：
+ * - 如果没有配置NO_HZ模式，那么tick就不会停止，也就是说每次tick到来时，clk都会
+ *   得到更新，不会与jiffies产生差值；所以自然也不需要forward；
+ * - 如果配置了NO_HZ，那么tick会在某些时候停掉，那么clk肯定得不到更新，那么需要
+ *   在某些合适的时候去补齐
+ */
 #ifdef CONFIG_NO_HZ_COMMON
 	unsigned long jnow;
 
@@ -992,6 +1032,9 @@ __mod_timer(struct timer_list *timer, unsigned long expires, unsigned int option
 		 * dequeue/enqueue dance.
 		 */
 		base = lock_timer_base(timer, &flags);
+		/*
+		 * 只有在配置了NO_HZ时该函数才有意义
+		 */
 		forward_timer_base(base);
 
 		if (timer_pending(timer) && (options & MOD_TIMER_REDUCE) &&
@@ -1059,7 +1102,20 @@ __mod_timer(struct timer_list *timer, unsigned long expires, unsigned int option
 	 * internal_add_timer().
 	 */
 	if (idx != UINT_MAX && clk == base->clk) {
+		/*
+		 * 将定时器timer_list正式放入到timer_base中的特定桶中
+		 */
 		enqueue_timer(base, timer, idx);
+		/*
+		 * 这个函数主要是解决下面这种情况，如果要将定时器插入一个正处于
+		 * 空闲状态的CPU下的timer_base 的时候，那个CPU的定时事件设备应
+		 * ^^^^^^^^
+		 * 该是已经被编程到了所有包含的定时器中最近要到期的那个时刻，这
+		 * 时候恰好要插入的定时器的到期时刻比原来最近的到期时刻还要早的
+		 * 话，那这个新被插入的定时器一定会超时，因为在这之前都不会有
+		 * Tick到来。对于这种情况，只有调用wake_up_nohz_cpu 函数将那个空
+		 * 闲的 CPU 唤醒，让它重新再检查一遍。
+		 */
 		trigger_dyntick_cpu(base, timer);
 	} else {
 		internal_add_timer(base, timer);
@@ -1673,6 +1729,8 @@ u64 get_next_timer_interrupt(unsigned long basej, u64 basem)
  * timer_clear_idle - Clear the idle state of the timer base
  *
  * Called with interrupts disabled
+ *
+ * 时钟中断后会调用到这里的
  */
 void timer_clear_idle(void)
 {
@@ -2047,7 +2105,14 @@ static void __init init_timer_cpus(void)
 
 void __init init_timers(void)
 {
+	/*
+	 * 初始化每个cpu上的timer_base数组
+	 */
 	init_timer_cpus();
+	/*
+	 * 设置定时器的软中断处理函数
+	 * 时钟中断后，会触发该软中断执行以推动时间子系统中的工作；
+	 */
 	open_softirq(TIMER_SOFTIRQ, run_timer_softirq);
 }
 

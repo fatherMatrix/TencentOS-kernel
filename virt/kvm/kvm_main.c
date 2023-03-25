@@ -1013,12 +1013,21 @@ int __kvm_set_memory_region(struct kvm *kvm,
 		goto out;
 
 	r = -EINVAL;
+	/*
+	 * mem->slot的高16位，address space id
+	 */
 	as_id = mem->slot >> 16;
 	id = (u16)mem->slot;
 
 	/* General sanity checks */
+	/*
+	 * 如果内存条大小不是PAGE_SIZE的整数倍，返回-EINVAL
+	 */
 	if (mem->memory_size & (PAGE_SIZE - 1))
 		goto out;
+	/*
+	 * 如果内存条要注册的位置在guest的GPA中不是PAGE_SIZE对齐的，返回-EINVAL
+	 */
 	if (mem->guest_phys_addr & (PAGE_SIZE - 1))
 		goto out;
 	/* We can read the guest memory with __xxx_user() later on. */
@@ -1033,6 +1042,9 @@ int __kvm_set_memory_region(struct kvm *kvm,
 	if (mem->guest_phys_addr + mem->memory_size < mem->guest_phys_addr)
 		goto out;
 
+	/*
+	 * 根据id从kvm->memslots中获取相对应的kvm_mem_slot
+	 */
 	slot = id_to_memslot(__kvm_memslots(kvm, as_id), id);
 	/*
 	 * 转换以page为单位
@@ -1050,6 +1062,13 @@ int __kvm_set_memory_region(struct kvm *kvm,
 	new.npages = npages;
 	new.flags = mem->flags;
 
+	/*
+	 * 确定内存改动的类型：
+	 * - KVM_MR_CREATE
+	 * - KVM_MR_MOVE
+	 * - KVM_MR_FLAGS_ONLY
+	 * - KVM_MR_DELETE
+	 */
 	if (npages) {
 		if (!old.npages)
 			change = KVM_MR_CREATE;
@@ -1077,6 +1096,9 @@ int __kvm_set_memory_region(struct kvm *kvm,
 		new.flags = 0;
 	}
 
+	/*
+	 * 如果改变类型是CREATE或者MOVE，则对其进行overlaps检查
+	 */
 	if ((change == KVM_MR_CREATE) || (change == KVM_MR_MOVE)) {
 		/* Check for overlaps */
 		r = -EEXIST;
@@ -3487,6 +3509,17 @@ static long kvm_vm_ioctl(struct file *filp,
 #ifdef __KVM_HAVE_IRQ_LINE
 	case KVM_IRQ_LINE_STATUS:
 	case KVM_IRQ_LINE: {
+		/*
+		 * 对于KVM_IRQCHIP_SPLIT模式，也是走这里；不过此时中断路由表里
+		 * 设置的都是msi模式，刚刚好，进入到内核后不经过IOAPIC（因为此
+		 * 时IOAPIC在qemu)，直接发向LAPIC；
+		 * - SPLIT模式下，中断路由表的设置在qemu中的：
+		 *   kvm_irqchip_create
+		 *     kvm_init_irq_routing
+		 *       kvm_arch_init_irq_routing
+		 *         if (split)
+		 *           ...
+		 */
 		struct kvm_irq_level irq_event;
 
 		r = -EFAULT;
@@ -3565,6 +3598,9 @@ out_free_irq_routing:
 		r = kvm_vm_ioctl_check_extension_generic(kvm, arg);
 		break;
 	default:
+		/*
+		 * 下面是与体系结构相关的选项
+		 */
 		r = kvm_arch_vm_ioctl(filp, ioctl, arg);
 	}
 out:

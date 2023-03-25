@@ -935,10 +935,20 @@ int __clocksource_register_scale(struct clocksource *cs, u32 scale, u32 freq)
 	mutex_lock(&clocksource_mutex);
 
 	clocksource_watchdog_lock(&flags);
+	/*
+	 * 将clocksource添加到全局的clocksource_list链表，该链表根据时钟质量进
+	 * 行排序；
+	 */
 	clocksource_enqueue(cs);
+	/*
+	 * 将clocksource添加到全局的watchdog_list链表
+	 */
 	clocksource_enqueue_watchdog(cs);
 	clocksource_watchdog_unlock(&flags);
 
+	/*
+	 * 每次新添加clocksource后，都会触发重新选择时钟源
+	 */
 	clocksource_select();
 	clocksource_select_watchdog(false);
 	__clocksource_suspend_select(cs);

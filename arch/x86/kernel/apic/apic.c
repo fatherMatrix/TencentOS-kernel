@@ -1120,6 +1120,9 @@ static void local_apic_timer_interrupt(void)
 	 */
 	inc_irq_stat(apic_timer_irqs);
 
+	/*
+	 * 对应的是hrtimer_interrupt
+	 */
 	evt->event_handler(evt);
 }
 
@@ -1338,6 +1341,9 @@ enum apic_intr_mode_id apic_intr_mode __ro_after_init;
 static int __init __apic_intr_mode_select(void)
 {
 	/* Check kernel option */
+	/*
+	 * 如果没有开启APIC，那么只能运行在pic mode
+	 */
 	if (disable_apic) {
 		pr_info("APIC disabled via kernel command line\n");
 		return APIC_PIC;
@@ -1371,6 +1377,10 @@ static int __init __apic_intr_mode_select(void)
 #endif
 
 	/* Check MP table or ACPI MADT configuration */
+	/*
+	 * 如果是UP，返回virtual wire相关模式，因为走到这里说明一定是开启了APIC
+	 * 的；
+	 */
 	if (!smp_found_config) {
 		disable_ioapic_support();
 		if (!acpi_lapic) {
@@ -1445,6 +1455,9 @@ void __init init_bsp_APIC(void)
 
 	/*
 	 * Set up the virtual wire mode.
+	 *
+	 * 将LVT LINT0的delivery mode设置为ExtINT模式；这样的话lapic的intr引脚只
+	 * 能够服务于pic（总线周期上只与pic匹配）;
 	 */
 	apic_write(APIC_LVT0, APIC_DM_EXTINT);
 	value = APIC_DM_NMI;
@@ -1968,6 +1981,9 @@ void __init enable_IR_x2apic(void)
 	}
 
 	local_irq_save(flags);
+	/*
+	 * 对应mask_8259A
+	 */
 	legacy_pic->mask_all();
 	mask_ioapic_entries();
 
@@ -1979,6 +1995,9 @@ void __init enable_IR_x2apic(void)
 
 	if (ir_stat < 0)
 		restore_ioapic_entries();
+	/*
+	 * 对应unmask_8259A
+	 */
 	legacy_pic->restore_mask();
 	local_irq_restore(flags);
 }
@@ -2277,6 +2296,9 @@ static void __init connect_bsp_APIC(void)
 		 */
 		apic_printk(APIC_VERBOSE, "leaving PIC mode, "
 				"enabling APIC mode.\n");
+		/*
+		 * 通过IMCR寄存器，控制cpu收到的中断来自Master PIC还是来自LAPIC
+		 */
 		imcr_pic_to_apic();
 	}
 #endif
@@ -2580,6 +2602,9 @@ static void __init apic_bsp_up_setup(void)
  */
 static void __init apic_bsp_setup(bool upmode)
 {
+	/*
+	 * 该函数只对32位cpu生效，那64位的怎么办？
+	 */
 	connect_bsp_APIC();
 	if (upmode)
 		apic_bsp_up_setup();

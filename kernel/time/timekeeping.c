@@ -2192,6 +2192,9 @@ EXPORT_SYMBOL(ktime_get_coarse_ts64);
  */
 void do_timer(unsigned long ticks)
 {
+	/*
+	 * 更新jiffies
+	 */
 	jiffies_64 += ticks;
 	calc_global_load(ticks);
 }

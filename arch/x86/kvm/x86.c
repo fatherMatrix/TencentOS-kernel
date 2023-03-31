@@ -3651,6 +3651,7 @@ static int kvm_vcpu_ioctl_interrupt(struct kvm_vcpu *vcpu,
 {
 	/*
 	 * 诶，这里为什么不可以使用Posted interrupt呢？
+	 * - 不是所有的中断都可以使用posted interrupt，pic中断都走的kick cpu方式；
 	 */
 	if (irq->irq >= KVM_NR_INTERRUPTS)
 		return -EINVAL;

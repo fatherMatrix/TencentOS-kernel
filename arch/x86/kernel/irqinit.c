@@ -100,6 +100,11 @@ void __init init_IRQ(void)
 	 *
 	 * irq_to_desc是从基数树中获取irq_desc结构体的指针；vector_irq中也是包含
 	 * 了irq(index)到irq_desc指针(item)的映射；
+	 *
+	 * vector_irq数组和irq_to_desc树的区别：
+	 * - vector_irq是vector到irq_desc的转换；irq_to_desc树是irq到irq_desc树
+	 *   的转换
+	 * - vector_irq数组中有exception的位置；
 	 */
 	for (i = 0; i < nr_legacy_irqs(); i++)
 		per_cpu(vector_irq, 0)[ISA_IRQ_VECTOR(i)] = irq_to_desc(i);
@@ -134,6 +139,7 @@ void __init native_init_IRQ(void)
 
 	/*
 	 * 这里难道是对2号irq做特殊处理？
+	 * - 2号有可能是用来级联slave 8259a；
 	 */
 	if (!acpi_ioapic && !of_ioapic && nr_legacy_irqs())
 		setup_irq(2, &irq2);

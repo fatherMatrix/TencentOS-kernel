@@ -306,6 +306,9 @@ static void kvm_pic_reset(struct kvm_kpic_state *s)
 	if (!found)
 		return;
 
+	/*
+	 * 这是在干嘛？
+	 */
 	for (irq = 0; irq < PIC_NUM_PINS/2; irq++)
 		if (edge_irr & (1 << irq))
 			pic_clear_isr(s, irq);
@@ -317,31 +320,108 @@ static void pic_ioport_write(void *opaque, u32 addr, u32 val)
 	int priority, cmd, irq;
 
 	addr &= 1;
+	/*
+	 * 写的是1号寄存器
+	 */
 	if (addr == 0) {
+		/*
+		 * bit4为1，表示这是一个初始化序列，ICW1
+		 */
 		if (val & 0x10) {
+			/*
+			 * ICW1的bit0为1，表示此序列中有ICW4；
+			 * ICW1的bit0为0，表示次序列中没有ICW4；
+			 */
 			s->init4 = val & 1;
+			/*
+			 * ICW1的bit1为0表示集联了2个8259a，这是我们期望的；
+			 * 否则，直接报错；
+			 */
 			if (val & 0x02)
 				pr_pic_unimpl("single mode not supported");
 			if (val & 0x08)
 				pr_pic_unimpl(
 						"level sensitive irq not supported");
+			/*
+			 * 上面配置好之后，这里触发对pic的重置操作；
+			 * 诶，不需要等ICW2-ICW4吗？
+			 * - 下面的kvm_pic_reset中重置的只是当前得到的信息；而且
+			 *   在kvm_pic_reset中将init_state设置为1，用于标识从
+			 *   ICW1 -> ICW2 -> ICW3 -> ICW4的状态机；在ICW3或ICW4
+			 *   结束后，将init_state重新设置回0，表示ICWx状态机结束；
+			 */
 			kvm_pic_reset(s);
 		} else if (val & 0x08) {
+		/*
+		 * bit3为1，bit4为0时（bit4为1就不会走到这里了），表示这是一个
+		 * OCW3命令字；
+		 *
+		 *  7 6 5 4 3 2 1 0
+		 * +-+-+-+-+-+-+-+-+
+		 * |0|E|S|0|1|P|R|R|
+		 * | |S|M| | | |R|I|
+		 * | |M|M| | | | |S|
+		 * | |M| | | | | | |
+		 * +-+-+-+-+-+-+-+-+
+		 *    | |     | | |
+		 *    | |     | | +-- read register command
+		 *    | |     | +---- read register command
+		 *    | |     +------ poll mode
+		 *    | +------------ special mask
+		 *    +-------------- special mask
+		 */
+			/*
+			 * 打开poll mode
+			 */
 			if (val & 0x04)
 				s->poll = 1;
+			/*
+			 * RR为1时，如果RIS为1，则读取ISR；
+			 * RR为1时，如果RIS为0，则读取IRR；
+			 */ 
 			if (val & 0x02)
 				s->read_reg_select = val & 1;
+			/*
+			 * 根据ESMM和SMM决定是否需要开启special mask
+			 */
 			if (val & 0x40)
 				s->special_mask = (val >> 5) & 1;
 		} else {
+		/*
+		 * 如果走到这里，则只剩下了一种可能：OCW2
+		 *
+		 *  7 6 5 4 3 2 1 0
+		 * +-+-+-+-+-+-+-+-+
+		 * |R|S|E|0|0| | | |
+		 * | |L|O| | | | | |
+		 * | | |I| | | | | |
+		 * +-+-+-+-+-+-+-+-+
+		 *  0 0 1 
+		 *  0 1 1
+		 *  1 0 1 rotate on non-specific eoi command   \
+		 *  1 0 0 rotate in automatic eoi mode (set)    > automatic rotation
+		 *  0 0 0 rotate in automatic eoi mode (clear) /
+		 *  1 1 1
+		 *  1 1 0
+		 *  0 1 0
+		 */
+			/*
+			 * 选取OCW2 bit7:5
+			 */
 			cmd = val >> 5;
 			switch (cmd) {
 			case 0:
 			case 4:
+				/*
+				 * 这里对应automatic rotation的set和clear
+				 */
 				s->rotate_on_auto_eoi = cmd >> 2;
 				break;
 			case 1:	/* end of interrupt */
 			case 5:
+				/*
+				 *
+				 */ 
 				priority = get_priority(s, s->isr);
 				if (priority != 8) {
 					irq = (priority + s->priority_add) & 7;
@@ -352,15 +432,24 @@ static void pic_ioport_write(void *opaque, u32 addr, u32 val)
 				}
 				break;
 			case 3:
+				/*
+				 * 
+				 */ 
 				irq = val & 7;
 				pic_clear_isr(s, irq);
 				pic_update_irq(s->pics_state);
 				break;
 			case 6:
+				/*
+				 * R=1, SL=1, 此时OCW2低3位+1是最高优先级
+				 */
 				s->priority_add = (val + 1) & 7;
 				pic_update_irq(s->pics_state);
 				break;
 			case 7:
+				/*
+				 * R=1, SL=1, EOL=1, 此时是结合EOI和case 6
+				 */
 				irq = val & 7;
 				s->priority_add = (irq + 1) & 7;
 				pic_clear_isr(s, irq);
@@ -371,6 +460,9 @@ static void pic_ioport_write(void *opaque, u32 addr, u32 val)
 			}
 		}
 	} else
+	/*
+	 * 写的是2号寄存器
+	 */
 		switch (s->init_state) {
 		case 0: { /* normal mode */
 			u8 imr_diff = s->imr ^ val,
@@ -387,16 +479,30 @@ static void pic_ioport_write(void *opaque, u32 addr, u32 val)
 			break;
 		}
 		case 1:
+			/* 
+			 * ICW2的bit7:3表示起始中断向量号
+			 */ 
 			s->irq_base = val & 0xf8;
+			/*
+			 * 推一下状态机
+			 */
 			s->init_state = 2;
 			break;
 		case 2:
+			/*
+			 * ICW3本来是用于表示是否使用了级联方式，但是我们这里肯
+			 * 定是级联的，而且还是级联了2片，所以没有必要再去处理
+			 * 这个；说实话，就是偷了个懒，相信guest os不是傻逼；
+			 */
 			if (s->init4)
 				s->init_state = 3;
 			else
 				s->init_state = 0;
 			break;
 		case 3:
+			/*
+			 * ICW4
+			 */
 			s->special_fully_nested_mode = (val >> 4) & 1;
 			s->auto_eoi = (val >> 1) & 1;
 			s->init_state = 0;
@@ -411,6 +517,9 @@ static u32 pic_poll_read(struct kvm_kpic_state *s, u32 addr1)
 	ret = pic_get_irq(s);
 	if (ret >= 0) {
 		if (addr1 >> 7) {
+		/*
+		 * 走进这里，说明addr1是0xA0或0xA1，表示是从片；
+		 */
 			s->pics_state->pics[0].isr &= ~(1 << 2);
 			s->pics_state->pics[0].irr &= ~(1 << 2);
 		}
@@ -436,11 +545,17 @@ static u32 pic_ioport_read(void *opaque, u32 addr)
 		s->poll = 0;
 	} else
 		if ((addr & 1) == 0)
+		/*
+		 * 奇地址端口复用读取ISR或者IRR
+		 */
 			if (s->read_reg_select)
 				ret = s->isr;
 			else
 				ret = s->irr;
 		else
+		/*
+		 * 偶地址端口只用来读取IMR
+		 */
 			ret = s->imr;
 	return ret;
 }

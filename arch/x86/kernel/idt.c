@@ -342,15 +342,21 @@ void __init idt_setup_apic_and_irq_gates(void)
 	 * irq_entries_start是汇编声明的，其中对外部的中断循环依次声明了idt中对
 	 * 应的处理函数（最直接的那个处理函数，其实是个包裹函数，用于压栈vector
 	 * 并调用通用的common_interrupt）。这里需要把该处理函数的地址依次设置给
-	 * 对应的irq
+	 * 对应的irq；
 	 *
 	 * 值得注意的是，对于外部中断，通用的过程就是：
 	 * hardware interrupt
 	 *   push ~vector + 0x80	// 位于irq_entries_start + i * 8
 	 *   common_interrupt
 	 *
+	 * 诶，common_interrupt最后还是调的irq_desc中的函数进行处理，这部分是谁
+	 * 去设置呢？
+	 * - 当然是对应的设备驱动；
+	 *
 	 * 这里的i代表的是vector
 	 * - 要仔细区分vector，irq，gsi，pin
+	 *
+	 * 这里对所有没有设置过对应IDT的vector设置IDT；
 	 */
 	for_each_clear_bit_from(i, system_vectors, FIRST_SYSTEM_VECTOR) {
 		entry = irq_entries_start + 8 * (i - FIRST_EXTERNAL_VECTOR);

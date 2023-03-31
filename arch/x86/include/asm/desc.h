@@ -389,6 +389,9 @@ static inline void set_desc_limit(struct desc_struct *desc, unsigned long limit)
 void update_intr_gate(unsigned int n, const void *addr);
 void alloc_intr_gate(unsigned int n, const void *addr);
 
+/*
+ * 这是一个位图，每个中断向量一位，当设置了对应的IDT后，对对应bit置1
+ */
 extern unsigned long system_vectors[];
 
 #ifdef CONFIG_X86_64

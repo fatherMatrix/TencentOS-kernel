@@ -893,6 +893,10 @@ __irq_get_desc_lock(unsigned int irq, unsigned long *flags, bool bus,
 			chip_bus_lock(desc);
 		raw_spin_lock_irqsave(&desc->lock, *flags);
 	}
+
+	/*
+	 * 如果没有找到对应的irq_desc，怎么办？
+	 */
 	return desc;
 }
 

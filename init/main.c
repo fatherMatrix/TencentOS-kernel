@@ -706,8 +706,12 @@ asmlinkage __visible void __init start_kernel(void)
 	/* init some links before init_ISA_irqs() */
 	/*
 	 * 中断初始化
+	 * - 分配众多的irq_desc结构体并插入到树中
 	 */
 	early_irq_init();
+	/*
+	 * 设置IDT table中irq相关部分；
+	 */
 	init_IRQ();
 	/*
 	 * 初始化tick子系统

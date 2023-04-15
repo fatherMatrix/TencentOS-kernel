@@ -149,6 +149,10 @@ irqreturn_t __handle_irq_event_percpu(struct irq_desc *desc, unsigned int *flags
 		res = action->handler(irq, action->dev_id);
 		trace_irq_handler_exit(irq, action, res);
 
+		/*
+		 * 从硬件中断触发开始，EFLAGS中的IF位就被硬件清除掉了；所以一直
+		 * 到这里，都应该是关中断的才对；
+		 */
 		if (WARN_ONCE(!irqs_disabled(),"irq %u handler %pS enabled interrupts\n",
 			      irq, action->handler))
 			local_irq_disable();

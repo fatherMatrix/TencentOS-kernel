@@ -586,7 +586,7 @@ handover_offset:	.long 0			# Filled in by build.c
 	.section ".entrytext", "ax"
 start_of_setup:
 # Force %es = %ds
-# 强制将ds和es的内容设成相同的0x1000
+# 强制将ds和es的内容设成相同的0x1000，这个值有可能根据不同bootloader会有所不同
 	movw	%ds, %ax
 	movw	%ax, %es
 	cld			# CLD清除EFLAGS中的DF标记。当DF标记为0时，字符串
@@ -616,7 +616,7 @@ start_of_setup:
 	#   1. 如果DX == 0，将SP设置为0xfffc
 	#   2. 如果DX != 0，将SP设置为DX（DX是bootloader设置的)
 	# 主要目的是为了形成如下的C语言栈环境
-	#   +----------------------+  <--- ss:esp
+	#   +----------------------+  <--- ss:esp 0x1fffc 可用栈空间的最高位置-4byte
 	#   |    stack for main    |
 	#   +----------------------+  <--- _end
 	#   |  bootsect(not used)  |

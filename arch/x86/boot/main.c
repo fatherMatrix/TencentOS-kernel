@@ -183,6 +183,8 @@ void main(void)
 	/* Set the video mode */
 	set_video();
 
+	/* 前面都是属于实模式的 */
+
 	/* Do the last things and invoke protected mode */
 	go_to_protected_mode();
 }

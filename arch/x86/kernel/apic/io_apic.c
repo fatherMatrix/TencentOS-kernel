@@ -2414,6 +2414,8 @@ void __init setup_IO_APIC(void)
 
 	/*
          * Set up IO-APIC IRQ routing.
+         *
+         * 当前这里是个空函数；
          */
 	x86_init.mpparse.setup_ioapic_ids();
 

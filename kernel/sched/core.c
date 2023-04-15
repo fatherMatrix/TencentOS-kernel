@@ -4119,6 +4119,7 @@ static void __sched notrace __schedule(bool preempt)
 
 	/*
 	 * 在哪里打开中断的呢？
+	 * - 调用__schedule之前会打开中断，比如：preempt_schedule_irq
 	 */
 	local_irq_disable();
 	/*
@@ -4443,6 +4444,10 @@ asmlinkage __visible void __sched preempt_schedule_irq(void)
 
 	do {
 		preempt_disable();
+		/*
+		 * 这是从中断返回部分调用进来的，这个时候还没有执行iret指令，理
+		 * 论上IF位还是空的，这里打开中断；
+		 */
 		local_irq_enable();
 		__schedule(true);
 		local_irq_disable();

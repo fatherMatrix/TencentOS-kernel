@@ -90,6 +90,10 @@ void __init hpet_time_init(void)
 		 */
 		if (!pit_timer_init())
 			return;
+
+		/*
+		 * 如果hpet和pit都失败了，不就没有时钟时间源了吗？
+		 */
 	}
 
 	/*
@@ -100,7 +104,9 @@ void __init hpet_time_init(void)
 	/*
 	 * 完成将HPET或PIT设置为BSP的本地tick设备后，内核在
 	 * setup_default_timer_irq中完成中断处理函数的设定并使能中断信号。之后
-	 * BSP在初始化过程中有会周期性地收到0号时钟中断，并进行中断处理
+	 * BSP在初始化过程中有会周期性地收到0号时钟中断，并进行中断处理；
+	 *
+	 * 这个时候已经开中断了；
 	 */
 	setup_default_timer_irq();
 }

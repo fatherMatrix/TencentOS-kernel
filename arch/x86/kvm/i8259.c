@@ -101,6 +101,12 @@ static inline int pic_set_irq1(struct kvm_kpic_state *s, int irq, int level)
 	mask = 1 << irq;
 	if (s->elcr & mask)	/* level triggered */
 		if (level) {
+			/*
+			 * 如果原来irr中对应bit已经为1，则ret为0，表示该中断
+			 * still pending；
+			 * 如果原来irr中对应bit为0，则ret为1(>0)，表示Number of
+			 * CPUs interrupt was delivered to;
+			 */
 			ret = !(s->irr & mask);
 			s->irr |= mask;
 			s->last_irr |= mask;
@@ -118,6 +124,9 @@ static inline int pic_set_irq1(struct kvm_kpic_state *s, int irq, int level)
 		} else
 			s->last_irr &= ~mask;
 
+	/*
+	 * 如果中断被imr屏蔽，则返回-1(<0)，表示失败；
+	 */
 	return (s->imr & mask) ? -1 : ret;
 }
 
@@ -143,8 +152,14 @@ static int pic_get_irq(struct kvm_kpic_state *s)
 {
 	int mask, cur_priority, priority;
 
+	/*
+	 * 干掉IMR中屏蔽的位
+	 */
 	mask = s->irr & ~s->imr;
 	priority = get_priority(s, mask);
+	/*
+	 * get_priority意味着没有中断
+	 */ 
 	if (priority == 8)
 		return -1;
 	/*
@@ -228,6 +243,12 @@ static inline void pic_intack(struct kvm_kpic_state *s, int irq)
 	s->isr |= 1 << irq;
 	/*
 	 * We don't clear a level sensitive interrupt here
+	 *
+	 * elcr寄存器对应位为0表示边沿触发；
+	 *
+	 * 对于边沿触发的中断，在这里清除其irr。那么对于水平触发的中断，在哪里
+	 * 清除其irr呢？
+	 * - 
 	 */
 	if (!(s->elcr & (1 << irq)))
 		s->irr &= ~(1 << irq);
@@ -248,9 +269,15 @@ int kvm_pic_read_irq(struct kvm *kvm)
 	s->output = 0;
 
 	pic_lock(s);
+	/*
+	 * 先读取master上的输出，因为这是作为一个整体；
+	 */
 	irq = pic_get_irq(&s->pics[0]);
 	if (irq >= 0) {
 		pic_intack(&s->pics[0], irq);
+		/*
+		 * 如果master上的输出是irq 2，那么说明是由slave触发的
+		 */
 		if (irq == 2) {
 			irq2 = pic_get_irq(&s->pics[1]);
 			if (irq2 >= 0)
@@ -525,6 +552,9 @@ static u32 pic_poll_read(struct kvm_kpic_state *s, u32 addr1)
 		}
 		s->irr &= ~(1 << ret);
 		pic_clear_isr(s, ret);
+		/*
+		 * 从片但是不是2号输出pin
+		 */
 		if (addr1 >> 7 || ret != 2)
 			pic_update_irq(s->pics_state);
 	} else {

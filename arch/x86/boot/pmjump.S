@@ -29,9 +29,13 @@ GLOBAL(protected_mode_jump)
 
 	xorl	%ebx, %ebx
 	movw	%cs, %bx		# 将real mode下的cs放到bx中
-	shll	$4, %ebx
+	shll	$4, %ebx		# ebx此时存放的是real mode代码段基址在
+					# 平坦地址空间的偏移(图中的X)
 	addl	%ebx, 2f		# movw、shll、addl最终的结果是:
 					#   in_pm32 = (%cs << 4) + in_pm32。
+					# 要注意是将标签2f所指的内存赋值为：
+					#   ebx + old[2f]
+					#
 					# 目的是：
 					#   将2f处的实模式跳转地址转变为保护模
 					#   式的偏移即平坦地址空间内的线性地址
@@ -46,6 +50,8 @@ GLOBAL(protected_mode_jump)
 	movl	%cr0, %edx
 	orb	$X86_CR0_PE, %dl	# Protected mode
 	movl	%edx, %cr0		# 此刻正式开启保护模式
+
+	######################## 实模式/保护模式 分界线 #######################
 
 	# Transition to 32-bit mode
 	.byte	0x66, 0xea		# ljmpl opcode
@@ -70,6 +76,10 @@ GLOBAL(in_pm32)				# <----------------------------+
 					#   实模式下ss == 0x1000
 					#   保护模式下ss.base == 0
 					#   所以要将esp加上ebx(值为0x10000)
+					# ebx是在上面算出的real mode代码段基地址
+					# 在平坦地址空间中的偏移。因为现在SS已经
+					# 是0了（不再是X），所以这里要将esp调整
+					# 一下使得在保护模式下可以正确访问；
 
 	# Set up TR to make Intel VT happy
 	# 骗一下CPU
@@ -84,6 +94,7 @@ GLOBAL(in_pm32)				# <----------------------------+
 	xorl	%edi, %edi
 
 	# Set up LDTR to make Intel VT happy
+	# 这里看样子是将ldtr设置为0了，这明显是没数据的；也是骗一下cpu，cpu真可怜
 	lldt	%cx
 
 	jmpl	*%eax			# Jump to the 32-bit entrypoint

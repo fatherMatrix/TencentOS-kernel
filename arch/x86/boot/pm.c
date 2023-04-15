@@ -116,9 +116,12 @@ void go_to_protected_mode(void)
 	/* Mask all interrupts in the PIC */
 	mask_all_interrupts();
 
+	/*
+	 * 要进入保护模式，就必须先设置好GDT和IDT
+	 */
 	/* Actual transition to protected mode... */
 	setup_idt();	/* 仅初始化了一个null_idt项 */
-	setup_gdt();	/* 数据段和代码段，平坦地址空间 */
+	setup_gdt();	/* 仅有数据段、代码段和一个TSS，平坦地址空间 */
 	protected_mode_jump(boot_params.hdr.code32_start,
 			    (u32)&boot_params + (ds() << 4));
 }

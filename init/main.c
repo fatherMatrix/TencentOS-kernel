@@ -596,7 +596,10 @@ asmlinkage __visible void __init start_kernel(void)
 	/*
 	 * 这里关闭了中断，这种终端关闭是清空IF标志位，使cpu不响应外部中断源发
 	 * 送的中断请求。其实这个时候，kernel还没有建立起对中断控制器的有效驱动
-	 * 程序
+	 * 程序;
+	 *
+	 * 中断的使能在哪里呢？
+	 * - 就在start_kernel内，设置好时钟子系统后；
 	 */
 	local_irq_disable();
 	early_boot_irqs_disabled = true;
@@ -752,6 +755,11 @@ asmlinkage __visible void __init start_kernel(void)
 	WARN(!irqs_disabled(), "Interrupts were enabled early\n");
 
 	early_boot_irqs_disabled = false;
+	/*
+	 * 对应上面start_kernel进来后立即执行的local_irq_disable;
+	 *
+	 * 关键是下面还要配置IOAPIC和PIC呢，这里就开中断会不会不太好？
+	 */
 	local_irq_enable();
 
 	kmem_cache_init_late();

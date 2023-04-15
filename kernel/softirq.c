@@ -311,7 +311,12 @@ restart:
 	/* Reset the pending bitmask before enabling irqs */
 	set_softirq_pending(0);
 
-	/* 软中断的主体执行过程是在打开硬件中断的情况下执行的 */
+	/* 
+	 * 软中断的主体执行过程是在打开硬件中断的情况下执行的;
+	 * 这次irq_enable对应的关中断操作是硬件中断触发时硬件自动清除EFLAGS寄存
+	 * 器中IF位的操作；简而言之，这个软件操作对应的是哥自动的硬件操作；
+	 * - 详细见sdm v3 6.8.1
+	 */
 	local_irq_enable();
 
 	h = softirq_vec;
@@ -479,6 +484,10 @@ inline void raise_softirq_irqoff(unsigned int nr)
 	 *
 	 * Otherwise we wake up ksoftirqd to make sure we
 	 * schedule the softirq soon.
+	 *
+	 * 如果我们在中断上下文中，直接返回即可；在中断上下文结束的时候，会调用
+	 * 执行相关的软中断；
+	 * 如果我们不在中断上下文中，就唤醒当前cpu的softirqd内核线程；
 	 */
 	if (!in_interrupt())
 		wakeup_softirqd();
@@ -488,8 +497,14 @@ void raise_softirq(unsigned int nr)
 {
 	unsigned long flags;
 
+	/*
+	 * 这里会禁用中断
+	 */
 	local_irq_save(flags);
 	raise_softirq_irqoff(nr);
+	/*
+	 * 开启中断
+	 */
 	local_irq_restore(flags);
 }
 

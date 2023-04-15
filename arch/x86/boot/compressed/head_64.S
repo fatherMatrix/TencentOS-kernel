@@ -63,6 +63,9 @@ ENTRY(startup_32)
 	testb $KEEP_SEGMENTS, BP_loadflags(%esi)
 	jnz 1f
 
+	/*
+	 * 再关一次中断
+	 */
 	cli
 	movl	$(__BOOT_DS), %eax
 	movl	%eax, %ds
@@ -93,11 +96,11 @@ ENTRY(startup_32)
 				 * 机器码是：e8 00 00 00 00
 				 *   near跳转，e8后是rel-ip，跳转到下面的指令
 				 */
-1:	popl	%ebp		/* call指令执行后，栈顶元素是返回地址
-                                 * 即call指令后的指令地址
+1:	popl	%ebp		/* call指令会将返回地址压栈，所以call指令执行后，
+				 * 栈顶元素是返回地址，即call指令后的指令地址。
 				 *
 				 * 这个栈空间就是位于boot_params中的一
-				 * 个32位的变量，因为这里的call调用也
+				 * 个32位的变量(scratch)，因为这里的call调用也
 				 * 只会用到4个byte。
 				 *
 				 * 此时ebp中保存了1f的VMA
@@ -109,14 +112,17 @@ ENTRY(startup_32)
 				 *         = VMA_s - 0
 				 *         = VMA_s
 				 * 
-				 * 其实在vmlinux中，VMA和LMA是相等的。但
-				 * 是加载的时候被加载到了0x100000
+				 * 其实在vmlinux中，VMA和LMA是相等的;但
+				 * 是加载的时候被加载到了其他地址，比如0x100000；
+				 * 该值根据bootloader的不同而不同，所以我们需要
+				 * 用这种方法将其算出来；
 				 */
 
 /* setup a stack and make sure cpu supports long mode. */
-	movl	$boot_stack_end, %eax	# eax中保存boot_stack的顶部的VMA（编译时）
-	addl	%ebp, %eax		# 因为vmlinux被加载到了0x100000，所以要加上
-	movl	%eax, %esp
+	movl	$boot_stack_end, %eax	# eax中保存boot_stack的顶部的VMA（编译时）;
+	addl	%ebp, %eax		# 因为vmlinux被加载到了0x100000，所以要加上;
+	movl	%eax, %esp		# boot_stack_end指向的是一个编译链接时就准备
+					# 好的栈的栈顶;
 
 	call	verify_cpu		# 验证通过返回0，验证失败返回1
 	testl	%eax, %eax
@@ -135,12 +141,13 @@ ENTRY(startup_32)
  */
 
 #ifdef CONFIG_RELOCATABLE
-	movl	%ebp, %ebx		        # ebp中存储的是startup_32的物理地址
+	movl	%ebp, %ebx		        # ebp中存储的是startup_32的平坦物理地址
 	movl	BP_kernel_alignment(%esi), %eax	# esi中保存boot_params的地址
-	decl	%eax
+	decl	%eax				
 	addl	%eax, %ebx
 	notl	%eax
-	andl	%eax, %ebx
+	andl	%eax, %ebx			# 到这里是将startup_32的平坦物理地址按
+						# BP_kernel_alignment中的值进行对齐；
 	cmpl	$LOAD_PHYSICAL_ADDR, %ebx
 	jae	1f
 #endif
@@ -174,11 +181,14 @@ ENTRY(startup_32)
 						# 这里是因为我们把原本应该从0地址开始
 						# 的startup_32加载到了%ebp指向的地址，
 						# 因此这里要修正
-	lgdt	gdt(%ebp)
+	lgdt	gdt(%ebp)			# 值得注意的是，这里虽然重新加载了GDT，
+						# 但是在reload各段寄存器前，其隐藏的缓
+						# 存基地址还是不会变化的，参加sdm v3
+						# 3.4.3
 
 	/* Enable PAE mode */
-	movl	%cr4, %eax
-	orl	$X86_CR4_PAE, %eax
+	movl	%cr4, %eax			# 开启PAE是开启分页的的必要步骤
+	orl	$X86_CR4_PAE, %eax		# 参见sdm v3 9.8.5
 	movl	%eax, %cr4
 
  /*
@@ -748,11 +758,21 @@ gdt64:
 	.quad   0
 	.balign	8
 gdt:
-	.word	gdt_end - gdt		/* gdt长度 */
-	.long	gdt			/* gdt基址 */
-	.word	0
-	.quad	0x00cf9a000000ffff	/* __KERNEL32_CS */
-	.quad	0x00af9a000000ffff	/* __KERNEL_CS */
+	.word	gdt_end - gdt		/* gdt长度, 2字节 */
+	.long	gdt			/* gdt基址，4字节 */
+	.word	0			/* 从gdt到这个word结束，是gdt表的第0项。
+					 * 这里算是借用这个第0项的位置来使用。
+					 * 不用担心该gdt entry被使用，因为试图
+					 * 使用此gdt entry进行内存访问会导致#GP
+					 */
+	.quad	0x00cf9a000000ffff	/* __KERNEL32_CS 
+					 * G=1, B/D=1, L=0, AVL=0
+					 * L=0表明这个时32bit的代码段
+					 */
+	.quad	0x00af9a000000ffff	/* __KERNEL_CS
+					 * G=1, B/D=0, L=1, AVL=0
+					 * L=1表明这个是64bit的代码段
+					 */
 	.quad	0x00cf92000000ffff	/* __KERNEL_DS */
 	.quad	0x0080890000000000	/* TS descriptor */
 	.quad   0x0000000000000000	/* TS continued */

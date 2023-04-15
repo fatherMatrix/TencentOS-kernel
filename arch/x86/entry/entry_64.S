@@ -610,6 +610,15 @@ _ASM_NOKPROBE(common_spurious)
 	.p2align CONFIG_X86_L1_CACHE_SHIFT
 common_interrupt:
 	addq	$-0x80, (%rsp)			/* Adjust vector to [-256, -1] range */
+	/*
+	 * interrupt_entry里面做的事情颇多，其中包括：
+	 * - ...
+	 * - 切换到硬件中断栈
+	 * - ...
+	 *
+	 * 在这里里面切换到硬件中断栈，那什么时候再切换回task的内核栈呢？
+	 * - 下面的LEAVE_IRQ_STACK(进入硬件中断栈是通过ENTER_IRQ_STACK)
+	 */
 	call	interrupt_entry
 	UNWIND_HINT_REGS indirect=1
 	call	do_IRQ	/* rdi points to pt_regs */
@@ -618,12 +627,22 @@ ret_from_intr:
 	/*
 	 * 在非paravirt场景下，直接调用cli指令关中断；
 	 * 在paravirt场景下，
+	 *
+	 * 但问题是，在硬件中断触发的时候，硬件已经自动清除了IF位；这里在做一次
+	 * 的意义是什么？
 	 */
 	DISABLE_INTERRUPTS(CLBR_ANY)
 	TRACE_IRQS_OFF
 
+	/*
+	 * 退出硬件中断栈
+	 */
 	LEAVE_IRQ_STACK
 
+	/*
+	 * CS(%rsp)保存的是返回地址的段选择子，通过低2位判断返回后是用户态还是
+	 * 内核态；
+	 */
 	testb	$3, CS(%rsp)
 	jz	retint_kernel
 
@@ -1376,6 +1395,9 @@ ENTRY(error_entry)
 	/* We have user CR3.  Change to kernel CR3. */
 	SWITCH_TO_KERNEL_CR3 scratch_reg=%rax
 
+/*
+ * 从trampoline栈切换到task栈
+ */
 .Lerror_entry_from_usermode_after_swapgs:
 	/* Put us onto the real thread stack. */
 	popq	%r12				/* save return addr in %12 */

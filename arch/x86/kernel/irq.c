@@ -237,6 +237,9 @@ __visible unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
 	/* high bit used in ret_from_ code  */
 	unsigned vector = ~regs->orig_ax;
 
+	/*
+	 * 这里面会关闭抢占（通过对preempt_count中的HARDIRQ部分加1）
+	 */
 	entering_irq();
 
 	/* entering_irq() tells RCU that we're not quiescent.  Check it. */
@@ -248,7 +251,8 @@ __visible unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
 			handle_irq(desc, regs);
 		else
 			/*
-			 * 直接调用irq_desc->handle_irq，其会调用irqaction
+			 * 直接调用irq_desc->handle_irq（电流层处理函数），其会
+			 * 调用irqaction;
 			 */
 			generic_handle_irq_desc(desc);
 	} else {

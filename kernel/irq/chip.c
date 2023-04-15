@@ -432,7 +432,14 @@ void unmask_irq(struct irq_desc *desc)
 		return;
 
 	if (desc->irq_data.chip->irq_unmask) {
+		/*
+		 * 对于legacy_pic，清除IMR(unmask_8259A_irq)
+		 */
 		desc->irq_data.chip->irq_unmask(&desc->irq_data);
+		/*
+		 * 设置desc中备份的屏蔽状态，对应上面的irqd_irq_masked。其实只
+		 * 要desc中显示没有被屏蔽，就说明硬件上也没有被屏蔽；
+		 */
 		irq_state_clr_masked(desc);
 	}
 }
@@ -800,6 +807,9 @@ void handle_edge_irq(struct irq_desc *desc)
 	 */
 	if (!irq_may_run(desc)) {
 		desc->istate |= IRQS_PENDING;
+		/*
+		 * ack硬件，并告知硬件屏蔽该irq
+		 */
 		mask_ack_irq(desc);
 		goto out_unlock;
 	}

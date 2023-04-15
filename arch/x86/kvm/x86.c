@@ -7734,6 +7734,7 @@ static int inject_pending_event(struct kvm_vcpu *vcpu)
 	} else if (kvm_cpu_has_injectable_intr(vcpu)) {
 		/*
 		 * kvm_cpu_has_injectable_intr判断当前vcpu是否有中断需要注入
+		 * - 对于i8259，检查output变量（该变量在pic_irq_request中更新）
 		 */
 		/*
 		 * Because interrupts can be injected asynchronously, we are
@@ -8443,6 +8444,9 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		kvm_lapic_sync_from_vapic(vcpu);
 
 	vcpu->arch.gpa_available = false;
+	/*
+	 * 退出处理，对应vmx_handle_exit
+	 */
 	r = kvm_x86_ops->handle_exit(vcpu);
 	return r;
 
@@ -9848,6 +9852,9 @@ void kvm_arch_destroy_vm(struct kvm *kvm)
 	}
 	if (kvm_x86_ops->vm_destroy)
 		kvm_x86_ops->vm_destroy(kvm);
+	/*
+	 * 销毁对应的pic和ioapic
+	 */
 	kvm_pic_destroy(kvm);
 	kvm_ioapic_destroy(kvm);
 	kvm_free_vcpus(kvm);

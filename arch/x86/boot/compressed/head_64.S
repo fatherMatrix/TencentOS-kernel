@@ -158,11 +158,11 @@ ENTRY(startup_32)
 	movl	BP_init_size(%esi), %eax	# BP_init_size保存了压缩镜像和解压
 						# 镜像两者尺寸的较大值（肯定是解压
 						# 后的镜像更大）-- 0x307200
-	subl	$_end, %eax			# $_end -- 0xb26000
+	subl	$_end, %eax			# $_end -- 0xb26000, __end是ZO的end
 	addl	%eax, %ebx
 
 	#
-	# 到这里后，应该是这个样子的
+	# 到这里后，应该是这个样子的。说实话，这里是没有看懂的；
 	#
 	#  +----------+----------------+
 	#  |          |    压缩镜像    |
@@ -208,35 +208,52 @@ ENTRY(startup_32)
 1:
 
 	/* Initialize Page tables to 0 */
-	leal	pgtable(%ebx), %edi		# pgtable这个位置链接时留出了6张页表的空间
+	leal	pgtable(%ebx), %edi		# pgtable这个位置链接时留出了19张页表的空间
 	xorl	%eax, %eax
 	movl	$(BOOT_INIT_PGT_SIZE/4), %ecx
-	rep	stosl				# 这三条指令的作用是将6张页表的内容全部写0
+	rep	stosl				# 这三条指令的作用是前6张页表的内容全部写0
 
-	/* Build Level 4 */
-	leal	pgtable + 0(%ebx), %edi		# 这四条指令其实是向PML4页表中的第一项写入
+	/* ======================= Build Level 4 ======================= */
+
+	leal	pgtable + 0(%ebx), %edi		# 这四条指令其实是向PML4页表中的第0项写入
 	leal	0x1007 (%edi), %eax		# 了数据，使其指向紧挨着的PD表项
-	movl	%eax, 0(%edi)
-	addl	%edx, 4(%edi)
+						# 0x1007 = 4096 + 7，其中7(0b111)是用来填充
+						# PML4中页表项的最低三个标志位（present, r/w,
+						# u/s);
+	movl	%eax, 0(%edi)			# edi中保存了PML4的基地址，也是其第一个页表
+						# 项的地址；这里就是填充第一个页表项；
+	addl	%edx, 4(%edi)			# SEV内存加密相关;
 
-	/* Build Level 3 */
-	leal	pgtable + 0x1000(%ebx), %edi
-	leal	0x1007(%edi), %eax
-	movl	$4, %ecx			# 循环变量
-1:	movl	%eax, 0x00(%edi)
+	/* ======================= Build Level 3 ======================= */
+
+	leal	pgtable + 0x1000(%ebx), %edi	# edi此时保存了预留的第二张页表的基地址，这
+						# 是一个PDP;
+	leal	0x1007(%edi), %eax		# eax是要在PDP中某一项填充的内容，包括了低3位
+						# 的标志位;
+	movl	$4, %ecx			# 循环变量 - 4项
+1:	movl	%eax, 0x00(%edi)		# 共计4个页表项
 	addl	%edx, 0x04(%edi)
 	addl	$0x00001000, %eax
 	addl	$8, %edi
 	decl	%ecx
-	jnz	1b				# 一共构建了4个页表项
+	jnz	1b
 
-	/* Build Level 2 */
+	/* ======================= Build Level 2 ======================= */
+
 	leal	pgtable + 0x2000(%ebx), %edi	#
-	movl	$0x00000183, %eax		# 这个0x183是页表项的标志位，不是地址
-	movl	$2048, %ecx			# 这里的地址是0
-1:	movl	%eax, 0(%edi)			#	
-	addl	%edx, 4(%edi)			# 构建了2048个页表项，每个页表项索引一个
-	addl	$0x00200000, %eax		# 2MB的页。共索引了4GB的内存。
+	movl	$0x00000183, %eax		# 这个0x183是页表项的标志位，不是地址;
+						# 这里的地址是从0开始的;
+						# 0x183: 0001 1000 0011
+						#             ^
+						#           PS=2MB
+						#
+	movl	$2048, %ecx			# 构建了2048个页表项；2048 * 2MB = 4GB
+						# 2048个页表项共需4个page才能放下；
+						#
+1:	movl	%eax, 0(%edi)			# edi总是指向当前该填充的页表项；
+	addl	%edx, 4(%edi)			#
+	addl	$0x00200000, %eax		# 移向下一个2MB的页;
+						#
 	addl	$8, %edi                        #
 	decl	%ecx                            # 这里不是4k的页，见SDM Vol3 4-22 Fig4-9
 	jnz	1b				#
@@ -248,8 +265,10 @@ ENTRY(startup_32)
 	/* Enable Long mode in EFER (Extended Feature Enable Register) */
 	movl	$MSR_EFER, %ecx
 	rdmsr
-	btsl	$_EFER_LME, %eax
-	wrmsr
+	btsl	$_EFER_LME, %eax		# IA32_EFER中有一个可读可写的LME位，对其
+	wrmsr					# 置位说明进入了IA-32e模式。至于是32位兼
+						# 容模式还是64位模式取决于段描述符的
+						# CS.L位。
 
 	/* After gdt is loaded */
 	xorl	%eax, %eax
@@ -278,7 +297,8 @@ ENTRY(startup_32)
 #endif
 	pushl	%eax				# 和上面的pushl $__KERNEL_CS一起将跳转
 						# 地址压入栈中，然后利用下面的lret指令
-						# 完成跳转过程(假装是返回)
+						# 完成跳转过程(假装是返回)；跳转后CS.L
+						# 便为1，即为64位模式；
 
 	/* Enter paged protected Mode, activating Long Mode */
 	movl	$(X86_CR0_PG | X86_CR0_PE), %eax /* Enable Paging and Protected mode */
@@ -354,14 +374,15 @@ ENTRY(startup_64)
 
 	/* Start with the delta to where the kernel will run at. */
 #ifdef CONFIG_RELOCATABLE
-	leaq	startup_32(%rip) /* - $startup_32 */, %rbp	# 代码是pie方式编译的，所以startup_32会编译为负值（相对rip的偏移）
+	leaq	startup_32(%rip) /* - $startup_32 */, %rbp	# 代码是pie方式编译的，
+								# 所以startup_32会编译为负值（相对rip的偏移）
 	movl	BP_kernel_alignment(%rsi), %eax
 	decl	%eax
 	addq	%rax, %rbp
 	notq	%rax
 	andq	%rax, %rbp
 	cmpq	$LOAD_PHYSICAL_ADDR, %rbp
-	jae	1f
+	jae	1f						# 这里照样是将加载地址按照kernel_alignment对齐
 #endif
 	movq	$LOAD_PHYSICAL_ADDR, %rbp
 1:
@@ -374,8 +395,8 @@ ENTRY(startup_64)
 								# 直接跳到这里，省略前面的startup_32
 
 	# 到这里时：
-	# ebp == 0x1000000
-	# ebx == 0x354c000
+	# ebp == 0x1000000 (内核被加载到了哪里）
+	# ebx == 0x354c000（解压内核前应该将内核临时备份到哪里）
 	 
 	/* Set up the stack */
 	leaq	boot_stack_end(%rbx), %rsp
@@ -395,7 +416,7 @@ ENTRY(startup_64)
 	 */
 	call	1f
 1:	popq	%rdi
-	subq	$1b, %rdi
+	subq	$1b, %rdi		# rdi此时保存的是startup_64在平坦地址空间的VMA
 
 	call	.Ladjust_got
 

@@ -46,6 +46,9 @@ L4_START_KERNEL = l4_index(__START_KERNEL_map)
 
 L3_START_KERNEL = pud_index(__START_KERNEL_map)
 
+/*
+ * 到这里，rax里应该是0x1000000(16MB)
+ */
 	.text
 	__HEAD
 	.code64
@@ -82,15 +85,29 @@ startup_64:
 	 * is active) to be added to the initial pgdir entry that will be
 	 * programmed into CR3.
 	 */
-	leaq	_text(%rip), %rdi
+	leaq	_text(%rip), %rdi	# 基址+偏移寻址方式中，如果基址寄存器是
+					# rip，那么前面的符号解释为与rip的相对地
+					# 址；如果是其他寄存器，则解释为其自身的
+					# 地址值。
+					# rip加上_text相对rip的偏移，即为_text的
+					# 运行地址；
+	# 参见：https://sourceware.org/binutils/docs/as/i386_002dMemory.html
+
 	pushq	%rsi
-	call	__startup_64		# 位于arch/x86/kernel/head64.c
+	call	__startup_64		# 位于arch/x86/kernel/head64.c;
+					# 该函数主要用来对KASLR或kdump kernel进行
+					# 物理基地址的调整；
 	popq	%rsi
 
 	/* Form the CR3 value being sure to include the CR3 modifier */
+	/*
+	 * 因为rax中一开始保存的是跳转到kernel/startup_64时的地址，即0x1000000。
+	 * 这里将rax变更为以0x1000000地址空间表示的early_top_pgt的地址(这个地址
+	 * 其实就是物理地址了）
+	 */
 	addq	$(early_top_pgt - __START_KERNEL_map), %rax
 	jmp 1f
-ENTRY(secondary_startup_64)
+ENTRY(secondary_startup_64)		# 这部分是给非BSP使用的；
 	UNWIND_HINT_EMPTY
 	/*
 	 * At this point the CPU runs in 64bit mode CS.L = 1 CS.D = 0,
@@ -133,12 +150,13 @@ ENTRY(secondary_startup_64)
 
 	/* Setup early boot stage 4-/5-level pagetables. */
 	addq	phys_base(%rip), %rax
-	movq	%rax, %cr3	# 装载页表
+	movq	%rax, %cr3		# 装载页表
 
 	/* Ensure I am executing from virtual addresses */
 	movq	$1f, %rax
 	ANNOTATE_RETPOLINE_SAFE
-	jmp	*%rax		# 这里就是跳到了下面的标号
+	jmp	*%rax			# 这里就是跳到了下面的标号
+					# 从跳转之后，使用的就是虚拟地址了；
 1:
 	UNWIND_HINT_EMPTY
 
@@ -376,8 +394,9 @@ GLOBAL(name)
 
 	__INITDATA
 NEXT_PGD_PAGE(early_top_pgt)
-	.fill	512,8,0
-	.fill	PTI_USER_PGD_FILL,8,0
+	.fill	512,8,0				# 4096 bytes的0
+	.fill	PTI_USER_PGD_FILL,8,0		# 如果开启了CONFIG_PAGE_TABLE_ISOLATION，
+						# 这里也有4096 bytes的0
 
 NEXT_PAGE(early_dynamic_pgts)
 	.fill	512*EARLY_DYNAMIC_PAGE_TABLES,8,0
@@ -442,7 +461,8 @@ NEXT_PAGE(level2_kernel_pgt)
 	 *  runtime.  Care must be taken to clear out undesired bits
 	 *  later, like _PAGE_RW or _PAGE_GLOBAL in some cases.
 	 *
-	 * 这里也是2MB或4MB的大页
+	 * 这里也是2MB或4MB的大页，用了256项，共512MB；
+	 *         ^^^
 	 */
 	PMDS(0, __PAGE_KERNEL_LARGE_EXEC,
 		KERNEL_IMAGE_SIZE/PMD_SIZE)

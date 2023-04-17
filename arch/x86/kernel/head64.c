@@ -109,12 +109,17 @@ static bool __head check_la57_support(unsigned long physaddr)
  * that function. Clang actually does not generate them, which leads to
  * boot-time crashes. To work around this problem, every global pointer must
  * be adjusted using fixup_pointer().
+ *
+ * 要注意的是，进入这个函数时我们还在使用解压内核时用的4GB的页表(该页表在数值上
+ * 就是物理地址到物理地址的映射)。但这部分代码在编译链接时已经是虚拟地址了，所以
+ * 在该函数内对全局变量的访问都要使用fixup_pointer调整到物理地址(局部变量和代码
+ * 都是地址无关的)。
  */
 unsigned long __head __startup_64(unsigned long physaddr,
 				  struct boot_params *bp)
 {
 	/*
-	 * 参数physaddr是rdi,保存_text的绝对地址
+	 * 参数physaddr是rdi,保存_text的运行地址。这里还是低地址（0x1000000）
 	 * 第二个参数是rsi
 	 */
 	unsigned long vaddr, vaddr_end;
@@ -155,8 +160,14 @@ unsigned long __head __startup_64(unsigned long physaddr,
 
 	/* Fixup the physical addresses in the page table */
 
+	/*
+	 * pgd此时保存了early_top_pgt的物理地址，0x1000000开始的那种
+	 */
 	pgd = fixup_pointer(&early_top_pgt, physaddr);
 	p = pgd + pgd_index(__START_KERNEL_map);
+	/*
+	 * 先设置地址，再设置标志
+	 */
 	if (la57)
 		*p = (unsigned long)level4_kernel_pgt;
 	else
@@ -202,10 +213,16 @@ unsigned long __head __startup_64(unsigned long physaddr,
 		p4d[(i + 1) % PTRS_PER_P4D] = (pgdval_t)pud + pgtable_flags;
 	} else {
 		i = (physaddr >> PGDIR_SHIFT) % PTRS_PER_PGD;
+		/*
+		 * 两个PGD项指向同一个PUD是啥意思？
+		 */
 		pgd[i + 0] = (pgdval_t)pud + pgtable_flags;
 		pgd[i + 1] = (pgdval_t)pud + pgtable_flags;
 	}
 
+	/*
+	 * 两个PUD项指向同一个PMD是啥意思？
+	 */
 	i = physaddr >> PUD_SHIFT;
 	pud[(i + 0) % PTRS_PER_PUD] = (pudval_t)pmd + pgtable_flags;
 	pud[(i + 1) % PTRS_PER_PUD] = (pudval_t)pmd + pgtable_flags;

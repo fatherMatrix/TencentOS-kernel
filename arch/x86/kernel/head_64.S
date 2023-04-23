@@ -77,7 +77,8 @@ startup_64:
 	leaq	(__end_init_task - SIZEOF_PTREGS)(%rip), %rsp
 
 	/* Sanitize CPU configuration */
-	call verify_cpu
+	call verify_cpu			# 这里编译出来是 E8 rel，是个相对偏移。
+					# 即验证了这里是地址无关代码；
 
 	/*
 	 * Perform pagetable fixups. Additionally, if SME is active, encrypt
@@ -97,6 +98,7 @@ startup_64:
 	call	__startup_64		# 位于arch/x86/kernel/head64.c;
 					# 该函数主要用来对KASLR或kdump kernel进行
 					# 物理基地址的调整；
+	# 返回后，rax是0了
 	popq	%rsi
 
 	/* Form the CR3 value being sure to include the CR3 modifier */
@@ -149,7 +151,9 @@ ENTRY(secondary_startup_64)		# 这部分是给非BSP使用的；
 	movq	%rcx, %cr4
 
 	/* Setup early boot stage 4-/5-level pagetables. */
-	addq	phys_base(%rip), %rax
+	addq	phys_base(%rip), %rax	# 这里不是将phys_base的物理地址加到
+					# rax寄存器中；而是将该地址中的值加
+					# rax寄存器中；
 	movq	%rax, %cr3		# 装载页表
 
 	/* Ensure I am executing from virtual addresses */
@@ -181,7 +185,7 @@ ENTRY(secondary_startup_64)		# 这部分是给非BSP使用的；
 	movq	%rax, %cr0
 
 	/* Setup a boot time stack */
-	movq initial_stack(%rip), %rsp	/* 0号进程的运行时栈？/
+	movq initial_stack(%rip), %rsp	/* 0号进程的运行时栈? -> ! /
 
 	/* zero EFLAGS after setting rsp */
 	pushq $0
@@ -215,6 +219,11 @@ ENTRY(secondary_startup_64)		# 这部分是给非BSP使用的；
 	 * stack protector canary is enabled, it is located at %gs:40.
 	 * Note that, on SMP, the boot cpu uses init data section until
 	 * the per cpu areas are set up.
+	 *
+	 * 要补的知识：
+	 * - 在x86_64位上，cpu是不使用fs和gs两个寄存器的，他们的隐藏基地址是通
+	 *   过MSR_GS_BASE和MSR_FS_BASE两个MSR寄存器保存的；
+	 * - GS寄存器用来保存per-cpu变量的基地址
 	 */
 	movl	$MSR_GS_BASE,%ecx
 	movl	initial_gs(%rip),%eax
@@ -337,6 +346,33 @@ early_idt_handler_common:
 	pushq %r15				/* pt_regs->r15 */
 	UNWIND_HINT_REGS
 
+	/*
+	 * 到这里后，栈上布局如下：
+	 * 
+	 * High |-------------------------|
+	 *      | %rflags                 |
+	 *      | %cs                     |
+	 *      | %rip                    |
+	 *      | error code              |
+	 *      | %rdi                    |
+	 *      | %rsi                    |
+	 *      | %rdx                    |
+	 *      | %rcx                    |
+	 *      | %rax                    |
+	 *      | %r8                     |
+	 *      | %r9                     |
+	 *      | %r10                    |
+	 *      | %r11                    |
+	 *      | %rbx                    |
+	 *      | %rbp                    |
+	 *      | %r12                    |
+	 *      | %r13                    |
+	 *      | %r14                    |
+	 *      | %r15                    |<-- %rsp
+	 * Low  |-------------------------|
+	 *
+	 */
+
 	cmpq $14,%rsi		/* Page fault? */
 	jnz 10f
 	GET_CR2_INTO(%rdi)	/* can clobber %rax if pv */
@@ -443,6 +479,9 @@ NEXT_PAGE(level4_kernel_pgt)
 NEXT_PAGE(level3_kernel_pgt)
 	.fill	L3_START_KERNEL,8,0
 	/* (2^48-(2*1024*1024*1024)-((2^39)*511))/(2^30) = 510 */
+	/*
+	 * 这一项对应的起始虚拟地址是0xffffffff80000000
+	 */
 	.quad	level2_kernel_pgt - __START_KERNEL_map + _KERNPG_TABLE_NOENC
 	.quad	level2_fixmap_pgt - __START_KERNEL_map + _PAGE_TABLE_NOENC
 
@@ -491,7 +530,10 @@ NEXT_PAGE(level1_fixmap_pgt)
 early_gdt_descr:
 	.word	GDT_ENTRIES*8-1
 early_gdt_descr_base:
-	.quad	INIT_PER_CPU_VAR(gdt_page)
+	.quad	INIT_PER_CPU_VAR(gdt_page)	# 这里展开为变量init_per_cpu__gdt_page;
+						# 该变量在vmlinux.ld.S中赋值；
+						# 这里只是需要设置一下gdt表的基地址，gdt
+						# 表本身是已经初始化好了的per-cpu全局变量
 
 ENTRY(phys_base)
 	/* This must match the first entry in level2_kernel_pgt */

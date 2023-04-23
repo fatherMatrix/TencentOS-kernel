@@ -1263,6 +1263,9 @@ void __init setup_arch(char **cmdline_p)
 	 *
 	 * 在ACPI表中读取相关硬件信息，其中包括mdat表（用于记录ioapic和lapic的
 	 * 相关信息）
+	 *
+	 * 这里主要是解析ACPI表中的信息来填充老式的mptable，然后通过下面的
+	 * get_smp_config进行最后的解析；
 	 */
 	acpi_boot_init();
 	sfi_init();

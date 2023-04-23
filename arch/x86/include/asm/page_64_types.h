@@ -40,12 +40,18 @@
 #define __PAGE_OFFSET_BASE_L5	_AC(0xff11000000000000, UL)
 #define __PAGE_OFFSET_BASE_L4	_AC(0xffff888000000000, UL)
 
+/*
+ * __PAGE_OFFSET是对所有物理内存的直接映射
+ */
 #ifdef CONFIG_DYNAMIC_MEMORY_LAYOUT
 #define __PAGE_OFFSET           page_offset_base
 #else
 #define __PAGE_OFFSET           __PAGE_OFFSET_BASE_L4
 #endif /* CONFIG_DYNAMIC_MEMORY_LAYOUT */
 
+/*
+ * __START_KERNEL_map用来映射内核image
+ */
 #define __START_KERNEL_map	_AC(0xffffffff80000000, UL)
 
 /* See Documentation/x86/x86_64/mm.rst for a description of the memory map. */

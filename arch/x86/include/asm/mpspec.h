@@ -51,6 +51,9 @@ extern int smp_found_config;
 
 static inline void get_smp_config(void)
 {
+	/*
+	 * 对应default_get_smp_config函数
+	 */
 	x86_init.mpparse.get_smp_config(0);
 }
 

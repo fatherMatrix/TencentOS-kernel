@@ -40,6 +40,9 @@
 /*
  * Manage page tables very early on.
  */
+/*
+ * arch/x86/kernel/head_64.S中，一开始都是0
+ */
 extern pmd_t early_dynamic_pgts[EARLY_DYNAMIC_PAGE_TABLES][PTRS_PER_PMD];
 static unsigned int __initdata next_early_pgt;
 pmdval_t early_pmd_flags = __PAGE_KERNEL_LARGE & ~(_PAGE_GLOBAL | _PAGE_NX);
@@ -48,6 +51,12 @@ pmdval_t early_pmd_flags = __PAGE_KERNEL_LARGE & ~(_PAGE_GLOBAL | _PAGE_NX);
 unsigned int __pgtable_l5_enabled __ro_after_init;
 unsigned int pgdir_shift __ro_after_init = 39;
 EXPORT_SYMBOL(pgdir_shift);
+/*
+ * 对于运行在5级页表环境中的4级页表，这个设置为1会使得在walk p4d时对已有的pgd+0.
+ * 如果确实运行在5级也表环境中，会在check_la57_support()中重新赋值为512;
+ * 
+ * 此处值为1对__early_make_pgtable中的4级页表的情况起了关键作用；
+ */
 unsigned int ptrs_per_p4d __ro_after_init = 1;
 EXPORT_SYMBOL(ptrs_per_p4d);
 #endif
@@ -164,9 +173,13 @@ unsigned long __head __startup_64(unsigned long physaddr,
 	 * pgd此时保存了early_top_pgt的物理地址，0x1000000开始的那种
 	 */
 	pgd = fixup_pointer(&early_top_pgt, physaddr);
+	/*
+	 * p指向了0xffffffff80000000所应处于的PGD页表项(511)
+	 */
 	p = pgd + pgd_index(__START_KERNEL_map);
 	/*
-	 * 先设置地址，再设置标志
+	 * 先设置地址，再设置标志;
+	 * 该表的511项刚好对应0xffffffff80000000，即__START_KERNEL_map。
 	 */
 	if (la57)
 		*p = (unsigned long)level4_kernel_pgt;
@@ -179,6 +192,9 @@ unsigned long __head __startup_64(unsigned long physaddr,
 		p4d[511] += load_delta;
 	}
 
+	/*
+	 * level3_kernel_pgt在汇编阶段已经安排好了条目了
+	 */
 	pud = fixup_pointer(&level3_kernel_pgt, physaddr);
 	pud[510] += load_delta;
 	pud[511] += load_delta;
@@ -227,6 +243,9 @@ unsigned long __head __startup_64(unsigned long physaddr,
 	pud[(i + 0) % PTRS_PER_PUD] = (pudval_t)pmd + pgtable_flags;
 	pud[(i + 1) % PTRS_PER_PUD] = (pudval_t)pmd + pgtable_flags;
 
+	/*
+	 * 表明这是个2MB的页
+	 */
 	pmd_entry = __PAGE_KERNEL_LARGE_EXEC & ~_PAGE_GLOBAL;
 	/* Filter out unsupported __PAGE_KERNEL_* bits: */
 	mask_ptr = fixup_pointer(&__supported_pte_mask, physaddr);
@@ -234,6 +253,10 @@ unsigned long __head __startup_64(unsigned long physaddr,
 	pmd_entry += sme_get_me_mask();
 	pmd_entry +=  physaddr;
 
+	/*
+	 * 恒等映射仅映射了内核的代码段，我怀疑只是在退出此函数到jmp 1f
+	 * 这段几行指令的时间里使用了这个恒等映射；
+	 */
 	for (i = 0; i < DIV_ROUND_UP(_end - _text, PMD_SIZE); i++) {
 		int idx = i + (physaddr >> PMD_SHIFT);
 
@@ -345,6 +368,9 @@ again:
 		p4d_p = pgd_p;
 	else if (pgd)
 		p4d_p = (p4dval_t *)((pgd & PTE_PFN_MASK) + __START_KERNEL_map - phys_base);
+	/*                                  ^^^^^^^^^^^^
+	 *                                  提取的是页帧的物理地址
+	 */
 	else {
 		if (next_early_pgt >= EARLY_DYNAMIC_PAGE_TABLES) {
 			reset_early_page_tables();
@@ -355,6 +381,13 @@ again:
 		memset(p4d_p, 0, sizeof(*p4d_p) * PTRS_PER_P4D);
 		*pgd_p = (pgdval_t)p4d_p - __START_KERNEL_map + phys_base + _KERNPG_TABLE;
 	}
+	/*
+	 * 如果是以4级页表运行于5级页表中，p4d_index()会返回0；
+	 * - 详见其PTRS_PER_P4D宏
+	 *   - 详见其ptrs_per_p4d变量
+	 *     - 对4级页表，该变量为1;
+	 *     - 对5级页表，该变量为512;
+	 */
 	p4d_p += p4d_index(address);
 	p4d = *p4d_p;
 
@@ -464,6 +497,9 @@ asmlinkage __visible void __init x86_64_start_kernel(char * real_mode_data)
 	cr4_init_shadow();
 
 	/* Kill off the identity-map trampoline */
+	/*
+	 * 在这里干掉了恒等映射，太可怜了，只被使用了几条指令的时间；
+	 */
 	reset_early_page_tables();
 
 	clear_bss();
@@ -479,6 +515,9 @@ asmlinkage __visible void __init x86_64_start_kernel(char * real_mode_data)
 
 	kasan_early_init();
 
+	/*
+	 * 设置早期的idt，此时只会处理缺页异常与fixup exception
+	 */
 	idt_setup_early_handler();
 
 	copy_bootdata(__va(real_mode_data));

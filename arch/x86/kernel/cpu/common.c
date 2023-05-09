@@ -120,6 +120,9 @@ DEFINE_PER_CPU_PAGE_ALIGNED(struct gdt_page, gdt_page) = { .gdt = {
 	 *
 	 * TLS descriptors are currently at a different place compared to i386.
 	 * Hopefully nobody expects them at a fixed place (Wine?)
+	 *
+	 * 用户态与内核态的权限不同（DPL），所以用户态不能访问内核态的地址是在
+	 * 段这一步卡住的，不是在页这一步卡住的；
 	 */
 	[GDT_ENTRY_KERNEL32_CS]		= GDT_ENTRY_INIT(0xc09b, 0, 0xfffff),
 	[GDT_ENTRY_KERNEL_CS]		= GDT_ENTRY_INIT(0xa09b, 0, 0xfffff),
@@ -1716,6 +1719,10 @@ EXPORT_PER_CPU_SYMBOL_GPL(fixed_percpu_data);
 /*
  * The following percpu variables are hot.  Align current_task to
  * cacheline size such that they fall in the same cacheline.
+ *
+ * 一开始，所有cpu上的current_task都指向了init_task；但事实情况是，系统启动完成
+ * 后每个cpu上的swapper进程并不同，只有0号cpu上的swapper进程是init_task；
+ * - init_task的定义在init/init_task.c
  */
 DEFINE_PER_CPU(struct task_struct *, current_task) ____cacheline_aligned =
 	&init_task;

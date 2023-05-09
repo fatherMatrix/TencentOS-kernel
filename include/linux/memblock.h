@@ -65,6 +65,10 @@ struct memblock_region {
  */
 struct memblock_type {
 	unsigned long cnt;
+	/*
+	 * 这个max只是说当前regions数组的最大长度，不够了就扩大就好；
+	 * - 动态数组的常规操作，不是个定值
+	 */
 	unsigned long max;
 	phys_addr_t total_size;
 	struct memblock_region *regions;

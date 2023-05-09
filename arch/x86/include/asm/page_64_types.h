@@ -41,7 +41,7 @@
 #define __PAGE_OFFSET_BASE_L4	_AC(0xffff888000000000, UL)
 
 /*
- * __PAGE_OFFSET是对所有物理内存的直接映射
+ * __PAGE_OFFSET是对所有物理内存的直接映射的起始地址；
  */
 #ifdef CONFIG_DYNAMIC_MEMORY_LAYOUT
 #define __PAGE_OFFSET           page_offset_base

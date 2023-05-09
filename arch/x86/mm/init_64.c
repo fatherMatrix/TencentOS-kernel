@@ -589,7 +589,13 @@ phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 {
 	unsigned long pages = 0, paddr_next;
 	unsigned long paddr_last = paddr_end;
+	/*
+	 * 获取起始物理地址对应的虚拟地址
+	 */
 	unsigned long vaddr = (unsigned long)__va(paddr);
+	/*
+	 * 获取起始虚拟地址对应的PUD entry在对应PUD page的索引值
+	 */
 	int i = pud_index(vaddr);
 
 	for (; i < PTRS_PER_PUD; i++, paddr = paddr_next) {
@@ -601,6 +607,13 @@ phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 		pud = pud_page + pud_index(vaddr);
 		paddr_next = (paddr & PUD_MASK) + PUD_SIZE;
 
+		/*
+		 * 这个if的作用是：
+		 * - 在启动阶段，如果paddr大于paddr_end了，但还没有推出循环，说
+		 *   明本PUD page剩下的PUD entry都应该设置为invalid entry；
+		 * - 如果已经启动完了，那不在[paddr, paddr_end]范围内的其他PUD
+		 *   entry也是有意义的，不能覆盖；
+		 */
 		if (paddr >= paddr_end) {
 			if (!after_bootmem &&
 			    !e820__mapped_any(paddr & PUD_MASK, paddr_next,
@@ -611,7 +624,13 @@ phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 			continue;
 		}
 
+		/*
+		 * 如果不为空
+		 */
 		if (!pud_none(*pud)) {
+			/*
+			 * 如果不是大页，即指向PMD page
+			 */
 			if (!pud_large(*pud)) {
 				pmd = pmd_offset(pud, 0);
 				paddr_last = phys_pmd_init(pmd, paddr,
@@ -620,6 +639,10 @@ phys_pud_init(pud_t *pud_page, unsigned long paddr, unsigned long paddr_end,
 							   prot, init);
 				continue;
 			}
+
+			/*
+			 * 到这里，说明该PUD entry指向的不是PMD page，而是指向1G大页
+			 */
 			/*
 			 * If we are ok with PG_LEVEL_1G mapping, then we will
 			 * use the existing mapping.
@@ -677,10 +700,16 @@ phys_p4d_init(p4d_t *p4d_page, unsigned long paddr, unsigned long paddr_end,
 	vaddr = (unsigned long)__va(paddr);
 	vaddr_end = (unsigned long)__va(paddr_end);
 
+	/*
+	 * 如果没有开启硬件5级页表（当前x86_64的默认情况），则直接转到pud
+	 */
 	if (!pgtable_l5_enabled())
 		return phys_pud_init((pud_t *) p4d_page, paddr, paddr_end,
 				     page_size_mask, init);
 
+	/*
+	 * 到这里说明硬件上是开启了5级页表的
+	 */
 	for (; vaddr < vaddr_end; vaddr = vaddr_next) {
 		p4d_t *p4d = p4d_page + p4d_index(vaddr);
 		pud_t *pud;
@@ -733,12 +762,26 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
 	vaddr_start = vaddr;
 
 	for (; vaddr < vaddr_end; vaddr = vaddr_next) {
+		/*
+		 * 获取vaddr在主内核页表中对应的pgd项
+		 * - 主内核页表就是swapper_pg_dir，就是init_top_pgtable
+		 */
 		pgd_t *pgd = pgd_offset_k(vaddr);
 		p4d_t *p4d;
 
+		/*
+		 * 不管vaddr开始的内存是多大，即不管这里使用几级页表来映射vaddr
+		 * 开始的内存，总之这里都会将vaddr到下一个PGD entry之前的所有内
+		 * 存都映射好；
+		 */
 		vaddr_next = (vaddr & PGDIR_MASK) + PGDIR_SIZE;
 
 		if (pgd_val(*pgd)) {
+			/*
+			 * 如果该pgd项有内容，即存在p4d表;
+			 * - 从pgd项中提取p4d表对应的物理地址并转化为虚拟地址;
+			 * - 交由p4d来处理；
+			 */
 			p4d = (p4d_t *)pgd_page_vaddr(*pgd);
 			paddr_last = phys_p4d_init(p4d, __pa(vaddr),
 						   __pa(vaddr_end),
@@ -747,12 +790,22 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
 			continue;
 		}
 
+		/*
+		 * 到这里说明pgd对应的p4d表不存在，应分配一个新的p4d表然后继续
+		 * 映射当前区域；
+		 */
 		p4d = alloc_low_page();
+		/*
+		 * 分配到新的p4d后继续交由p4d处理
+		 */
 		paddr_last = phys_p4d_init(p4d, __pa(vaddr), __pa(vaddr_end),
 					   page_size_mask, init);
 
 		spin_lock(&init_mm.page_table_lock);
 		if (pgtable_l5_enabled())
+			/*
+			 * 这种类似的宏定义见DEFINE_POPULATE
+			 */
 			pgd_populate_init(&init_mm, pgd, p4d, init);
 		else
 			p4d_populate_init(&init_mm, p4d_offset(pgd, vaddr),
@@ -808,6 +861,10 @@ void __init initmem_init(void)
 
 void __init paging_init(void)
 {
+	/*
+	 * 根据memblock.memory中物理内存的分布情况，遍历mem_section并设置
+	 * physnode_map数组；
+	 */
 	sparse_memory_present_with_active_regions(MAX_NUMNODES);
 	sparse_init();
 

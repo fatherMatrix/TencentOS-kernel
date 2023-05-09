@@ -619,6 +619,7 @@ asmlinkage __visible void __init start_kernel(void)
 	early_security_init();
 	/*
 	 * 设置体系结构相关的数据结构，包括：
+	 * - 建立direct mapping
 	 * - 解析MADT表，获取中断控制器和中断源的拓扑信息
 	 * - 初始化虚拟化环境
 	 * - 

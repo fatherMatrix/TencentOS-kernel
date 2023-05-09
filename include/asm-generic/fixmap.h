@@ -18,6 +18,18 @@
 #include <linux/bug.h>
 #include <linux/mm_types.h>
 
+/*
+ * 为什么是减法？
+ * - +----------+ <---- FIXADDR_TOP
+ *   | PAGE 1   |
+ *   +----------+
+ *   | PAGE 2   |
+ *   +----------+
+ *   |          |
+ *   +----------+
+ *   | PAGE LST |
+ *   +----------+ <---- FIXADDR_START
+ */
 #define __fix_to_virt(x)	(FIXADDR_TOP - ((x) << PAGE_SHIFT))
 #define __virt_to_fix(x)	((FIXADDR_TOP - ((x)&PAGE_MASK)) >> PAGE_SHIFT)
 

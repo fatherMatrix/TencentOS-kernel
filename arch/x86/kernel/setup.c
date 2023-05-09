@@ -873,6 +873,10 @@ void __init setup_arch(char **cmdline_p)
 			initial_page_table + KERNEL_PGD_BOUNDARY,
 			KERNEL_PGD_PTRS);
 
+	/*
+	 * 64bit对应的在哪里？
+	 * - init_mem_mapping
+	 */
 	load_cr3(swapper_pg_dir);
 	/*
 	 * Note: Quark X1000 CPUs advertise PGE incorrectly and require
@@ -900,11 +904,15 @@ void __init setup_arch(char **cmdline_p)
 	 * - debug
 	 * - int3
 	 * - page fault（if CONFIG_X86_32)(那64位呢?)
+	 *   - idt_setup_early_pf
 	 */
 	idt_setup_early_traps();
 	early_cpu_init();
 	arch_init_ideal_nops();
 	jump_label_init();
+	/*
+	 * 建立早期ioremap映射
+	 */
 	early_ioremap_init();
 
 	setup_olpc_ofw_pgd();
@@ -945,13 +953,19 @@ void __init setup_arch(char **cmdline_p)
 
 	iomem_resource.end = (1ULL << boot_cpu_data.x86_phys_bits) - 1;
 	/*
-	 * 在e820表中抠出保留的部分
+	 * 处理e820表；
 	 */
 	e820__memory_setup();
 	parse_setup_data();
 
+	/*
+	 * bios的拓展数据
+	 */
 	copy_edd();
 
+	/*
+	 * 设置0号进程的内存描述符中的字段
+	 */
 	if (!boot_params.hdr.root_flags)
 		root_mountflags &= ~MS_RDONLY;
 	init_mm.start_code = (unsigned long) _text;
@@ -993,6 +1007,9 @@ void __init setup_arch(char **cmdline_p)
 	 */
 	x86_configure_nx();
 
+	/*
+	 * 处理kernel的cmdline
+	 */
 	parse_early_param();
 
 	if (efi_enabled(EFI_BOOT))
@@ -1077,6 +1094,8 @@ void __init setup_arch(char **cmdline_p)
 	/*
 	 * partially used pages are not usable - thus
 	 * we are rounding upwards:
+	 *
+	 * 找到最大的页帧号
 	 */
 	max_pfn = e820__end_of_ram_pfn();
 
@@ -1132,9 +1151,16 @@ void __init setup_arch(char **cmdline_p)
 	 */
 	reserve_brk();
 
+	/*
+	 * 前面建立了level2_kernel_pgt中的0-512MB的页表映射，这里要清除
+	 * 除了代码段之外的页表；
+	 */
 	cleanup_highmap();
 
 	memblock_set_current_limit(ISA_END_ADDRESS);
+	/*
+	 * 把e820表中非保留的条目全部加到memblock里面去；
+	 */
 	e820__memblock_setup();
 
 	reserve_bios_regions();
@@ -1168,8 +1194,14 @@ void __init setup_arch(char **cmdline_p)
 	trim_platform_memory_ranges();
 	trim_low_memory_range();
 
+	/*
+	 * 建立direct mapping
+	 */
 	init_mem_mapping();
 
+	/*
+	 * x86_64的idt表在这里设置
+	 */
 	idt_setup_early_pf();
 
 	/*
@@ -1238,6 +1270,9 @@ void __init setup_arch(char **cmdline_p)
 	if (!early_xdbc_setup_hardware())
 		early_xdbc_register_console();
 
+	/*
+	 * 对应native_pagetable_init
+	 */
 	x86_init.paging.pagetable_init();
 
 	kasan_init();

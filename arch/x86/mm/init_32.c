@@ -266,6 +266,9 @@ kernel_physical_mapping_init(unsigned long start,
 	unsigned pages_2m, pages_4k;
 	int mapping_iter;
 
+	/*
+	 * 根据起止地址获取对应的4KB页框号
+	 */
 	start_pfn = start >> PAGE_SHIFT;
 	end_pfn = end >> PAGE_SHIFT;
 
@@ -291,9 +294,15 @@ kernel_physical_mapping_init(unsigned long start,
 repeat:
 	pages_2m = pages_4k = 0;
 	pfn = start_pfn;
+	/*
+	 * 物理地址后面加的PAGE_OFFSET就是direct mapping的起始虚地址空间；
+	 */
 	pgd_idx = pgd_index((pfn<<PAGE_SHIFT) + PAGE_OFFSET);
 	pgd = pgd_base + pgd_idx;
 	for (; pgd_idx < PTRS_PER_PGD; pgd++, pgd_idx++) {
+		/*
+		 * 根据PGD获取PMD，为啥不获取PTE？
+		 */
 		pmd = one_md_table_init(pgd);
 
 		if (pfn >= end_pfn)

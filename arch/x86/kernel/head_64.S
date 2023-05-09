@@ -528,7 +528,7 @@ NEXT_PAGE(level1_fixmap_pgt)
 	.align 16
 	.globl early_gdt_descr
 early_gdt_descr:
-	.word	GDT_ENTRIES*8-1
+	.word	GDT_ENTRIES*8-1			# 这16bit表示GDT的limit
 early_gdt_descr_base:
 	.quad	INIT_PER_CPU_VAR(gdt_page)	# 这里展开为变量init_per_cpu__gdt_page;
 						# 该变量在vmlinux.ld.S中赋值；

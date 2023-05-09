@@ -260,6 +260,9 @@ void __init memory_present(int nid, unsigned long start, unsigned long end)
 	unsigned long pfn;
 
 #ifdef CONFIG_SPARSEMEM_EXTREME
+	/*
+	 * 以防万一，给mem_section分配内存
+	 */
 	if (unlikely(!mem_section)) {
 		unsigned long size, align;
 
@@ -272,13 +275,30 @@ void __init memory_present(int nid, unsigned long start, unsigned long end)
 	}
 #endif
 
+	/*
+	 * start变为其所属section的起始pfn
+	 */
 	start &= PAGE_SECTION_MASK;
+	/*
+	 * 保证start和end都是合法的pfn
+	 */
 	mminit_validate_memmodel_limits(&start, &end);
 	for (pfn = start; pfn < end; pfn += PAGES_PER_SECTION) {
+		/*
+		 * 每个section中的page数量都是固定的，所以很好换算
+		 */
 		unsigned long section = pfn_to_section_nr(pfn);
 		struct mem_section *ms;
 
 		sparse_index_init(section, nid);
+		/*
+		 * 如果开启了NODE_NOT_IN_PAGE_FLAGS，那么需要一个section到node
+		 * 的转换数组；并在这里填充该数组；通过page得到node时先通过page
+		 * 的到section，然后通过该数组得到node；
+		 * 如果未开启NODE_NOT_IN_PAGE_FLAGS，那么page对应的node在page的
+		 * flags字段中，不需要section来过渡；下面的函数也条件编译为空操
+		 * 作；
+		 */
 		set_section_nid(section, nid);
 
 		ms = __nr_to_section(section);

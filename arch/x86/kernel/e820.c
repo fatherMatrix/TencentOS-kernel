@@ -1253,6 +1253,10 @@ void __init e820__memory_setup(void)
 	/* This is a firmware interface ABI - make sure we don't break it: */
 	BUILD_BUG_ON(sizeof(struct boot_e820_entry) != 20);
 
+	/*
+	 * 对应e820__memory_setup_default；主要作用是将bios传递给kernel的e820表
+	 * 拷贝到内核的e820_table数据结构中，并再按需填充一些；
+	 */
 	who = x86_init.resources.memory_setup();
 
 	memcpy(e820_table_kexec, e820_table, sizeof(*e820_table_kexec));

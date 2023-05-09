@@ -1217,7 +1217,7 @@ struct mem_section {
 	 * Making it a UL at least makes someone do a cast
 	 * before using it wrong.
 	 */
-	unsigned long section_mem_map;
+	unsigned long section_mem_map;	/* 指向page结构体数组，但还编码了一些其他东西 */
 
 	struct mem_section_usage *usage;
 #ifdef CONFIG_PAGE_EXTENSION

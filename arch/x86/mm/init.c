@@ -339,6 +339,9 @@ static int __meminit split_mem_range(struct map_range *mr, int nr_range,
 	unsigned long pfn;
 	int i;
 
+	/*
+	 * 物理地址end所在页框的页框号
+	 */
 	limit_pfn = PFN_DOWN(end);
 
 	/* head if not big page alignment ? */
@@ -355,10 +358,19 @@ static int __meminit split_mem_range(struct map_range *mr, int nr_range,
 	else
 		end_pfn = round_up(pfn, PFN_DOWN(PMD_SIZE));
 #else /* CONFIG_X86_64 */
+	/*
+	 * 这里为什么是PMD，不是PUD或PTE？
+	 */
 	end_pfn = round_up(pfn, PFN_DOWN(PMD_SIZE));
 #endif
+	/*
+	 * end_pfn不可能超过limit_pfn
+	 */
 	if (end_pfn > limit_pfn)
 		end_pfn = limit_pfn;
+	/*
+	 * start_pfn小于end_pfn说明至少可以铺满一个PMD项；
+	 */
 	if (start_pfn < end_pfn) {
 		nr_range = save_mr(mr, nr_range, start_pfn, end_pfn, 0);
 		pfn = end_pfn;
@@ -467,6 +479,9 @@ bool pfn_range_is_mapped(unsigned long start_pfn, unsigned long end_pfn)
 unsigned long __ref init_memory_mapping(unsigned long start,
 					       unsigned long end)
 {
+	/*
+	 * 本函数的两个参数都是物理地址
+	 */
 	struct map_range mr[NR_RANGE_MR];
 	unsigned long ret = 0;
 	int nr_range, i;
@@ -475,6 +490,14 @@ unsigned long __ref init_memory_mapping(unsigned long start,
 	       start, end - 1);
 
 	memset(mr, 0, sizeof(mr));
+	/*
+	 * 按照不同的连续页面大小拆分，即尽量切割为按页表项对齐的大块内存；
+	 * 因为direct mapping区域一旦创建就不会动态的撤销，所以尽可能使用huge
+	 * page去映射；
+	 * - PUD huge page = 1G
+	 * - PMD huge page = 2M
+	 * x86_64当前只支持着这种大小的巨型页；
+	 */
 	nr_range = split_mem_range(mr, 0, start, end);
 
 	for (i = 0; i < nr_range; i++)
@@ -649,12 +672,22 @@ void __init init_mem_mapping(void)
 	unsigned long end;
 
 	pti_check_boottime_disable();
+	/*
+	 * 设置page_size_mask全局变量，该变量决定了系统中支持的页框大小种类；
+	 * 参见pg_level枚举，每种支持的页框大小都在该变量中置位；
+	 */ 
 	probe_page_size_mask();
 	setup_pcid();
 
 #ifdef CONFIG_X86_64
+	/*
+	 * 64位映射全部内存
+	 */
 	end = max_pfn << PAGE_SHIFT;
 #else
+	/*
+	 * 32位仅映射低端内存
+	 */
 	end = max_low_pfn << PAGE_SHIFT;
 #endif
 
@@ -693,6 +726,9 @@ void __init init_mem_mapping(void)
 	early_ioremap_page_table_range_init();
 #endif
 
+	/*
+	 * 装载一下
+	 */
 	load_cr3(swapper_pg_dir);
 	__flush_tlb_all();
 

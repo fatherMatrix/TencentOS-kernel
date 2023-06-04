@@ -1547,8 +1547,14 @@ __do_page_fault(struct pt_regs *regs, unsigned long hw_error_code,
 
 	/* Was the fault on kernel-controlled part of the address space? */
 	if (unlikely(fault_in_kernel_space(address)))
+		/*
+		 * 错误地址处于kernel
+		 */
 		do_kern_addr_fault(regs, hw_error_code, address);
 	else
+		/*
+		 * 错误地址处于user
+		 */
 		do_user_addr_fault(regs, hw_error_code, address);
 }
 NOKPROBE_SYMBOL(__do_page_fault);

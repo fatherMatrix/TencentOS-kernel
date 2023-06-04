@@ -98,6 +98,8 @@
 /*
  * We are going to use the flags for the page to node mapping if its in
  * there.  This includes the case where there is no node, so it is implicit.
+ *
+ * 这个宏最终没有被定义
  */
 #if !(NODES_WIDTH > 0 || NODES_SHIFT == 0)
 #define NODE_NOT_IN_PAGE_FLAGS

@@ -450,7 +450,13 @@ static inline pgoff_t linear_page_index(struct vm_area_struct *vma,
 	pgoff_t pgoff;
 	if (unlikely(is_vm_hugetlb_page(vma)))
 		return linear_hugepage_index(vma, address);
+	/*
+	 * pgoff表示page在对应的vma中的页偏移
+	 */
 	pgoff = (address - vma->vm_start) >> PAGE_SHIFT;
+	/*
+	 * 匿名vma->vm_pgoff的设置是在insert_vm_struct()中
+	 */
 	pgoff += vma->vm_pgoff;
 	return pgoff;
 }

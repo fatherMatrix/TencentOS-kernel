@@ -555,6 +555,7 @@ setxattr(struct dentry *d, const char __user *name, const void __user *value,
 	 * 置的拓展属性名称。
 	 * - 不能这么做，用户态的cp命令要拷贝这些xattr，一旦某些xattr被拒绝，cp
 	 *   命令会报错。
+	 *   - 是否拷贝xattr取决于--preserve选项
 	 *
 	 * 其实在内核中实现biba policy的解析是最好的，失策失策！
 	 */

@@ -154,6 +154,9 @@ ENTRY(entry_SYSCALL_64)
 	swapgs
 	/* tss.sp2 is scratch space. */
 	movq	%rsp, PER_CPU_VAR(cpu_tss_rw + TSS_sp2)
+	/*
+	 * 如果没有开启内核页表隔离的话，下面这个宏是空的
+	 */
 	SWITCH_TO_KERNEL_CR3 scratch_reg=%rsp
 	movq	PER_CPU_VAR(cpu_current_top_of_stack), %rsp
 
@@ -947,6 +950,9 @@ apicinterrupt IRQ_WORK_VECTOR			irq_work_interrupt		smp_irq_work_interrupt
 	movq	%r12, %rdx			/* Move CR2 into 3rd argument */
 	.endif
 
+	/*
+	 * do_sym这个符号是用宏DO_ERROR()创建的，详见：arch/x86/kernel/traps.c
+	 */
 	call	\do_sym
 
 	.if \shift_ist != -1

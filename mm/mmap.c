@@ -529,6 +529,11 @@ static int find_vma_links(struct mm_struct *mm, unsigned long addr,
 {
 	struct rb_node **__rb_link, *__rb_parent, *rb_prev;
 
+	/*
+	 * mm_rb是个struct rb_root;
+	 * rb_root.rb_node是个struct rb_node *;
+	 * 所以__rb_link需要是一个二级指针；
+	 */
 	__rb_link = &mm->mm_rb.rb_node;
 	rb_prev = __rb_parent = NULL;
 
@@ -539,11 +544,21 @@ static int find_vma_links(struct mm_struct *mm, unsigned long addr,
 		vma_tmp = rb_entry(__rb_parent, struct vm_area_struct, vm_rb);
 
 		if (vma_tmp->vm_end > addr) {
-			/* Fail if an existing vma overlaps the area */
+			/*
+			 * Fail if an existing vma overlaps the area
+			 *
+			 * 要插入的新vma和已有的vma有重叠，是个错误；
+			 * 但返回-ENOMEM，是有点烦人的
+			 */
 			if (vma_tmp->vm_start < end)
 				return -ENOMEM;
 			__rb_link = &__rb_parent->rb_left;
 		} else {
+			/*
+			 * 如果是向右走，那么要换一下rb_prev了，因为中序遍历是
+			 * 有序的，parent要排在右子树的前面；
+			 * 如果是向左走，就不需要更新rb_prev；
+			 */
 			rb_prev = __rb_parent;
 			__rb_link = &__rb_parent->rb_right;
 		}
@@ -648,7 +663,14 @@ static void vma_link(struct mm_struct *mm, struct vm_area_struct *vma,
 		i_mmap_lock_write(mapping);
 	}
 
+	/*
+	 * 将vma插入红黑树
+	 */
 	__vma_link(mm, vma, prev, rb_link, rb_parent);
+	/*
+	 * 对于匿名页，该函数无实际操作；
+	 * 对于文件页，把vma添加到文件的基数树上；
+	 */
 	__vma_link_file(vma);
 
 	if (mapping)
@@ -1584,20 +1606,35 @@ unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 			      unsigned long prot, unsigned long flags,
 			      unsigned long fd, unsigned long pgoff)
 {
+	/*
+	 * 此处的pgoff是以页为单位的;
+	 */
 	struct file *file = NULL;
 	unsigned long retval;
 
 	if (!(flags & MAP_ANONYMOUS)) {
+		/*
+		 * 如果不是匿名页，即是文件页
+		 */
 		audit_mmap_fd(fd, flags);
+		/*
+		 * 获取fd对应的file结构体
+		 */
 		file = fget(fd);
 		if (!file)
 			return -EBADF;
+		/*
+		 * 通过file->f_op字段是否只想hugepage相关的操作方法判断是否是巨型页
+		 */
 		if (is_file_hugepages(file))
 			len = ALIGN(len, huge_page_size(hstate_file(file)));
 		retval = -EINVAL;
 		if (unlikely(flags & MAP_HUGETLB && !is_file_hugepages(file)))
 			goto out_fput;
 	} else if (flags & MAP_HUGETLB) {
+		/*
+		 * 匿名巨型页
+		 */
 		struct user_struct *user = NULL;
 		struct hstate *hs;
 
@@ -3213,6 +3250,11 @@ int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
 	struct vm_area_struct *prev;
 	struct rb_node **rb_link, *rb_parent;
 
+	/*
+	 * rb_link指向要链接到的节点的孩子指针的地址，把新的vma地址写入rb_link
+	 * 指向的位置就好了；
+	 * rb_parent是伸出rb_link指向的分支的节点，即完成插入后新vma的父节点；
+	 */
 	if (find_vma_links(mm, vma->vm_start, vma->vm_end,
 			   &prev, &rb_link, &rb_parent))
 		return -ENOMEM;
@@ -3234,6 +3276,11 @@ int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
 	 */
 	if (vma_is_anonymous(vma)) {
 		BUG_ON(vma->anon_vma);
+		/*
+		 * 对于文件vma，vma->vm_pgoff保存的是相对文件头的偏移，单位是页；
+		 * 对于匿名vma，vma->vm_pgoff保存的直接就是vma->vm_start的页；
+		 * - 也有版本是0，但这里不是；
+		 */
 		vma->vm_pgoff = vma->vm_start >> PAGE_SHIFT;
 	}
 

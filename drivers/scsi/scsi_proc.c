@@ -116,6 +116,9 @@ void scsi_proc_hostdir_add(struct scsi_host_template *sht)
 /**
  * scsi_proc_hostdir_rm - remove directory in /proc for a scsi host
  * @sht: owner of directory
+ *
+ * 这个函数删除的是/proc/{sg,usb-storage}这种文件夹；
+ * - 对比scsi_proc_host_rm
  */
 void scsi_proc_hostdir_rm(struct scsi_host_template *sht)
 {
@@ -156,6 +159,9 @@ void scsi_proc_host_add(struct Scsi_Host *shost)
 /**
  * scsi_proc_host_rm - remove this host's entry from /proc
  * @shost: which host
+ *
+ * 这个函数删除的是/proc/scsi/{sg,usb-storage}/{1,2,3,4}这种文件；
+ * - 对比scsi_proc_hostdir_rm
  */
 void scsi_proc_host_rm(struct Scsi_Host *shost)
 {

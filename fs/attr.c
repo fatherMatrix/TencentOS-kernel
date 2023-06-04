@@ -24,6 +24,7 @@ static bool chown_ok(const struct inode *inode, kuid_t uid)
 	 * 对于改变user owner，要求满足如下其中一个条件
 	 * 1. fsuid == inode->i_uid 且 uid == inode->i_uid
 	 * 2. 具有CAP_CHOWN能力
+	 * 3. 暂时没看懂？
 	 *
 	 * 条件1针对non-root进程，
 	 *     fsuid == inode->i_uid要求自己是文件的主人
@@ -346,8 +347,14 @@ int notify_change(struct dentry * dentry, struct iattr * attr, struct inode **de
 		return error;
 
 	/*
-	 * 对于chmod这种类似的操作，是通过文件的普通属性(setattr)进行存储的；
-	 * 对于ACL，是通过文件的拓展属性(setxattr)进行存储的；
+	 * 对于chmod这种类似的操作，是通过文件的普通属性(setattr)进行存储的；对
+	 * 其进行读写是通过inode_operations->setattr函数指针；
+	 *
+	 * 对于ACL，是通过文件的拓展属性(setxattr)进行存储的；在inode_operations
+	 * 结构体中没有专门的setxattr函数指针，是使用xattr_handler机制实现的；在
+	 * 文件系统对应的super_block中包含了对应文件系统xattr_handler结构体的指
+	 * 针；
+	 *
 	 */
 	if (inode->i_op->setattr)
 		error = inode->i_op->setattr(dentry, attr);

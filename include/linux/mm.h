@@ -1892,6 +1892,10 @@ int __pte_alloc_kernel(pmd_t *pmd);
 static inline p4d_t *p4d_alloc(struct mm_struct *mm, pgd_t *pgd,
 		unsigned long address)
 {
+	/*
+	 * 如果pgtable_5level_enabled()返回false，则pgd_none()也直接返回0;
+	 * 如果pgd_none返回0，则走p4d_offset分支；
+	 */
 	return (unlikely(pgd_none(*pgd)) && __p4d_alloc(mm, pgd, address)) ?
 		NULL : p4d_offset(pgd, address);
 }
@@ -2264,6 +2268,9 @@ extern atomic_long_t mmap_pages_allocated;
 extern int nommu_shrink_inode_mappings(struct inode *, size_t, size_t);
 
 /* interval_tree.c */
+/*
+ * 详见INTERVAL_TREE_DEFINE宏
+ */
 void vma_interval_tree_insert(struct vm_area_struct *node,
 			      struct rb_root_cached *root);
 void vma_interval_tree_insert_after(struct vm_area_struct *node,

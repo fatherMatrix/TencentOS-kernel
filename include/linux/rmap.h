@@ -73,11 +73,19 @@ struct anon_vma {
  * all the anon_vmas associated with this VMA.
  * The "rb" field indexes on an interval tree the anon_vma_chains
  * which link all the VMAs associated with this anon_vma.
+ *
+ * 组织anon_vma和vma间多对多的关系；
  */
 struct anon_vma_chain {
 	struct vm_area_struct *vma;
 	struct anon_vma *anon_vma;
+	/*
+	 * 挂入vma->anon_vma_chain链表；
+	 */
 	struct list_head same_vma;   /* locked by mmap_sem & page_table_lock */
+	/*
+	 * 挂入
+	 */
 	struct rb_node rb;			/* locked by anon_vma->rwsem */
 	unsigned long rb_subtree_last;
 #ifdef CONFIG_DEBUG_VM_RB

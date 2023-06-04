@@ -1043,6 +1043,9 @@ static void __page_set_anon_rmap(struct page *page,
 
 	anon_vma = (void *) anon_vma + PAGE_MAPPING_ANON;
 	page->mapping = (struct address_space *) anon_vma;
+	/*
+	 * page->index表示page映射到vma中的第几页；
+	 */
 	page->index = linear_page_index(vma, address);
 }
 

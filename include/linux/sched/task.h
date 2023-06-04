@@ -38,6 +38,9 @@ extern rwlock_t tasklist_lock;
 extern spinlock_t mmlist_lock;
 
 extern union thread_union init_thread_union;
+/*
+ * 参见init/init_task.c
+ */
 extern struct task_struct init_task;
 
 #ifdef CONFIG_PROVE_RCU

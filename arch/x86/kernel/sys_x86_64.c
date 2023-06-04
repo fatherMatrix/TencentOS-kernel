@@ -94,6 +94,10 @@ SYSCALL_DEFINE6(mmap, unsigned long, addr, unsigned long, len,
 {
 	long error;
 	error = -EINVAL;
+	/*
+	 * 取出off的页内偏移位，如果不为0，返回错误；
+	 * - 即要求这个offset必须是page对齐的；
+	 */
 	if (off & ~PAGE_MASK)
 		goto out;
 

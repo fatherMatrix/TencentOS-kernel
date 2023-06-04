@@ -85,6 +85,13 @@ struct page {
 			struct list_head lru;
 			/* See page-flags.h for PAGE_MAPPING_FLAGS */
 			struct address_space *mapping;
+			/*
+			 * 如果page是文件页，则表示在文件中的偏移，单位是页;
+			 * 如果page是匿名页，则设置为page虚拟地址/PAGE_SIZE；
+			 * - 也有版本是在对应vma中的偏移，单位是页；但这里不是；
+			 *   其含义本质上依赖于vma->pgoff的含义；
+			 * - 参见__page_set_anon_rmap()和insert_vm_struct()
+			 */
 			pgoff_t index;		/* Our offset within mapping. */
 			/**
 			 * @private: Mapping-private opaque data.
@@ -293,13 +300,22 @@ struct vm_userfaultfd_ctx {};
 struct vm_area_struct {
 	/* The first cache line has the info for VMA tree walking. */
 
+	/*
+	 * vma在进程地址空间的起止地址
+	 */
 	unsigned long vm_start;		/* Our start address within vm_mm. */
 	unsigned long vm_end;		/* The first byte after our end address
 					   within vm_mm. */
 
 	/* linked list of VM areas per task, sorted by address */
+	/*
+	 * 用于将vma组成双向链表，链表头是mm_struct.mmap
+	 */
 	struct vm_area_struct *vm_next, *vm_prev;
 
+	/*
+	 * 红黑树节点
+	 */
 	struct rb_node vm_rb;
 
 	/*
@@ -313,12 +329,20 @@ struct vm_area_struct {
 	/* Second cache line starts here. */
 
 	struct mm_struct *vm_mm;	/* The address space we belong to. */
+	/*
+	 * 此vma的访问权限，本质上是个unsigned long变量
+	 */
 	pgprot_t vm_page_prot;		/* Access permissions of this VMA. */
+	/*
+	 * 标志位，这些标志位最终都要落实到具体架构的页表项的标志中
+	 */
 	unsigned long vm_flags;		/* Flags, see mm.h. */
 
 	/*
 	 * For areas with an address space and backing store,
 	 * linkage into the address_space->i_mmap interval tree.
+	 *
+	 * 用于链接进address_space->i_mmap红黑树；
 	 */
 	struct {
 		struct rb_node rb;
@@ -331,11 +355,19 @@ struct vm_area_struct {
 	 * can only be in the i_mmap tree.  An anonymous MAP_PRIVATE, stack
 	 * or brk vma (with NULL file) can only be in an anon_vma list.
 	 */
+
+	/*
+	 * 链表头，元素是anon_vma_chain->same_vma;
+	 */
 	struct list_head anon_vma_chain; /* Serialized by mmap_sem &
 					  * page_table_lock */
 	struct anon_vma *anon_vma;	/* Serialized by page_table_lock */
 
 	/* Function pointers to deal with this struct. */
+	/*
+	 * 有操作方法，就是文件页；
+	 * 没有操作方法，就是匿名页；
+	 */
 	const struct vm_operations_struct *vm_ops;
 
 	/* Information about our backing store: */
@@ -376,10 +408,22 @@ struct core_state {
 struct kioctx_table;
 struct mm_struct {
 	struct {
+		/*
+		 * vm_area_struct的链表头，排序方式是按起始地址递增
+		 *                                     ^^^^
+		 */
 		struct vm_area_struct *mmap;		/* list of VMAs */
+		/*
+		 * vm_area_struct的红黑树根，看find_vma中代码，似乎是按照结束地
+		 *                                                       ^^^^
+		 * 址递增
+		 */
 		struct rb_root mm_rb;
 		u64 vmacache_seqnum;                   /* per-thread vmacache */
 #ifdef CONFIG_MMU
+		/*
+		 * 返回一段没有映射过的空间的起始地址
+		 */
 		unsigned long (*get_unmapped_area) (struct file *filp,
 				unsigned long addr, unsigned long len,
 				unsigned long pgoff, unsigned long flags);
@@ -393,6 +437,9 @@ struct mm_struct {
 #endif
 		unsigned long task_size;	/* size of task vm space */
 		unsigned long highest_vm_end;	/* highest vma end address */
+		/*
+		 * 指向进程的PGD
+		 */
 		pgd_t * pgd;
 
 #ifdef CONFIG_MEMBARRIER
@@ -433,8 +480,15 @@ struct mm_struct {
 		spinlock_t page_table_lock; /* Protects page tables and some
 					     * counters
 					     */
+		/*
+		 * 用于保护vma
+		 */
 		struct rw_semaphore mmap_sem;
 
+		/*
+		 * 所有的mm_struct数据结构都连接到一个双向链表中，链表头是
+		 * init_mm.mmlist;
+		 */
 		struct list_head mmlist; /* List of maybe swapped mm's.	These
 					  * are globally strung together off
 					  * init_mm.mmlist, and are protected
@@ -454,6 +508,9 @@ struct mm_struct {
 		unsigned long def_flags;
 
 		spinlock_t arg_lock; /* protect the below fields */
+		/*
+		 * 代码段、数据段、堆栈段的起止地址；
+		 */
 		unsigned long start_code, end_code, start_data, end_data;
 		unsigned long start_brk, brk, start_stack;
 		unsigned long arg_start, arg_end, env_start, env_end;

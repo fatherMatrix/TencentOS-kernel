@@ -256,13 +256,22 @@ struct page * __meminit __populate_section_memmap(unsigned long pfn,
 	 * PAGES_PER_SUBSECTION as allocations are tracked in the
 	 * 'subsection_map' bitmap of the section.
 	 */
+	/*
+	 * 对这几个参数做一下规整
+	 */
 	end = ALIGN(pfn + nr_pages, PAGES_PER_SUBSECTION);
 	pfn &= PAGE_SUBSECTION_MASK;
 	nr_pages = end - pfn;
 
+	/*
+	 * 这里就将他们两个从页帧号转换为对应的page结构体地址了
+	 */
 	start = (unsigned long) pfn_to_page(pfn);
 	end = start + nr_pages * sizeof(struct page);
 
+	/*
+	 * 字节的HVO优化就是在这里添加了compound页映射，妙啊；
+	 */
 	if (vmemmap_populate(start, end, nid, altmap))
 		return NULL;
 

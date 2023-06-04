@@ -862,10 +862,14 @@ void __init initmem_init(void)
 void __init paging_init(void)
 {
 	/*
-	 * 根据memblock.memory中物理内存的分布情况，遍历mem_section并设置
-	 * physnode_map数组；
+	 * 根据memblock.memory中物理内存的分布情况，分配对应的mem_section并初始
+	 * 化对应字段表示在线；
+	 * - 但是似乎没有看到设置mem_section->section_mem_map的地址部分；
 	 */
 	sparse_memory_present_with_active_regions(MAX_NUMNODES);
+	/*
+	 * 创建vmemmap映射
+	 */
 	sparse_init();
 
 	/*
@@ -1514,6 +1518,9 @@ static int __meminit vmemmap_populate_hugepages(unsigned long start,
 	pmd_t *pmd;
 
 	for (addr = start; addr < end; addr = next) {
+		/*
+		 * 直接用2MB的页
+		 */
 		next = pmd_addr_end(addr, end);
 
 		pgd = vmemmap_pgd_populate(addr, node);
@@ -1528,6 +1535,9 @@ static int __meminit vmemmap_populate_hugepages(unsigned long start,
 		if (!pud)
 			return -ENOMEM;
 
+		/*
+		 * pmd是指向对应PMD entry的指针
+		 */
 		pmd = pmd_offset(pud, addr);
 		if (pmd_none(*pmd)) {
 			void *p;
@@ -1536,9 +1546,15 @@ static int __meminit vmemmap_populate_hugepages(unsigned long start,
 				p = altmap_alloc_block_buf(PMD_SIZE, altmap);
 			else
 				p = vmemmap_alloc_block_buf(PMD_SIZE, node);
+			/*
+			 * 这个p指向的内存是用来保存page结构体的
+			 */
 			if (p) {
 				pte_t entry;
 
+				/*
+				 * 设置该页表项
+				 */
 				entry = pfn_pte(__pa(p) >> PAGE_SHIFT,
 						PAGE_KERNEL_LARGE);
 				set_pmd(pmd, __pmd(pte_val(entry)));
@@ -1571,10 +1587,16 @@ static int __meminit vmemmap_populate_hugepages(unsigned long start,
 int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,
 		struct vmem_altmap *altmap)
 {
+	/*
+	 * 参数start，end对应的是page结构体的地址；
+	 */
 	int err;
 
 	if (end - start < PAGES_PER_SECTION * sizeof(struct page))
 		err = vmemmap_populate_basepages(start, end, node);
+	/*
+	 * 实验得知：PSE是打开了的
+	 */
 	else if (boot_cpu_has(X86_FEATURE_PSE))
 		err = vmemmap_populate_hugepages(start, end, node, altmap);
 	else if (altmap) {
@@ -1583,6 +1605,10 @@ int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,
 		err = -ENOMEM;
 	} else
 		err = vmemmap_populate_basepages(start, end, node);
+
+	/*
+	 * 这里有可能是多个cpu上都有不同的init_mm；
+	 */
 	if (!err)
 		sync_global_pgds(start, end - 1);
 	return err;

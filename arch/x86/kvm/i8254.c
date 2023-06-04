@@ -657,12 +657,20 @@ struct kvm_pit *kvm_create_pit(struct kvm *kvm, u32 flags)
 	if (!pit)
 		return NULL;
 
+	/*
+	 * 分配一个irq号
+	 * - 诶，如果irqchip在用户态，那么irq号的分配是在哪里呢？
+	 */
 	pit->irq_source_id = kvm_request_irq_source_id(kvm);
 	if (pit->irq_source_id < 0)
 		goto fail_request;
 
 	mutex_init(&pit->pit_state.lock);
 
+	/*
+	 * 获取进程在当前namespace中的pid；
+	 * - linux进程的namespace和pid机制较为复杂
+	 */
 	pid = get_pid(task_tgid(current));
 	pid_nr = pid_vnr(pid);
 	put_pid(pid);

@@ -453,6 +453,9 @@ int pagecache_write_end(struct file *, struct address_space *mapping,
  */
 struct address_space {
 	struct inode		*host;
+	/*
+	 * 基数树
+	 */
 	struct xarray		i_pages;
 	gfp_t			gfp_mask;
 	atomic_t		i_mmap_writable;
@@ -460,6 +463,11 @@ struct address_space {
 	/* number of thp, only for non-shmem files */
 	atomic_t		nr_thps;
 #endif
+	/*
+	 * 将相关的vma组织成一棵红黑树;
+	 * - 一个文件可能会被映射到多个进程的多个VMA中，所有的这些VMA都被挂入到
+	 *   i_mmap指向的Priority search tree中。
+	 */
 	struct rb_root_cached	i_mmap;
 	struct rw_semaphore	i_mmap_rwsem;
 	unsigned long		nrpages;
@@ -1030,7 +1038,7 @@ struct file {
 		struct llist_node	fu_llist;
 		struct rcu_head 	fu_rcuhead;
 	} f_u;
-	struct path		f_path;
+	struct path		f_path;		/* 来源参见vfs_open */
 	struct inode		*f_inode;	/* cached value */
 	const struct file_operations	*f_op;
 

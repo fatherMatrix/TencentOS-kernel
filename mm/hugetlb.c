@@ -2990,6 +2990,9 @@ static int __init hugetlb_init(void)
 	if (!hugepages_supported())
 		return 0;
 
+	/*
+	 * size_to_hstate的作用是从全局hstate数组中找出size对应的hstate结构体
+	 */
 	if (!size_to_hstate(default_hstate_size)) {
 		if (default_hstate_size != 0) {
 			pr_err("HugeTLB: unsupported default_hugepagesz %lu. Reverting to %lu\n",
@@ -3000,16 +3003,32 @@ static int __init hugetlb_init(void)
 		if (!size_to_hstate(default_hstate_size))
 			hugetlb_add_hstate(HUGETLB_PAGE_ORDER);
 	}
+	/*
+	 * hstate_index的作用是找出size对应的hstate结构体在全局hstate数组中的位置；
+	 */
 	default_hstate_idx = hstate_index(size_to_hstate(default_hstate_size));
 	if (default_hstate_max_huge_pages) {
 		if (!default_hstate.max_huge_pages)
 			default_hstate.max_huge_pages = default_hstate_max_huge_pages;
 	}
 
+	/*
+	 * 伙伴系统可以分配的巨型页在这里分配到hstate中，1GB的巨型页伙伴系统分配不了，
+	 * 可以在系统启动阶段提前分配好；
+	 */
 	hugetlb_init_hstates();
+	/*
+	 * 将启动时分配的1GB的巨型页信息收集到hstate数组中
+	 */ 
 	gather_bootmem_prealloc();
+	/*
+	 * 报告系统中的巨型页信息
+	 */
 	report_hugepages();
 
+	/*
+	 * 创建/sys/kernel/mm/hugepages-xxx/{...}
+	 */
 	hugetlb_sysfs_init();
 	hugetlb_register_all_nodes();
 	hugetlb_cgroup_file_init();

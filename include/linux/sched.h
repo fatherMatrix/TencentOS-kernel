@@ -645,6 +645,13 @@ struct task_struct {
 	 * For reasons of header soup (see current_thread_info()), this
 	 * must be the first element of task_struct.
 	 */
+	/*
+	 * 记得在32位上，thread_info好像是放在进程内核栈的最低部分的，还用了sp
+	 * 寄存器mask的骚操作来快速获取thread_info，进而快速获取task_struct；
+	 *
+	 * 这里为什么又把thread_info放到task_struct内了呢？在devcloud上，上边的
+	 * 宏THERAD_INFO_IN_TASK是开启的；
+	 */
 	struct thread_info		thread_info;
 #endif
 	/* -1 unrunnable, 0 runnable, >0 stopped: */
@@ -803,12 +810,15 @@ struct task_struct {
 
 	struct restart_block		restart_block;
 
-	pid_t				pid;	/* 全局进程号，不同线程的pid也不同
-						 * gettid()返回pid 
-						 */
-	pid_t				tgid;	/* 线程组标识符，即线程组组长的pid
-						 * getpid()返回tgid
-						 */
+	/*
+	 * 全局进程号，不同线程的pid也不同，gettid()返回pid；
+	 */
+	pid_t				pid;
+	/*
+	 * 线程组描述符，即线程组长的pid，getpid()返回tgid；
+	 * 其实这里是优点反直觉的；
+	 */
+	pid_t				tgid;
 						
 #ifdef CONFIG_STACKPROTECTOR
 	/* Canary value for the -fstack-protector GCC feature: */
@@ -820,10 +830,19 @@ struct task_struct {
 	 * p->real_parent->pid)
 	 */
 
-	/* Real parent process: */
+	/* 
+	 * Real parent process:
+	 *
+	 * real_parent指向真实的父进程，对比parent字段理解；
+	 */  
 	struct task_struct __rcu	*real_parent;
 
-	/* Recipient of SIGCHLD, wait4() reports: */
+	/* 
+	 * Recipient of SIGCHLD, wait4() reports:
+	 * 
+	 * parent指向父进程：如果一个进程被另一个进程（通常是调试器）使用系统调用
+	 * ptrace()跟踪，那么parent指向跟踪进程，否则和real_parent的值相同；
+	 */
 	struct task_struct __rcu	*parent;
 
 	/*
@@ -831,8 +850,10 @@ struct task_struct {
 	 */
 	struct list_head		children;
 	struct list_head		sibling;
-	struct task_struct		*group_leader;	/* 指向tgid的task_struct */
-
+	/* 
+	 * 指向tgid的task_struct，即线程组组长；
+	 */
+	struct task_struct		*group_leader;	
 	/*
 	 * 'ptraced' is the list of tasks this task is using ptrace() on.
 	 *
@@ -843,7 +864,10 @@ struct task_struct {
 	struct list_head		ptrace_entry;
 
 	/* PID/PID hash table linkage. */
-	/* 存储除根命名空间外的其他命名空间的pid */
+	/* 
+	 * 存储除根命名空间外的其他命名空间的pid 
+	 * - 根命名空间的pid存在哪里？
+	 */
 	struct pid			*thread_pid;	
 	/*
 	 * 所有共享同一ID的task_struct实例都按进程存储在一个散列表中，这里是用

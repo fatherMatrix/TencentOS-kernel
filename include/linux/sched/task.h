@@ -20,11 +20,31 @@ union thread_union;
 struct kernel_clone_args {
 	u64 flags;
 	int __user *pidfd;
+	/*
+	 * 只有创建线程的时候才有意义，用于新线程保存自己的进程标识符；
+	 */
 	int __user *child_tid;
+	/*
+	 * 只有创建线程的时候才有意义，用于父线程保存新线程的进程标识符；
+	 * - 猜测pthread_create()的第一个参数就是这么来的；
+	 */
 	int __user *parent_tid;
+	/*
+	 * 进程退出时给发给父进程的信号
+	 */
 	int exit_signal;
+	/*
+	 * 如果新创建的是线程，用来指定新线程的用户栈的起始地址；
+	 */
 	unsigned long stack;
+	/*
+	 * 如果新创建的是线程，用来指定新线程的用户栈的大小；
+	 */
 	unsigned long stack_size;
+	/*
+	 * 如果新创建的是线程，并指定了CLONE_SETTLS，用来指定新线程的线程本地存
+	 * 储的地址；
+	 */
 	unsigned long tls;
 };
 

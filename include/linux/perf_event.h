@@ -287,6 +287,8 @@ struct pmu {
 	/*
 	 * Fully disable/enable this PMU, can be used to protect from the PMI
 	 * as well as for lazy/batch writing of the MSRs.
+	 *
+	 * 各种回调函数；
 	 */
 	void (*pmu_enable)		(struct pmu *pmu); /* optional */
 	void (*pmu_disable)		(struct pmu *pmu); /* optional */
@@ -583,6 +585,8 @@ struct pmu_event_list {
 
 /**
  * struct perf_event - performance event kernel representation:
+ *
+ * 用来描述一个事件，比如CPU时钟时间等；
  */
 struct perf_event {
 #ifdef CONFIG_PERF_EVENTS
@@ -590,6 +594,8 @@ struct perf_event {
 	 * entry onto perf_event_context::event_list;
 	 *   modifications require ctx->lock
 	 *   RCU safe iterations.
+	 *
+	 * 作为链表元素链入perf_event_context->event_list；
 	 */
 	struct list_head		event_entry;
 
@@ -621,11 +627,20 @@ struct perf_event {
 	int				group_caps;
 
 	struct perf_event		*group_leader;
+	/*
+	 * 指向抽象的pmu单元;
+	 * - 可为什么perf_event_context中也有一个pmu指针？
+	 * - 实例：
+	 *   + perf_cpu_clock
+	 */ 
 	struct pmu			*pmu;
 	void				*pmu_private;
 
 	enum perf_event_state		state;
 	unsigned int			attach_state;
+	/*
+	 * 本事件被触发的次数
+	 */
 	local64_t			count;
 	atomic64_t			child_count;
 
@@ -649,12 +664,18 @@ struct perf_event {
 	 */
 	u64				shadow_ctx_time;
 
+	/*
+	 * 事件的属性，由userspace提供
+	 */
 	struct perf_event_attr		attr;
 	u16				header_size;
 	u16				id_header_size;
 	u16				read_size;
 	struct hw_perf_event		hw;
 
+	/*
+	 * 事件所属的上下文
+	 */
 	struct perf_event_context	*ctx;
 	atomic_long_t			refcount;
 
@@ -748,8 +769,14 @@ struct perf_event_groups {
  * struct perf_event_context - event context structure
  *
  * Used as a container for task events and CPU events as well:
+ *
+ * 一个进程可以同时分析多种事件，使用该结构体来记录属于一个进程的所有事件；
  */
 struct perf_event_context {
+	/*
+	 * perf_event结构体中有一个pmu指针字段；
+	 * - 那么这里的pmu字段是为了做什么呢？
+	 */
 	struct pmu			*pmu;
 	/*
 	 * Protect the states of the events in the list,
@@ -766,11 +793,18 @@ struct perf_event_context {
 	struct list_head		active_ctx_list;
 	struct perf_event_groups	pinned_groups;
 	struct perf_event_groups	flexible_groups;
+	/*
+	 * 作为链表头，用于链接所有属于此事件上下文的perf_event结构体；
+	 * 链表元素是perf_event->event_entry字段；
+	 */
 	struct list_head		event_list;
 
 	struct list_head		pinned_active;
 	struct list_head		flexible_active;
 
+	/*
+	 * 属于当前上下文的所有事件的总数
+	 */
 	int				nr_events;
 	int				nr_active;
 	int				is_active;
@@ -783,6 +817,10 @@ struct perf_event_context {
 	 */
 	int				rotate_necessary;
 	refcount_t			refcount;
+	/*
+	 * 事件上下文对应的task_struct；
+	 * - task_struct->perf_event_ctxp字段指向本事件上下文结构体；
+	 */
 	struct task_struct		*task;
 
 	/*

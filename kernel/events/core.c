@@ -9618,14 +9618,26 @@ static enum hrtimer_restart perf_swevent_hrtimer(struct hrtimer *hrtimer)
 	struct perf_event *event;
 	u64 period;
 
+	/*
+	 * perf_event结构体内嵌了hw_perf_event结构体；hw_perf_event结构体中以
+	 * union的形式来保存对应的私有数据；在这里私有数据是hrtimer，可以反向获
+	 * 取到perf_event结构体；
+	 */
 	event = container_of(hrtimer, struct perf_event, hw.hrtimer);
 
 	if (event->state != PERF_EVENT_STATE_ACTIVE)
 		return HRTIMER_NORESTART;
 
+	/*
+	 * 调用该pmu对应的read回调
+	 */
 	event->pmu->read(event);
 
 	perf_sample_data_init(&data, 0, event->hw.last_period);
+	/*
+	 * 获取中断触发时所有寄存器的值；
+
+	 */
 	regs = get_irq_regs();
 
 	if (regs && !perf_exclude_event(event, regs)) {
@@ -9657,6 +9669,9 @@ static void perf_swevent_start_hrtimer(struct perf_event *event)
 	} else {
 		period = max_t(u64, 10000, hwc->sample_period);
 	}
+	/*
+	 * 高精度定时器的工作函数是perf_swevent_hrtimer
+	 */
 	hrtimer_start(&hwc->hrtimer, ns_to_ktime(period),
 		      HRTIMER_MODE_REL_PINNED_HARD);
 }

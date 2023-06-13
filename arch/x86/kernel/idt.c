@@ -315,9 +315,6 @@ void __init idt_setup_debugidt_traps(void)
  */
 void __init idt_setup_apic_and_irq_gates(void)
 {
-	int i = FIRST_EXTERNAL_VECTOR;
-	void *entry;
-
 	/*
 	 * 此函数用于设置idt表中的项，主要是处理函数（最直接的处理函数）的地址，
 	 * 这些处理函数的声明都在arch/x86/entry/entry_64.S中。包括：
@@ -325,7 +322,10 @@ void __init idt_setup_apic_and_irq_gates(void)
 	 * - IOAPIC中的
 	 * - 异常？
 	 *   x 异常当然是在trap_init中啊
-	 */
+	 */	
+	
+	int i = FIRST_EXTERNAL_VECTOR;
+	void *entry;
 
 	/*
 	 * 这里对LAPIC中的一些中断源的idt项进行设置；

@@ -264,6 +264,9 @@ struct cred *prepare_creds(void)
 
 	kdebug("prepare_creds() alloc %p", new);
 
+	/*
+	 * 把old cred拷贝到new cred中；
+	 */
 	old = task->cred;
 	memcpy(new, old, sizeof(struct cred));
 

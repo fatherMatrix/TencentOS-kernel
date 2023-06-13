@@ -782,6 +782,10 @@ static void flush_sigqueue_mask(sigset_t *mask, struct sigpending *s)
 	struct sigqueue *q, *n;
 	sigset_t m;
 
+	/*
+	 * 参见include/linux/signal.h: _SIG_SET_BINOP；
+	 * - 主要作用是针对不同体系结构不同长度的掩码进行and操作；
+	 */
 	sigandsets(&m, mask, &s->signal);
 	if (sigisemptyset(&m))
 		return;
@@ -3956,6 +3960,9 @@ void __weak sigaction_compat_abi(struct k_sigaction *act,
 {
 }
 
+/*
+ * 本函数只负责在task_struct中的sighand中置位对应的信号，并不触发信号；
+ */
 int do_sigaction(int sig, struct k_sigaction *act, struct k_sigaction *oact)
 {
 	struct task_struct *p = current, *t;
@@ -3965,7 +3972,15 @@ int do_sigaction(int sig, struct k_sigaction *act, struct k_sigaction *oact)
 	if (!valid_signal(sig) || sig < 1 || (act && sig_kernel_only(sig)))
 		return -EINVAL;
 
+	/*
+	 * 获取进程当前的sig信号对应的结构体
+	 */
 	k = &p->sighand->action[sig-1];
+
+	/*
+	 * 如果进程在这里被切换出去，而且另一个进程也在设置信号，删除了sig会怎
+	 * 么样？
+	 */
 
 	spin_lock_irq(&p->sighand->siglock);
 	if (oact)
@@ -3974,6 +3989,10 @@ int do_sigaction(int sig, struct k_sigaction *act, struct k_sigaction *oact)
 	sigaction_compat_abi(act, oact);
 
 	if (act) {
+		/*
+		 * SIGKILL和SIGSTOP这两个信号不允许被屏蔽，因此在act->sa.sa_mask
+		 * 中清除掉这两个bit
+		 */
 		sigdelsetmask(&act->sa.sa_mask,
 			      sigmask(SIGKILL) | sigmask(SIGSTOP));
 		*k = *act;

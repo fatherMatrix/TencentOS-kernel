@@ -495,9 +495,17 @@ bool process_shares_mm(struct task_struct *p, struct mm_struct *mm)
 
 	for_each_thread(p, t) {
 		struct mm_struct *t_mm = READ_ONCE(t->mm);
+		/*
+		 * 同一个进程内的所有线程对应的mm_struct肯定是同一个；这里的意思
+		 * 就是检查其中任意一个mm字段非NULL的thread的mm是否是待评估进程
+		 * 的mm；
+		 */
 		if (t_mm)
 			return t_mm == mm;
 	}
+	/*
+	 * 如果进程p包含的所有thread的mm字段都是NULL了，就返回false；
+	 */
 	return false;
 }
 
@@ -841,7 +849,15 @@ static bool task_will_free_mem(struct task_struct *task)
 	 * b) the task is also reapable by the oom reaper.
 	 */
 	rcu_read_lock();
+	/*
+	 * for_each_process()选出的一定是进程的主线程？
+	 * - 是的；参见task_struct->tasks字段的注释
+	 */
 	for_each_process(p) {
+		/*
+		 * 查看是否有其他进程共享了当前待评估进程的mm_struct；
+		 * - 为什么不同的进程间会存在共享mm的情况呢？
+		 */
 		if (!process_shares_mm(p, mm))
 			continue;
 		if (same_thread_group(task, p))
@@ -1046,6 +1062,11 @@ bool out_of_memory(struct oom_control *oc)
 {
 	unsigned long freed = 0;
 
+	/*
+	 * 在freeze_processes()时会调用oom_killer_disable()将其置位；
+	 * 在thaw_processes()时会调用oom_killer_enable()将其清零；
+	 * 即，在进程freeze过程中，不允许OOM；
+	 */
 	if (oom_killer_disabled)
 		return false;
 
@@ -1060,6 +1081,9 @@ bool out_of_memory(struct oom_control *oc)
 	 * If current has a pending SIGKILL or is exiting, then automatically
 	 * select it.  The goal is to allow it to allocate so that it may
 	 * quickly exit and free its memory.
+	 *
+	 * 如果当前进程正因为各种原因将要退出，或者释放内存，则将当前进程作为OOM
+	 * 候选者，然后唤醒OOM reaper内核线程去进行收割，从而释放内存；
 	 */
 	if (task_will_free_mem(current)) {
 		mark_oom_victim(current);

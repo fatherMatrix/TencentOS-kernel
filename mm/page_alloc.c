@@ -3825,6 +3825,10 @@ __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
 	 * making progress for us.
 	 */
 	if (!mutex_trylock(&oom_lock)) {
+		/*
+		 * 进入到这里，说明没有获取到oom_lock，说明有另一位oom_killer在
+		 * 工作，我们退出重试即可；
+		 */
 		*did_some_progress = 1;
 		schedule_timeout_uninterruptible(1);
 		return NULL;
@@ -4582,12 +4586,18 @@ retry:
 		goto nopage;
 
 	/* Try direct reclaim and then allocating */
+	/*
+	 * 进行直接内存回收
+	 */
 	page = __alloc_pages_direct_reclaim(gfp_mask, order, alloc_flags, ac,
 							&did_some_progress);
 	if (page)
 		goto got_pg;
 
 	/* Try direct compaction and then allocating */
+	/*
+	 * 进行直接内存规整
+	 */
 	page = __alloc_pages_direct_compact(gfp_mask, order, alloc_flags, ac,
 					compact_priority, &compact_result);
 	if (page)

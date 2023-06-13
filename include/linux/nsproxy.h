@@ -36,6 +36,7 @@ struct nsproxy {
 	struct pid_namespace *pid_ns_for_children;
 	struct net 	     *net_ns;
 	struct cgroup_namespace *cgroup_ns;
+	/* user_namespace位于cred中 */
 };
 extern struct nsproxy init_nsproxy;
 

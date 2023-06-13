@@ -520,6 +520,10 @@ setxattr(struct dentry *d, const char __user *name, const void __user *value,
 	void *kvalue = NULL;
 	char kname[XATTR_NAME_MAX + 1];
 
+	/*
+	 * setxattr()的flag只允许XATTR_CREATE和XATTR_REPLACE两个参数，如果出现
+	 * 其他的bit，就判定为参数错误；
+	 */
 	if (flags & ~(XATTR_CREATE|XATTR_REPLACE))
 		return -EINVAL;
 
@@ -539,9 +543,15 @@ setxattr(struct dentry *d, const char __user *name, const void __user *value,
 			error = -EFAULT;
 			goto out;
 		}
+		/*
+		 * 如果要改ACL()或default ACL()，
+		 */
 		if ((strcmp(kname, XATTR_NAME_POSIX_ACL_ACCESS) == 0) ||
 		    (strcmp(kname, XATTR_NAME_POSIX_ACL_DEFAULT) == 0))
 			posix_acl_fix_xattr_from_user(kvalue, size);
+		/*
+		 * 如果要改cap()，也要做一些动作；
+		 */
 		else if (strcmp(kname, XATTR_NAME_CAPS) == 0) {
 			error = cap_convert_nscap(d, &kvalue, size);
 			if (error < 0)
@@ -573,9 +583,15 @@ static int path_setxattr(const char __user *pathname,
 	struct path path;
 	int error;
 retry:
+	/*
+	 * 这种返回出来的path结构体都是增加了引用计数的
+	 */
 	error = user_path_at(AT_FDCWD, pathname, lookup_flags, &path);
 	if (error)
 		return error;
+	/*
+	 * 获取vfsmount的写权限，这个写权限并不是锁
+	 */
 	error = mnt_want_write(path.mnt);
 	if (!error) {
 		error = setxattr(path.dentry, name, value, size, flags);

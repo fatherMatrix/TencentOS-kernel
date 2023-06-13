@@ -273,6 +273,10 @@ EXPORT_SYMBOL_GPL(find_vpid);
 
 static struct pid **task_pid_ptr(struct task_struct *task, enum pid_type type)
 {
+	/*
+	 * PIDTYPE_PID放到了task_struct->thread_pid中，其他的都放到了
+	 * signal_struct->pids数组中；
+	 */
 	return (type == PIDTYPE_PID) ?
 		&task->thread_pid :
 		&task->signal->pids[type];
@@ -373,6 +377,9 @@ struct pid *get_task_pid(struct task_struct *task, enum pid_type type)
 {
 	struct pid *pid;
 	rcu_read_lock();
+	/*
+	 * get_pid用于增加引用计数
+	 */
 	pid = get_pid(rcu_dereference(*task_pid_ptr(task, type)));
 	rcu_read_unlock();
 	return pid;
@@ -410,10 +417,16 @@ pid_t pid_nr_ns(struct pid *pid, struct pid_namespace *ns)
 
 	if (pid && ns->level <= pid->level) {
 		upid = &pid->numbers[ns->level];
-		/* 这里还会不相等吗？*/
+		/* 
+		 * 这里还会不相等吗？
+		 * - 如果当前进程根本没有在这个pid_namespace中就会不想等；
+		 */
 		if (upid->ns == ns)
 			nr = upid->nr;
 	}
+	/*
+	 * 返回0合适嘛？
+	 */
 	return nr;
 }
 EXPORT_SYMBOL_GPL(pid_nr_ns);

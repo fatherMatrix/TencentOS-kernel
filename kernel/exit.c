@@ -764,6 +764,9 @@ void __noreturn do_exit(long code)
 		schedule();
 	}
 
+	/*
+	 * 设置PF_EXITING
+	 */
 	exit_signals(tsk);  /* sets PF_EXITING */
 
 	/* sync mm's RSS info before statistics gathering */

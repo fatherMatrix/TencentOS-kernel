@@ -16,11 +16,29 @@
 #define UID_GID_MAP_MAX_EXTENTS 340
 
 struct uid_gid_extent {
+	/*
+	 * 本段id映射范围在当前user namespace的起始id
+	 */
 	u32 first;
+	/*
+	 * 本段id映射范围在全局user namespace的起始id；
+	 * - 当通过/proc/$$/xxx_map配置时，本字段填写的是父user namespace中的起
+	 *   始id，但内核会将其自动转换为全局id保存到这里；
+	 */
 	u32 lower_first;
+	/*
+	 * 本段id映射范围内id的个数
+	 */
 	u32 count;
 };
 
+/*
+ * 本数据结构表示一段id范围的映射，有两种存储形式：
+ * - 当nr_extents <= UID_GID_MAP_MAX_BASE_EXTENTS时，直接将uid_gid_extent结构体
+ *   保存到本地；
+ * - 当nr_extents > UID_GID_MAP_MAX_BASE_EXTENTS时，将uid_gid_extent结构体保存到
+ *   指针组成的数组里；需要分配额外的内存；
+ */
 struct uid_gid_map { /* 64 bytes -- 1 cache line */
 	u32 nr_extents;
 	union {
@@ -53,6 +71,16 @@ enum ucount_type {
 	UCOUNT_COUNTS,
 };
 
+/*
+ * user_namespace遵循以下原则：
+ * - user_namespace使用父子关系组成树形结构，进程需要指定树种的某个节点为本进程
+ *   所在的user_namespace。即task_struct->real_cred->user_ns
+ * - 每个其他类型的namespace（uts/pid/mount/network/cgroup）都需要指定当前ns所属
+ *   的user_namespace。即xxx_ns->user_ns
+ * - 每个进程使用一个代理结构来指定本进程所属的其他类型的namespace（
+ *   task_struct->nsproxy->xxx_ns），这些namespace所属的user_namespace即为2；
+ *   1和2种的user_ns可以不一致；
+ */
 struct user_namespace {
 	struct uid_gid_map	uid_map;
 	struct uid_gid_map	gid_map;

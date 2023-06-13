@@ -367,11 +367,17 @@ static bool ns_capable_common(struct user_namespace *ns,
 {
 	int capable;
 
+	/*
+	 * 请求的cap一定要合法
+	 */
 	if (unlikely(!cap_valid(cap))) {
 		pr_crit("capable() called with invalid cap=%u\n", cap);
 		BUG();
 	}
 
+	/*
+	 * 请求的是当前进程的主体cred
+	 */
 	capable = security_capable(current_cred(), ns, cap, opts);
 	if (capable == 0) {
 		current->flags |= PF_SUPERPRIV;
@@ -442,10 +448,15 @@ EXPORT_SYMBOL(ns_capable_setid);
  * available for use, false if not.
  *
  * This sets PF_SUPERPRIV on the task if the capability is available on the
+ *           ^^^^^^^^^^^^
+ *           啥时候clear呢？
  * assumption that it's about to be used.
  */
 bool capable(int cap)
 {
+	/*
+	 * 观察当前进程在init_user_ns空间中的cap
+	 */
 	return ns_capable(&init_user_ns, cap);
 }
 EXPORT_SYMBOL(capable);

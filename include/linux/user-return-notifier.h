@@ -2,6 +2,9 @@
 #ifndef _LINUX_USER_RETURN_NOTIFIER_H
 #define _LINUX_USER_RETURN_NOTIFIER_H
 
+/*
+ * devcloud是定义了这个宏的
+ */
 #ifdef CONFIG_USER_RETURN_NOTIFIER
 
 #include <linux/list.h>

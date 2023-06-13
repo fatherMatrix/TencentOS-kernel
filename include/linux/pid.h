@@ -8,9 +8,21 @@
 
 enum pid_type
 {
+	/*
+	 * 线程id
+	 */
 	PIDTYPE_PID,
+	/*
+	 * 线程组id，即进程id
+	 */
 	PIDTYPE_TGID,
+	/*
+	 * 进程组id
+	 */
 	PIDTYPE_PGID,
+	/*
+	 * 会话组id
+	 */
 	PIDTYPE_SID,
 	PIDTYPE_MAX,
 };
@@ -143,6 +155,11 @@ extern void disable_pid_allocation(struct pid_namespace *ns);
  */
 static inline struct pid_namespace *ns_of_pid(struct pid *pid)
 {
+	/*
+	 * pid->numbers本身是个零长数组，该数组的（长度-1）保存在pid->level字段
+	 * 中；任务的当前pid_namespace就是下标pid->level对应的pid_namespace，因
+	 * 为进程创建的时候是从当前namespace反向向上级namespace分配的；
+	 */
 	struct pid_namespace *ns = NULL;
 	if (pid)
 		ns = pid->numbers[pid->level].ns;

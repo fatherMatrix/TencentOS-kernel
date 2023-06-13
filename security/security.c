@@ -779,6 +779,10 @@ int security_capable(const struct cred *cred,
 		     int cap,
 		     unsigned int opts)
 {
+	/*
+	 * 通过crash得知，开启了CONFIG_SECURITY后，这个哈希表里有cap_capable
+	 * 这一个函数；如果开启了其他LSM的话，应该还会有其他的；
+	 */
 	return call_int_hook(capable, 0, cred, ns, cap, opts);
 }
 

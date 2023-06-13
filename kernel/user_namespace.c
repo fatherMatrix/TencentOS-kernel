@@ -68,6 +68,10 @@ static void set_cred_user_ns(struct cred *cred, struct user_namespace *user_ns)
  */
 int create_user_ns(struct cred *new)
 {
+	/*
+	 * new中的大部分内容是从old cred中拷贝过来的，其中就包括了user_ns字段；
+	 * 详见prepare_creds()
+	 */
 	struct user_namespace *ns, *parent_ns = new->user_ns;
 	kuid_t owner = new->euid;
 	kgid_t group = new->egid;
@@ -75,9 +79,15 @@ int create_user_ns(struct cred *new)
 	int ret, i;
 
 	ret = -ENOSPC;
+	/*
+	 * 32是个限制，但似乎有些草率；
+	 */
 	if (parent_ns->level > 32)
 		goto fail;
 
+	/*
+	 * parent_ns就是old cred中的user namespace;
+	 */
 	ucounts = inc_user_namespaces(parent_ns, owner);
 	if (!ucounts)
 		goto fail;
@@ -101,11 +111,17 @@ int create_user_ns(struct cred *new)
 	    !kgid_has_mapping(parent_ns, group))
 		goto fail_dec;
 
+	/*
+	 * 分配user namespace的内存；
+	 */
 	ret = -ENOMEM;
 	ns = kmem_cache_zalloc(user_ns_cachep, GFP_KERNEL);
 	if (!ns)
 		goto fail_dec;
 
+	/*
+	 * 分配在/proc/中的inode number
+	 */
 	ret = ns_alloc_inum(&ns->ns);
 	if (ret)
 		goto fail_free;
@@ -382,6 +398,8 @@ static u32 map_id_up(struct uid_gid_map *map, u32 id)
  *	pair INVALID_UID is returned.  Callers are expected to test
  *	for and handle INVALID_UID being returned.  INVALID_UID
  *	may be tested for using uid_valid().
+ *
+ *	make_kuid()函数通过查询uid_map把对应user ns的uid转换成全局uid
  */
 kuid_t make_kuid(struct user_namespace *ns, uid_t uid)
 {
@@ -401,6 +419,8 @@ EXPORT_SYMBOL(make_kuid);
  *	There is always a mapping into the initial user_namespace.
  *
  *	If @kuid has no mapping in @targ (uid_t)-1 is returned.
+ *
+ *	from_kuid()函数通过查询uid_map把全局uid转换成对应user ns的uid
  */
 uid_t from_kuid(struct user_namespace *targ, kuid_t kuid)
 {

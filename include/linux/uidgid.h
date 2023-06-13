@@ -138,7 +138,7 @@ static inline bool kgid_has_mapping(struct user_namespace *ns, kgid_t gid)
 	return from_kgid(ns, gid) != (gid_t) -1;
 }
 
-#else
+#else /* 没有CONFIG_USER_NS */
 
 static inline kuid_t make_kuid(struct user_namespace *from, uid_t uid)
 {

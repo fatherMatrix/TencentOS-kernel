@@ -743,6 +743,10 @@ struct task_struct {
 
 	struct sched_info		sched_info;
 
+	/*
+	 * 串联所有进程的主线程的task_struct；
+	 * - for_each_process()宏使用这个字段从init_task起遍历所有的进程；
+	 */
 	struct list_head		tasks;
 #ifdef CONFIG_SMP
 	struct plist_node		pushable_tasks;
@@ -865,8 +869,19 @@ struct task_struct {
 
 	/* PID/PID hash table linkage. */
 	/* 
-	 * 存储除根命名空间外的其他命名空间的pid 
-	 * - 根命名空间的pid存在哪里？
+	 * 存储PIDTYPE_PID类型的pid结构体；
+	 * - PIDTYPE_PID类型的pid结构体保存当前进程/线程在所有命令空间分配的进程号；
+	 * - PIDTYPE_PGID类型的pid结构体指向进程组组长的pid结构体；位于signal中；
+	 * - PIDTYPE_SID类型的pid结构体指向会话首进程的pid结构体；位于signal中；
+	 *
+	 * 进程组：
+	 * - 多个进程可以组成一个进程组，进程组标识符是组长的进程标识符。进程可
+	 *   以使用setpgid()创建或者加入一个进程组。shell为执行单一命令或者管道
+	 *   的进程创建一个进程组，进程组简化了向进程组中所有成员进程发送信号的
+	 *   操作；
+	 * 
+	 * 会话：
+	 * - 
 	 */
 	struct pid			*thread_pid;	
 	/*
@@ -875,7 +890,19 @@ struct task_struct {
 	 * 链表头是struct pid->task[PIDTYPE_MAX]。
 	 */
 	struct hlist_node		pid_links[PIDTYPE_MAX];
+	/*
+	 * 对于线程组组长，thread_group是链表头；
+	 * 对于普通线程，thread_group是链表元素；
+	 */
 	struct list_head		thread_group;
+	/*
+	 * 这个是链表元素，对应的链表头是task_struct->signal->thread_head;
+	 * 同属一个进程的所有线程都作为元素链接到主线程的signal->thread_head链表
+	 *
+	 * - thread_node和thread_group的功能确实有些冲突；后面thread_group会逐渐
+	 *   消失，因为其安全性和rcu不友好；
+	 * - 参见[ Upstream commit 0c740d0afc3bff0a097ad03a1c8df92757516f5c ]
+	 */
 	struct list_head		thread_node;
 
 	struct completion		*vfork_done;
@@ -964,11 +991,17 @@ struct task_struct {
 
 	/* Signal handlers: */
 	struct signal_struct		*signal;	/* 贼尼玛混乱 */
+	/*
+	 * 进程接收到的信号
+	 */
 	struct sighand_struct		*sighand;
 	sigset_t			blocked;
 	sigset_t			real_blocked;
 	/* Restored if set_restore_sigmask() was used: */
 	sigset_t			saved_sigmask;
+	/*
+	 * 当前pending的信号
+	 */
 	struct sigpending		pending;
 	unsigned long			sas_ss_sp;
 	size_t				sas_ss_size;
@@ -1110,6 +1143,12 @@ struct task_struct {
 	unsigned int			futex_state;
 #endif
 #ifdef CONFIG_PERF_EVENTS
+	/*
+	 * 指向perf相关的事件上下文;
+	 * - 数组共2项，分别是
+	 *   + 软件事件
+	 *   + 硬件事件
+	 */
 	struct perf_event_context	*perf_event_ctxp[perf_nr_task_contexts];
 	struct mutex			perf_event_mutex;
 	struct list_head		perf_event_list;
@@ -1301,6 +1340,10 @@ struct task_struct {
 	struct task_struct		*oom_reaper_list;
 #endif
 #ifdef CONFIG_VMAP_STACK
+	/*
+	 * 缓存一下stack所在的vm_struct结构体地址；
+	 * - 注意：这是内核栈
+	 */
 	struct vm_struct		*stack_vm_area;
 #endif
 #ifdef CONFIG_THREAD_INFO_IN_TASK
@@ -1516,6 +1559,9 @@ extern struct pid *cad_pid;
 #define PF_WQ_WORKER		0x00000020	/* I'm a workqueue worker */
 #define PF_FORKNOEXEC		0x00000040	/* Forked but didn't exec */
 #define PF_MCE_PROCESS		0x00000080      /* Process policy on mce errors */
+/*
+ * 好像通过了ns_capable()的检查就会给进程标志这个位，不论检查的是哪个cap
+ */
 #define PF_SUPERPRIV		0x00000100	/* Used super-user privileges */
 #define PF_DUMPCORE		0x00000200	/* Dumped core */
 #define PF_SIGNALED		0x00000400	/* Killed by a signal */

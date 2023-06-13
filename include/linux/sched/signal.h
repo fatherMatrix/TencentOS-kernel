@@ -82,6 +82,9 @@ struct signal_struct {
 	refcount_t		sigcnt;
 	atomic_t		live;
 	int			nr_threads;
+	/*
+	 * 进程中所有线程的链表头，参见task_struct->thread_node字段注释
+	 */
 	struct list_head	thread_head;
 
 	wait_queue_head_t	wait_chldexit;	/* for wait4() */
@@ -148,7 +151,13 @@ struct signal_struct {
 	/* Empty if CONFIG_POSIX_TIMERS=n */
 	struct posix_cputimers posix_cputimers;
 
-	/* PID/PID hash table linkage. */
+	/* 
+	 * PID/PID hash table linkage.
+	 *
+	 * 其中PIDTYPE_PID对应的元素是0，因为该类型的pid结构体指针放到了
+	 * task_struct->thread_pid中；
+	 * - 那这里岂不是有内存浪费？
+	 */
 	struct pid *pids[PIDTYPE_MAX];
 
 #ifdef CONFIG_NO_HZ_FULL

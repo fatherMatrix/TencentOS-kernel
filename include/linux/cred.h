@@ -117,10 +117,31 @@ struct cred {
 #define CRED_MAGIC	0x43736564
 #define CRED_MAGIC_DEAD	0x44656144
 #endif
+	/*
+	 * real user id是真正process执行起来的用户user id，这个是比较清楚的，这
+	 * 个进程是哪个用户调用的，或者是哪个父进程发起的，这个都是很明显的。通
+	 * 常这个是不更改的，也不需要更改。
+	 *
+	 * 通过查看getuid/setuid系统调用的代码，这里的id号应该是全局id号，即处于
+	 * init_user_namespace中的id号；
+	 */ 
 	kuid_t		uid;		/* real UID of the task */
 	kgid_t		gid;		/* real GID of the task */
+	/*
+	 * 在exec启动进程之后，它会从effective user id位拷贝信息到自己;
+	 * 
+	 * 对于非root用户，可以在未来使用setuid()来将euid设置成为real uid和suid
+	 * 中的任何一个。但是非root用户是不允许用setuid()把euid设置成为其他值；
+	 *
+	 * 对于root来说，就没有那么大的意义了。因为root调用setuid()的时候，将会
+	 * 同时设置uid/suid/euid三个值；
+	 */
 	kuid_t		suid;		/* saved UID of the task */
 	kgid_t		sgid;		/* saved GID of the task */
+	/*
+	 * 当判定一个进程是否对于某个文件有权限的时候，要验证的ID是
+	 * effective user id，而非real user id。
+	 */
 	kuid_t		euid;		/* effective UID of the task */
 	kgid_t		egid;		/* effective GID of the task */
 	kuid_t		fsuid;		/* UID for VFS ops */
@@ -143,6 +164,11 @@ struct cred {
 	void		*security;	/* subjective LSM security */
 #endif
 	struct user_struct *user;	/* real user ID subscription */
+	/*
+	 * 进程需要指定user_namespace树中的某个节点作为本进程所在的user_namespace
+	 * - user namespace还是比较特殊的，其他的namespace都放到了nsproxy中，就
+	 *   只有user namespace搞尼玛特殊；
+	 */
 	struct user_namespace *user_ns; /* user_ns the caps and keyrings are relative to. */
 	struct group_info *group_info;	/* supplementary groups for euid/fsgid */
 	/* RCU deletion */
@@ -290,6 +316,8 @@ static inline void put_cred(const struct cred *_cred)
 
 /**
  * current_cred - Access the current task's subjective credentials
+ *                                          ^^^^^^^^^^
+ *                                             主体
  *
  * Access the subjective credentials of the current task.  RCU-safe,
  * since nobody else can modify it.
@@ -299,6 +327,8 @@ static inline void put_cred(const struct cred *_cred)
 
 /**
  * current_real_cred - Access the current task's objective credentials
+ *                                               ^^^^^^^^^
+ *                                                  客体
  *
  * Access the objective credentials of the current task.  RCU-safe,
  * since nobody else can modify it.

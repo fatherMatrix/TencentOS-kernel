@@ -260,6 +260,9 @@ static unsigned long *alloc_thread_stack_node(struct task_struct *tsk, int node)
 	 * so cache the vm_struct.
 	 */
 	if (stack) {
+		/*
+		 * 将stack所在的vm_struct缓存到task_struct中
+		 */
 		tsk->stack_vm_area = find_vm_area(stack);
 		tsk->stack = stack;
 	}
@@ -307,7 +310,7 @@ static inline void free_thread_stack(struct task_struct *tsk)
 
 	__free_pages(virt_to_page(tsk->stack), THREAD_SIZE_ORDER);
 }
-# else
+# else /* !(THREAD_SIZE >= PAGE_SIZE || defined(CONFIG_VMAP_STACK)) */
 static struct kmem_cache *thread_stack_cache;
 
 static unsigned long *alloc_thread_stack_node(struct task_struct *tsk,
@@ -873,19 +876,32 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 
 	if (node == NUMA_NO_NODE)
 		node = tsk_fork_get_node(orig);
+	/*
+	 * 分配task_struct，并没有初始化
+	 */
 	tsk = alloc_task_struct_node(node);
 	if (!tsk)
 		return NULL;
 
+	/*
+	 * 分配stack内存
+	 */
 	stack = alloc_thread_stack_node(tsk, node);
 	if (!stack)
 		goto free_tsk;
 
+	/*
+	 * memcg记账
+	 */
 	if (memcg_charge_kernel_stack(tsk))
 		goto free_stack;
 
 	stack_vm_area = task_stack_vm_area(tsk);
 
+	/*
+	 * 首先是对task_struct的整体拷贝；
+	 * 然后对于x86，还额外做了fpu的拷贝
+	 */
 	err = arch_dup_task_struct(tsk, orig);
 
 	/*
@@ -914,6 +930,9 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 	tsk->seccomp.filter = NULL;
 #endif
 
+	/*
+	 * 拷贝thread_info，不论是在栈上的，还是在task_struct中的；
+	 */
 	setup_thread_stack(tsk, orig);
 	clear_user_return_notifier(tsk);
 	clear_tsk_need_resched(tsk);
@@ -1875,6 +1894,9 @@ static __latent_entropy struct task_struct *copy_process(
 		goto fork_out;
 
 	retval = -ENOMEM;
+	/*
+	 * 复制task_struct及stack
+	 */
 	p = dup_task_struct(current, node);
 	if (!p)
 		goto fork_out;
@@ -2401,18 +2423,34 @@ long _do_fork(struct kernel_clone_args *args)
 	 */
 	trace_sched_process_fork(current, p);
 
+	/*
+	 * 获取新创建task_struct在当前current进程所在的当前pid_namespace中的pid
+	 * 并保存到nr中；
+	 * - nr将作为fork()系统调用的返回值，那么子进程的返回值是怎么变成0的？
+	 */
 	pid = get_task_pid(p, PIDTYPE_PID);
 	nr = pid_vnr(pid);
 
+	/*
+	 * 系统调用clone才会走这个分支，猜测pthread_create()的第一个参数就是这么
+	 * 得到的；
+	 */
 	if (clone_flags & CLONE_PARENT_SETTID)
 		put_user(nr, args->parent_tid);
 
+	/*
+	 * vfork现在基本废弃，但机制可以等有时间研究一下；
+	 */
 	if (clone_flags & CLONE_VFORK) {
 		p->vfork_done = &vfork;
 		init_completion(&vfork);
 		get_task_struct(p);
 	}
 
+	/*
+	 * 上面通过copy_process()创建的新task_struct还是不能被调度的，这里将其
+	 * 唤醒，正式参与调度；
+	 */
 	wake_up_new_task(p);
 
 	/* forking complete and child started to run, tell ptracer */
@@ -2424,6 +2462,9 @@ long _do_fork(struct kernel_clone_args *args)
 			ptrace_event_pid(PTRACE_EVENT_VFORK_DONE, pid);
 	}
 
+	/*
+	 * 对应get_task_pid()
+	 */
 	put_pid(pid);
 	return nr;
 }

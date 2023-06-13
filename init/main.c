@@ -416,8 +416,10 @@ noinline void __ref rest_init(void)
 	 * the init task will end up wanting to create kthreads, which, if
 	 * we schedule it before we create kthreadd, will OOPS.
 	 *
-	 * kernel_thread是直接调用do_fork进行task的创建
-	 * kthread_create是通过内核线程创建新的内核线程
+	 * kernel_thread是直接调用do_fork进行task的创建；
+	 * kthread_create是通过内核线程kthreadd创建新的内核线程；
+	 * - kthreadd内核线程本身在下面通过kernel_thread创建；
+	 * - kthreadd内核线程本身最终是通过kernel_thread创建；
 	 */
 	pid = kernel_thread(kernel_init, NULL, CLONE_FS);
 	/*
@@ -431,6 +433,9 @@ noinline void __ref rest_init(void)
 	rcu_read_unlock();
 
 	numa_default_policy();
+	/*
+	 * 2号线程，kthreadd
+	 */
 	pid = kernel_thread(kthreadd, NULL, CLONE_FS | CLONE_FILES);
 	rcu_read_lock();
 	kthreadd_task = find_task_by_pid_ns(pid, &init_pid_ns);

@@ -9,8 +9,7 @@
  * entry.S contains the system-call and fault low-level handling routines.
  *
  * Some of this is documented in Documentation/x86/entry_64.rst
- *
- * A note on terminology:
+ * * A note on terminology:
  * - iret frame:	Architecture defined interrupt frame from SS to RIP
  *			at the top of the kernel process stack.
  *
@@ -156,6 +155,7 @@ ENTRY(entry_SYSCALL_64)
 	movq	%rsp, PER_CPU_VAR(cpu_tss_rw + TSS_sp2)
 	/*
 	 * 如果没有开启内核页表隔离的话，下面这个宏是空的
+	 * - 见calling.h
 	 */
 	SWITCH_TO_KERNEL_CR3 scratch_reg=%rsp
 	movq	PER_CPU_VAR(cpu_current_top_of_stack), %rsp
@@ -413,6 +413,9 @@ END(spurious_entries_start)
 .macro ENTER_IRQ_STACK regs=1 old_rsp save_ret=0
 	DEBUG_ENTRY_ASSERT_IRQS_OFF
 
+	/*
+	 * 找到不包含返回地址的内核栈rsp
+	 */
 	.if \save_ret
 	/*
 	 * If save_ret is set, the original stack contains one additional
@@ -447,6 +450,9 @@ END(spurious_entries_start)
 	 */
 
 	movq	\old_rsp, PER_CPU_VAR(irq_stack_backing_store + IRQ_STACK_SIZE - 8)
+	/*
+	 * 从内核栈切换到中断栈
+	 */
 	movq	PER_CPU_VAR(hardirq_stack_ptr), %rsp
 
 #ifdef CONFIG_DEBUG_ENTRY
@@ -463,6 +469,9 @@ END(spurious_entries_start)
 #endif
 
 .Lirq_stack_push_old_rsp_\@:
+	/*
+	 * 将内核栈的rsp压到中断栈
+	 */
 	pushq	\old_rsp
 
 	.if \regs
@@ -520,8 +529,23 @@ ENTRY(interrupt_entry)
 	ASM_CLAC
 	cld
 
+	/*
+	 * 判断中断是否发生在内核态
+	 */
 	testb	$3, CS-ORIG_RAX+8(%rsp)
 	jz	1f
+
+	/*
+	 * 走到这里，说明中断是发生在用户态的。因此需要进行栈切换；
+	 * - 中断刚发生时，栈已经从用户态栈切换到了trampoline栈。下面的代码要从
+	 *   trampoline栈切换内核栈；
+	 */
+
+	/*
+	 * swapgs指令，负责切换gs的寄存器值，保证内核中per-cpu变量可用；参见sdm
+	 * 中IA32_GS_BASE与IA32_KERNEL_GS_BASE寄存器即swapgs指令解释；
+	 * - 切换回用户态时应该有个对应的swapgs指令吧？在哪儿呢？
+	 */
 	SWAPGS
 	FENCE_SWAPGS_USER_ENTRY
 	/*
@@ -533,7 +557,19 @@ ENTRY(interrupt_entry)
 	pushq	%rdi
 
 	/* Need to switch before accessing the thread stack. */
+	/*
+	 * 内核页表隔离（CONFIG_PAGE_TABLE_ISOLATION）相关：
+	 * - 如果没有开启内核页表隔离，这个宏是空的；
+	 * - 如果开启了内核页表格里，这个宏会切换cr3；当前devcloud是开启
+	 *   了的；
+	 *
+	 * 64位下定义见arch/x86/entry/calling.h
+	 */
 	SWITCH_TO_KERNEL_CR3 scratch_reg=%rdi
+	/*
+	 * trampoline栈的rsp保存到rdi中；
+	 * 从tampoline栈手动切换到内核栈; - 这里是中断处理流程中的第2次栈切换
+	 */
 	movq	%rsp, %rdi
 	movq	PER_CPU_VAR(cpu_current_top_of_stack), %rsp
 
@@ -543,6 +579,11 @@ ENTRY(interrupt_entry)
 	  */
 	UNWIND_HINT_IRET_REGS base=%rdi offset=24
 
+	/*
+	 * 此时rsp已经指向了内核栈，rdi保存的已经是trampoline栈对应的rsp了（见上面）；
+	 * 这里将存在于trampoline的几个相关寄存器再压到内核栈里；
+	 * - 这不是多此一举吗？明明可以去进程栈上找到的；
+	 */
 	pushq	7*8(%rdi)		/* regs->ss */
 	pushq	6*8(%rdi)		/* regs->rsp */
 	pushq	5*8(%rdi)		/* regs->eflags */
@@ -552,11 +593,26 @@ ENTRY(interrupt_entry)
 	pushq	2*8(%rdi)		/* regs->orig_ax */
 	pushq	8(%rdi)			/* return address */
 
+	/*
+	 * 诶，这里因为上面有pushq %rdi，所以这里是又把当时的rdi恢复了；
+	 */
 	movq	(%rdi), %rdi
 	jmp	2f
+
+	/*
+	 * 走到这里，说明中断发生前一刻处于内核态
+	 */
 1:
 	FENCE_SWAPGS_KERNEL_ENTRY
+
+	/*
+	 * 不论中断发生前处于用户态还是内核态，在上面的分支后都会走到这里；
+	 * 在这里保存通用寄存器并构造pt_regs结构体
+	 */
 2:
+	/*
+	 * 64位下该宏位于calling.h
+	 */
 	PUSH_AND_CLEAR_REGS save_ret=1
 	ENCODE_FRAME_POINTER 8
 
@@ -578,6 +634,12 @@ ENTRY(interrupt_entry)
 	CALL_enter_from_user_mode
 
 1:
+	/*
+	 * 这里的old_rsp=%rdi不是说现在rdi中保存了原来的rsp，而是说在这个宏里面
+	 * 使用rdi作为old_rsp的暂存寄存器；
+	 * 
+	 * 里面会从内核栈切换到中断栈 - 这是中断处理流程中的第3次栈切换
+	 */
 	ENTER_IRQ_STACK old_rsp=%rdi save_ret=1
 	/* We entered an interrupt context - irqs are off: */
 	TRACE_IRQS_OFF
@@ -604,7 +666,9 @@ _ASM_NOKPROBE(common_spurious)
 
 /* common_interrupt is a hotpath. Align it */
 /*
- * 不论vector id是多少，idt都会跳到这里。
+ * 不论vector id是多少，idt都会经过irq_entries_start + 8 * i跳到这里。
+ * - 见idt_setup_apic_and_irq_gates
+ *
  * 难道idt中所有的目标都指向了这里？
  * - 不是的。common_interrupt仅接手外部IRQ中断，中断向量表的相关服务程序先压栈对应
  *   的irq，再调用common_interrupt。
@@ -614,13 +678,18 @@ _ASM_NOKPROBE(common_spurious)
 common_interrupt:
 	addq	$-0x80, (%rsp)			/* Adjust vector to [-256, -1] range */
 	/*
-	 * interrupt_entry里面做的事情颇多，其中包括：
-	 * - ...
-	 * - 切换到硬件中断栈
-	 * - ...
+	 * 在这里面从trampoline栈切换到内核栈，然后再从内核栈切换到中断栈；
+	 *         ^^^^^^^^^^^^^^^^^^^^^^^^^^
+	 *     iff 中断引起了用户态到内核态的切换
 	 *
-	 * 在这里里面切换到硬件中断栈，那什么时候再切换回task的内核栈呢？
+	 * 什么时候再从中断栈切换回task的内核栈呢？
 	 * - 下面的LEAVE_IRQ_STACK(进入硬件中断栈是通过ENTER_IRQ_STACK)
+	 * 什么时候从内核栈切换回trampoline栈呢？
+	 * - 首先，iff要返回用户态时才会发生
+	 * - swapgs_restore_regs_and_return_to_usermode
+	 *
+	 * 中断处理过程中的第一次栈切换（从用户态->内核态）是硬件做的，切换回去
+	 * 时也是通过iret指令交由硬件完成；
 	 */
 	call	interrupt_entry
 	UNWIND_HINT_REGS indirect=1

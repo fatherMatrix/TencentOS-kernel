@@ -569,6 +569,9 @@ SYSCALL_DEFINE2(setreuid, uid_t, ruid, uid_t, euid)
  */
 long __sys_setuid(uid_t uid)
 {
+	/*
+	 * 从当前的cred中取出user namespace
+	 */
 	struct user_namespace *ns = current_user_ns();
 	const struct cred *old;
 	struct cred *new;
@@ -920,6 +923,12 @@ SYSCALL_DEFINE0(getppid)
 SYSCALL_DEFINE0(getuid)
 {
 	/* Only we change this so SMP safe */
+	/*
+	 * current_uid()从task_struct的cred中取出uid；
+	 * current_user_ns()从task_struct的cred中取出user_namespace；
+	 *
+	 *
+	 */
 	return from_kuid_munged(current_user_ns(), current_uid());
 }
 

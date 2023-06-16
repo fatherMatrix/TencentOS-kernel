@@ -73,12 +73,18 @@ int cap_capable(const struct cred *cred, struct user_namespace *targ_ns,
 	 */
 	for (;;) {
 		/* Do we have the necessary capabilities? */
+		/*
+		 * 相同namespace就直接看cap_effective
+		 */
 		if (ns == cred->user_ns)
 			return cap_raised(cred->cap_effective, cap) ? 0 : -EPERM;
 
 		/*
 		 * If we're already at a lower level than we're looking for,
 		 * we're done searching.
+		 *
+		 * ns表示目标user namespace，cred->user_ns表示当前进程的user
+		 * namespace；这里要求进程主体的level不能大于目标namespace；
 		 */
 		if (ns->level <= cred->user_ns->level)
 			return -EPERM;
@@ -687,6 +693,11 @@ static int get_file_caps(struct linux_binprm *bprm, bool *effective, bool *has_f
 	if (!current_in_userns(bprm->file->f_path.mnt->mnt_sb->s_user_ns))
 		return 0;
 
+	/*
+	 * 这里判断访问xattr的权限了吗？
+	 * - 没有判断，可能是因为这里是内核的内部隐藏路径，反正用户态没办法通过
+	 *   这里获取什么数据，不会造成安全问题；
+	 */
 	rc = get_vfs_caps_from_disk(bprm->file->f_path.dentry, &vcaps);
 	if (rc < 0) {
 		if (rc == -EINVAL)
@@ -737,6 +748,11 @@ static void handle_privileged_root(struct linux_binprm *bprm, bool has_fcap,
 
 	if (!root_privileged())
 		return;
+
+	/*
+	 * 默认情况是可以走下来的
+	 */
+
 	/*
 	 * If the legacy file capability is set, then don't set privs
 	 * for a setuid root binary run by a non-root user.  Do set it
@@ -835,6 +851,9 @@ int cap_bprm_set_creds(struct linux_binprm *bprm)
 	if (WARN_ON(!cap_ambient_invariant_ok(old)))
 		return -EPERM;
 
+	/*
+	 * 文件的能力机制本身也是写在文件的拓展属性中的；
+	 */
 	ret = get_file_caps(bprm, &effective, &has_fcap);
 	if (ret < 0)
 		return ret;
@@ -1058,7 +1077,11 @@ int cap_task_fix_setuid(struct cred *new, const struct cred *old, int flags)
 	case LSM_SETID_ID:
 	case LSM_SETID_RES:
 		/* juggle the capabilities to follow [RES]UID changes unless
-		 * otherwise suppressed */
+		 * otherwise suppressed 
+		 *
+		 * 默认情况下，下面这个分支是走得进去的；
+		 * - 非默认情况是怎么导致的？
+		 */
 		if (!issecure(SECURE_NO_SETUID_FIXUP))
 			cap_emulate_setxuid(new, old);
 		break;

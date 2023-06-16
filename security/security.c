@@ -306,8 +306,8 @@ static void __init ordered_lsm_init(void)
 	 * 加载顺序，"security="是指定一个补充加载的安全模块(其他模块是否需要加
 	 * 载还是CONFIG_LSM决定)。"lsm="优先级更高，如果配置了，"security="就失
 	 * 效(作为即将淘汰接口建议不再使用)。
-	 * 
-	 * 如果传递了"security="参数，那么其他的lsm模块都失效。
+	 *
+	 * builtin_lsm_order对应CONFIG_LSM；
 	 */
 	if (chosen_lsm_order) {
 		if (chosen_major_lsm) {
@@ -378,7 +378,7 @@ int __init early_security_init(void)
 
 	/* 
 	 * __start_early_lsm_info和__end_early_lsm_info是全局变量，是在链接脚本
-	 * 中初始化的
+	 * 中初始化的，参见DEFINE_LSM和LSM_TABLE两个宏，注意.lsm_info.init段；
 	 */
 	for (lsm = __start_early_lsm_info; lsm < __end_early_lsm_info; lsm++) {
 		if (!lsm->enabled)

@@ -21,18 +21,24 @@
 static bool chown_ok(const struct inode *inode, kuid_t uid)
 {
 	/*
+	 * 传进来的uid是iattr->ia_uid；
+	 * - 这个是chown的目标uid；参见chown_common()
+	 */
+
+	/*
 	 * 对于改变user owner，要求满足如下其中一个条件
 	 * 1. fsuid == inode->i_uid 且 uid == inode->i_uid
 	 * 2. 具有CAP_CHOWN能力
 	 * 3. 暂时没看懂？
 	 *
-	 * 条件1针对non-root进程，
-	 *     fsuid == inode->i_uid要求自己是文件的主人
-	 *     uid == inode->i_uid要求不能把别人设置成文件的主人
+	 * 条件1主要判断UGO机制，
+	 * - fsuid == inode->i_uid要求自己是文件的主人
+	 * - uid == inode->i_uid要求不能把别人设置成文件的主人
+	 *   x 这条是安全四级要求的，刚刚好；
 	 *
-	 * 条件2针对root进程：
-	 *     root进程的cap是全满的，所以root进程可以把任意用户设置为任意文件
-	 *     的主人
+	 * 条件2主要判断Capability，
+	 * - root进程的cap是全满的，所以root进程可以把任意用户设置为任意文件
+	 *   的主人
 	 */
 	if (uid_eq(current_fsuid(), inode->i_uid) &&
 	    uid_eq(uid, inode->i_uid))

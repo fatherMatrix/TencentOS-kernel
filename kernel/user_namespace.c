@@ -905,6 +905,9 @@ static ssize_t map_write(struct file *file, const char __user *buf,
 	 */
 	mutex_lock(&userns_state_mutex);
 
+	/*
+	 * 清空new_map临时变量
+	 */
 	memset(&new_map, 0, sizeof(struct uid_gid_map));
 
 	ret = -EPERM;
@@ -914,10 +917,15 @@ static ssize_t map_write(struct file *file, const char __user *buf,
 
 	/*
 	 * Adjusting namespace settings requires capabilities on the target.
+	 *
+	 * 检查文件的打开者有对应的CAP
 	 */
 	if (cap_valid(cap_setid) && !file_ns_capable(file, ns, CAP_SYS_ADMIN))
 		goto out;
 
+	/*
+	 * 下面这个大的for循环负责解析
+	 */
 	/* Parse the user data */
 	ret = -EINVAL;
 	pos = kbuf;

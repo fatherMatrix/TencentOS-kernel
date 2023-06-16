@@ -44,7 +44,15 @@ struct uid_gid_map { /* 64 bytes -- 1 cache line */
 	union {
 		struct uid_gid_extent extent[UID_GID_MAP_MAX_BASE_EXTENTS];
 		struct {
+			/*
+			 * forward指向一个uid_gid_extent数组，数组内以first为
+			 * key进行排序；
+			 */
 			struct uid_gid_extent *forward;
+			/*
+			 * reverse指向一个uid_gid_extent数组，数组内以lower_first
+			 * 为key进行排序；
+			 */
 			struct uid_gid_extent *reverse;
 		};
 	};
@@ -82,6 +90,10 @@ enum ucount_type {
  *   1和2种的user_ns可以不一致；
  */
 struct user_namespace {
+	/*
+	 * 保存当前user namespace中id与parent namespace（其实是与init namespace)
+	 * 间的映射关系；
+	 */
 	struct uid_gid_map	uid_map;
 	struct uid_gid_map	gid_map;
 	struct uid_gid_map	projid_map;

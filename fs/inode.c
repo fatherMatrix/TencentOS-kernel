@@ -2211,6 +2211,10 @@ bool inode_owner_or_capable(const struct inode *inode)
 		return true;
 
 	ns = current_user_ns();
+	/*
+	 * 首先要求inode->i_uid在current_user_ns()中有映射；
+	 * 然后要求当前用户在current_user_ns()中有CAP_FOWNER能力；
+	 */
 	if (kuid_has_mapping(ns, inode->i_uid) && ns_capable(ns, CAP_FOWNER))
 		return true;
 	return false;

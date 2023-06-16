@@ -132,9 +132,13 @@ struct cred {
 	 * 
 	 * 对于非root用户，可以在未来使用setuid()来将euid设置成为real uid和suid
 	 * 中的任何一个。但是非root用户是不允许用setuid()把euid设置成为其他值；
+	 * - 这个特性支持了文件的set uid位，比如passwd；当用户态进程执行passwd程
+	 *   序时，suid会被设置为文件的set uid(root)，此时可以通过seteuid将euid
+	 *   设置为root，从而获取root权限；
 	 *
 	 * 对于root来说，就没有那么大的意义了。因为root调用setuid()的时候，将会
 	 * 同时设置uid/suid/euid三个值；
+	 * - 这个特性用于支持root进程将自己永远降级为普通进程；
 	 */
 	kuid_t		suid;		/* saved UID of the task */
 	kgid_t		sgid;		/* saved GID of the task */
@@ -147,6 +151,25 @@ struct cred {
 	kuid_t		fsuid;		/* UID for VFS ops */
 	kgid_t		fsgid;		/* GID for VFS ops */
 	unsigned	securebits;	/* SUID-less security management */
+	/*
+	 * 详细关系及解读参见：
+	 * - https://lwn.net/Articles/636533/
+	 * 
+	 * pA' = (file caps or setuid or setgid ? 0 : pA)
+	 * pP' = (X & fP) | (pI & fI) | pA'
+	 * pI' = pI
+	 * pE' = (fE ? pP' : pA')
+	 * X is unchanged
+	 *
+	 * 关系较为复杂，来龙去脉还是得去看lwn；
+	 *
+	 * ----------------------------------------------
+	 *
+	 * 这里保存的是进程的capability，文件也有capability，作用类似于suid-root；
+	 * 文件的capability存储于文件的拓展属性中，参见:
+	 * cap_bprm_set_creds
+	 *   get_file_caps
+	 */
 	kernel_cap_t	cap_inheritable; /* caps our children can inherit */
 	kernel_cap_t	cap_permitted;	/* caps we're permitted */
 	kernel_cap_t	cap_effective;	/* caps we can actually use */

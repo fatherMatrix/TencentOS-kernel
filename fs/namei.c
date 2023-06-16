@@ -305,6 +305,12 @@ static int acl_permission_check(struct inode *inode, int mask)
 {
 	unsigned int mode = inode->i_mode;
 
+	/*
+	 * 这里使用的都是全局user namespace中的id;
+	 * - UGO在不同user namespace中不是独立的，所以比较UGO时总是使用全局ID；
+	 * - Capability在不同user namespace中是独立管理的；
+	 *   x 小level和大level间的Capability的充分/必要关系是怎样的？
+	 */
 	if (likely(uid_eq(current_fsuid(), inode->i_uid)))
 		/* 
  		 * 同一个用户，使用User的rwx标志
@@ -378,8 +384,17 @@ int generic_permission(struct inode *inode, int mask)
 
 	/*
 	 * Do the basic permission checks.
+	 *
+	 * mode和acl权限检查；
 	 */
 	ret = acl_permission_check(inode, mask);
+	/*
+	 * acl检查如果返回：
+	 * x 0：说明检查通过，直接返回即可；
+	 * x -EACCES，说明是权限错误，这时候不退出；因为有可能后面的capability检
+	 *   查通过；
+	 * x 否则说明是其他异常错误，返回给上层处理；
+	 */ 
 	if (ret != -EACCES)
 		return ret;
 

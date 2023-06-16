@@ -1054,6 +1054,12 @@ struct file {
 	struct mutex		f_pos_lock;
 	loff_t			f_pos;
 	struct fown_struct	f_owner;
+	/*
+	 * 文件打开者的cred：
+	 * alloc_file
+	 *   alloc_empty_file
+	 *     __alloc_file
+	 */
 	const struct cred	*f_cred;
 	struct file_ra_state	f_ra;
 

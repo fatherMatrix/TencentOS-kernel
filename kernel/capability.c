@@ -481,6 +481,9 @@ bool file_ns_capable(const struct file *file, struct user_namespace *ns,
 	if (WARN_ON_ONCE(!cap_valid(cap)))
 		return false;
 
+	/*
+	 * file->f_cred保存的是文件打开者的cred
+	 */
 	if (security_capable(file->f_cred, ns, cap, CAP_OPT_NONE) == 0)
 		return true;
 
@@ -514,6 +517,9 @@ bool capable_wrt_inode_uidgid(const struct inode *inode, int cap)
 {
 	struct user_namespace *ns = current_user_ns();
 
+	/*
+	 * 首先检查当前进程在current_user_ns()中是否包含指定cap；
+	 */
 	return ns_capable(ns, cap) && privileged_wrt_inode_uidgid(ns, inode);
 }
 EXPORT_SYMBOL(capable_wrt_inode_uidgid);

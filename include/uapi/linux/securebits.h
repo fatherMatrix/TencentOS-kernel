@@ -15,7 +15,11 @@
    compatibility mode. We raise the effective and inheritable bitmasks
    *of the executable file* if the effective uid of the new process is
    0. If the real uid is 0, we raise the effective (legacy) bit of the
-   executable file. */
+   executable file. 
+
+   这个标志位其实只是用于控制set user id root(owner为root的文件的mode
+   中的s位)的可执行文件在被exec时，是否给子进程授予权限；并非想象中的
+   root用户完全没有特殊权限了 */
 #define SECURE_NOROOT			0
 #define SECURE_NOROOT_LOCKED		1  /* make bit-0 immutable */
 

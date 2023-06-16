@@ -601,6 +601,16 @@ long __sys_setuid(uid_t uid)
 
 	new->fsuid = new->euid = kuid;
 
+	/*
+	 * 这里有意思，set*uid()后需要更改cred中的capability，最终是通过
+	 * cap_task_fix_setuid()函数完成的；但路径有点骚：
+	 * - 如果没有打开CONFIG_SECURITY，那么本函数预编译为直接调用
+	 *   cap_task_fix_setuid()函数；
+	 * - 如果打开了CONFIG_SECURITY，那么本函数预编译为调用众多LSM模块向
+	 *   task_fix_setuid链表注册的hook函数；此时会有一个name=capability的
+	 *   LSM模块被编译进来，其order=LSM_ORDER_FIRST，即不需通过"CONFIG_LSM/
+	 *   lsm=/security="这三个东西指定也会初始化；
+	 */
 	retval = security_task_fix_setuid(new, old, LSM_SETID_ID);
 	if (retval < 0)
 		goto error;
@@ -924,10 +934,9 @@ SYSCALL_DEFINE0(getuid)
 {
 	/* Only we change this so SMP safe */
 	/*
-	 * current_uid()从task_struct的cred中取出uid；
+	 * current_uid()从task_struct的cred中取出uid；这个是全局id
 	 * current_user_ns()从task_struct的cred中取出user_namespace；
-	 *
-	 *
+	 * from_kuid_munged()将全局id转换为目标namespace中的id；
 	 */
 	return from_kuid_munged(current_user_ns(), current_uid());
 }

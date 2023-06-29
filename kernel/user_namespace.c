@@ -152,6 +152,10 @@ int create_user_ns(struct cred *new)
 	if (!setup_userns_sysctls(ns))
 		goto fail_keyring;
 
+	/*
+	 * 绑定cred和user_namespace；
+	 * - 注意，里面对cred的capability字段都进行了重置；
+	 */
 	set_cred_user_ns(new, ns);
 	return 0;
 fail_keyring:

@@ -769,6 +769,10 @@ static void handle_privileged_root(struct linux_binprm *bprm, bool has_fcap,
 	 */
 	if (__is_eff(root_uid, new) || __is_real(root_uid, new)) {
 		/* pP' = (cap_bset & ~0) | (pI & ~0) */
+		/*
+		 * 因为cap_bset(X)一直是全满的，所以这里其实就是在给set-root-uid
+		 * 提权了；
+		 */
 		new->cap_permitted = cap_combine(old->cap_bset,
 						 old->cap_inheritable);
 	}
@@ -860,6 +864,9 @@ int cap_bprm_set_creds(struct linux_binprm *bprm)
 
 	root_uid = make_kuid(new->user_ns, 0);
 
+	/*
+	 * root特权是否需要下传，set-user-id就是在这里面处理的；
+	 */
 	handle_privileged_root(bprm, has_fcap, &effective, root_uid);
 
 	/* if we have fs caps, clear dangerous personality flags */
@@ -890,12 +897,20 @@ int cap_bprm_set_creds(struct linux_binprm *bprm)
 	new->sgid = new->fsgid = new->egid;
 
 	/* File caps or setid cancels ambient. */
+	/*
+	 * 这里对应：
+	 *   pA' = (file caps or setuid or setgid ? 0 : pA)
+	 */
 	if (has_fcap || is_setid)
 		cap_clear(new->cap_ambient);
 
 	/*
 	 * Now that we've computed pA', update pP' to give:
 	 *   pP' = (X & fP) | (pI & fI) | pA'
+	 *
+	 * 其中前两个分量在：
+	 *   get_file_caps
+	 *     ...
 	 */
 	new->cap_permitted = cap_combine(new->cap_permitted, new->cap_ambient);
 

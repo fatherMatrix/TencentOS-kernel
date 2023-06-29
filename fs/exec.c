@@ -1635,6 +1635,11 @@ int prepare_binprm(struct linux_binprm *bprm)
 	int retval;
 	loff_t pos = 0;
 
+	/*
+	 * 这里面会处理set-user-id；
+	 * - 如果有set-user-id标志位，那么从下面出来后bprm->cred->euid就成了对
+	 *   应的user id了；
+	 */
 	bprm_fill_uid(bprm);
 
 	/* fill in binprm security blob */

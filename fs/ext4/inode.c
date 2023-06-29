@@ -5641,6 +5641,9 @@ int ext4_setattr(struct dentry *dentry, struct iattr *attr)
 				  ATTR_GID | ATTR_TIMES_SET))))
 		return -EPERM;
 
+	/*
+	 * 下面是VFS公共的函数，用于检查权限；
+	 */
 	error = setattr_prepare(dentry, attr);
 	if (error)
 		return error;

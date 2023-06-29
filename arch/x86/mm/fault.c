@@ -1577,6 +1577,9 @@ do_page_fault(struct pt_regs *regs, unsigned long error_code, unsigned long addr
 {
 	enum ctx_state prev_state;
 
+	/*
+	 * 如果CONFIG_CONTEXT_TRACKING=n，则exception_enter()为空操作；
+	 */
 	prev_state = exception_enter();
 	trace_page_fault_entries(regs, error_code, address);
 	__do_page_fault(regs, error_code, address);

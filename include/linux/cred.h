@@ -159,7 +159,7 @@ struct cred {
 	 * pP' = (X & fP) | (pI & fI) | pA'
 	 * pI' = pI
 	 * pE' = (fE ? pP' : pA')
-	 * X is unchanged
+	 * X is unchanged (X means bounding set)
 	 *
 	 * 关系较为复杂，来龙去脉还是得去看lwn；
 	 *

@@ -588,6 +588,9 @@ long __sys_setuid(uid_t uid)
 	old = current_cred();
 
 	retval = -EPERM;
+	/*
+	 * 不是所有用户都可以setuid()的，这个CAP应该也可以放给secadm和auditadm；
+	 */
 	if (ns_capable_setid(old->user_ns, CAP_SETUID)) {
 		new->suid = new->uid = kuid;
 		if (!uid_eq(kuid, old->uid)) {

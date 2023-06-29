@@ -5264,6 +5264,15 @@ void kvm_init_mmu(struct kvm_vcpu *vcpu, bool reset_roots)
 	else if (tdp_enabled)
 		/*
 		 * [T]wo [D]imensional [P]aging
+		 *
+		 * 此函数对应EPT页表的初始化；
+		 * - 值得注意的是，EPT页表的violation/misconfig异常在host态的处
+		 *   理并不是像page fault那样触发exception，而是退出guest态，然
+		 *   后在host态观察退出原因（详见kvm_vmx_exit_handlers数组）：
+		 *   x 如果退出原因是EXIT_REASON_EPT_VIOLATION，则执行处理函数
+		 *     handle_ept_violation；
+		 *   x 如果退出原因是EXIT_REASON_EPT_MISCONFIG，则执行处理函数
+		 *     handle_ept_misconfig；
 		 */
 		init_kvm_tdp_mmu(vcpu);
 	else
@@ -5570,6 +5579,10 @@ int kvm_mmu_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa, u64 error_code,
 	}
 
 	if (r == RET_PF_INVALID) {
+		/*
+		 * page_fault函数指针指向tdp_page_fault()；
+		 * - 该函数指针的设置在kvm_init_mmu()
+		 */
 		r = vcpu->arch.mmu->page_fault(vcpu, cr2_or_gpa,
 					       lower_32_bits(error_code),
 					       false);

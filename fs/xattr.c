@@ -103,6 +103,9 @@ xattr_permission(struct inode *inode, const char *name, int mask)
 	/*
 	 * We can never set or remove an extended attribute on a read-only
 	 * filesystem  or on an immutable / append-only inode.
+	 *
+	 * 这里检查文件系统本身是否支持写操作（针对只读文件系统），与具体用户权
+	 * 限无关；
 	 */
 	if (mask & MAY_WRITE) {
 		if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
@@ -119,6 +122,10 @@ xattr_permission(struct inode *inode, const char *name, int mask)
 	/*
 	 * No restriction for security.* and system.* from the VFS.  Decision
 	 * on these is left to the underlying filesystem / security module.
+	 *
+	 * security./system.属性不要求写操作的执行者是文件的owner，这里直接返回
+	 * 到上层了，不再继续后面的检查；
+	 * -
 	 */
 	if (!strncmp(name, XATTR_SECURITY_PREFIX, XATTR_SECURITY_PREFIX_LEN) ||
 	    !strncmp(name, XATTR_SYSTEM_PREFIX, XATTR_SYSTEM_PREFIX_LEN))
@@ -166,6 +173,9 @@ __vfs_setxattr(struct dentry *dentry, struct inode *inode, const char *name,
 		return -EOPNOTSUPP;
 	if (size == 0)
 		value = "";  /* empty EA, do not remove */
+	/*
+	 * ext4_xattr_handler_map
+	 */
 	return handler->set(handler, dentry, inode, name, value, size, flags);
 }
 EXPORT_SYMBOL(__vfs_setxattr);
@@ -257,6 +267,12 @@ __vfs_setxattr_locked(struct dentry *dentry, const char *name,
 	if (error)
 		return error;
 
+	/*
+	 * 这里面会调用cap_inode_setxattr()：
+	 * - 如果是设置security.，需要CAP_SYS_ADMIN权限；
+	 * - 如果是设置capability.，直接返回0；
+	 *   x 对应的检查在cap_convert_nscap()
+	 */
 	error = security_inode_setxattr(dentry, name, value, size, flags);
 	if (error)
 		goto out;

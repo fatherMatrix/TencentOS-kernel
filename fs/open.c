@@ -358,6 +358,10 @@ long do_faccessat(int dfd, const char __user *filename, int mode)
 	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
 		return -EINVAL;
 
+	/*
+	 * prepare_creds()中虽然没有完全初始化cred结构体，但是有将old cred拷贝
+	 * 到new cred中的操作，所以很多信息其实是可用的；
+	 */
 	override_cred = prepare_creds();
 	if (!override_cred)
 		return -ENOMEM;
@@ -658,6 +662,9 @@ retry_deleg:
 		newattrs.ia_valid |= ATTR_GID;
 		newattrs.ia_gid = gid;
 	}
+	/*
+	 * 对于非目录文件，chown会顺带清楚set-user-ID和set-group-ID；
+	 */
 	if (!S_ISDIR(inode->i_mode))
 		newattrs.ia_valid |=
 			ATTR_KILL_SUID | ATTR_KILL_SGID | ATTR_KILL_PRIV;

@@ -355,6 +355,8 @@ int notify_change(struct dentry * dentry, struct iattr * attr, struct inode **de
 	/*
 	 * 对于chmod这种类似的操作，是通过文件的普通属性(setattr)进行存储的；对
 	 * 其进行读写是通过inode_operations->setattr函数指针；
+	 * - 对ext4文件系统，该指针是ext4_setattr()；
+	 * - 对xfs文件系统，该指针是xfs_vn_setattr()；
 	 *
 	 * 对于ACL，是通过文件的拓展属性(setxattr)进行存储的；在inode_operations
 	 * 结构体中没有专门的setxattr函数指针，是使用xattr_handler机制实现的；在

@@ -66,6 +66,7 @@ static void pic_unlock(struct kvm_pic *s)
 			 * kvm_lapic的regs（LVT LINT0）；这将导致下面的判断会返
 			 * 回0，从而跳过本分支，不会继续执行kvm_make_request和
 			 * kvm_vcpu_kick函数；
+			 * - 下面这个检查在其他地方也有做；
 			 */
 			if (kvm_apic_accept_pic_intr(vcpu)) {
 				kvm_make_request(KVM_REQ_EVENT, vcpu);

@@ -652,6 +652,11 @@ struct kvm_vcpu_arch {
 		u8 nested_apf;
 	} exception;
 
+	/*
+	 * 要和pending_external_vector字段区分看；
+	 * - KVM_IRQCHIP_NONE时设置interrupt；
+	 * - 其他情况设置pending_external_vector;
+	 */
 	struct kvm_queued_interrupt {
 		bool injected;
 		bool soft;
@@ -787,6 +792,7 @@ struct kvm_vcpu_arch {
 	int pending_ioapic_eoi;
 	/*
 	 * 这个和interrupt.nr间有什么关系？
+	 * - 参见本结构体的interrupt字段注释；
 	 */
 	int pending_external_vector;
 

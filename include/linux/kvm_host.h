@@ -280,6 +280,9 @@ struct kvm_vcpu {
 
 	int guest_xcr0_loaded;
 	struct swait_queue_head wq;
+	/*
+	 * 当前vcpu线程的pid
+	 */
 	struct pid __rcu *pid;
 	int sigset_active;
 	sigset_t sigset;

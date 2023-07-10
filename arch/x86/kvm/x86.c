@@ -3657,7 +3657,9 @@ static int kvm_vcpu_ioctl_interrupt(struct kvm_vcpu *vcpu,
 		return -EINVAL;
 
 	/*
-	 * 如果内核里什么都没有，都在qemu中模拟的，会进入下面的分支；
+	 * 如果内核里什么都没有(KVM_IRQCHIP_NONE)，都在qemu中模拟的，会进入下面
+	 * 的分支；主要是设置vcpu->arch.interrupt.nr = irq->irq；
+	 * - 什么都没有意味着lapic也没有；
 	 */
 	if (!irqchip_in_kernel(vcpu->kvm)) {
 		kvm_queue_interrupt(vcpu, irq->irq, false);
@@ -3666,15 +3668,23 @@ static int kvm_vcpu_ioctl_interrupt(struct kvm_vcpu *vcpu,
 	}
 
 	/*
-	 * 走到这里，说明中断控制器是在kvm模拟的
+	 * 走到这里，说明是KVM_IRQCHIP_KERNEL或者KVM_IRQCHIP_SPLIT两种模式中的
+	 * 一种；
 	 */
 
 	/*
 	 * With in-kernel LAPIC, we only use this to inject EXTINT, so
 	 * fail for in-kernel 8259.
+	 *
+	 * 如果是KVM_IRQCHIP_KERNEL，进入下面分支：
+	 * - 这里可以得出结论：KVM_INTERRUPT不可用于KVM_IRQCHIP_KERNEL；
 	 */
 	if (pic_in_kernel(vcpu->kvm))
 		return -ENXIO;
+
+	/*
+	 * 走到这里，说明是KVM_IRQCHIP_SPLIT模式；
+	 */
 
 	if (vcpu->arch.pending_external_vector != -1)
 		return -EEXIST;
@@ -7734,7 +7744,10 @@ static int inject_pending_event(struct kvm_vcpu *vcpu)
 	} else if (kvm_cpu_has_injectable_intr(vcpu)) {
 		/*
 		 * kvm_cpu_has_injectable_intr判断当前vcpu是否有中断需要注入
-		 * - 对于i8259，检查output变量（该变量在pic_irq_request中更新）
+		 * - KVM_IRQCHIP_KERNEL：
+		 *   x 对于pic，检查output变量（该变量在pic_irq_request中更新）
+		 * - KVM_IRQ_SPLIT:
+		 *   x 对于pic，检查pending_external_vector变量；
 		 */
 		/*
 		 * Because interrupts can be injected asynchronously, we are
@@ -8692,11 +8705,17 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *kvm_run)
 	kvm_sigset_activate(vcpu);
 	kvm_load_guest_fpu(vcpu);
 
+	/*
+	 * KVM_MP_STATE_UNINITIALIZED表示AP还未初始化；
+	 */
 	if (unlikely(vcpu->arch.mp_state == KVM_MP_STATE_UNINITIALIZED)) {
 		if (kvm_run->immediate_exit) {
 			r = -EINTR;
 			goto out;
 		}
+		/*
+		 * 将当前vcpu阻塞
+		 */
 		kvm_vcpu_block(vcpu);
 		kvm_apic_accept_events(vcpu);
 		kvm_clear_request(KVM_REQ_UNHALT, vcpu);
@@ -8737,6 +8756,14 @@ int kvm_arch_vcpu_ioctl_run(struct kvm_vcpu *vcpu, struct kvm_run *kvm_run)
 	} else
 		WARN_ON(vcpu->arch.pio.count || vcpu->mmio_needed);
 
+	/*
+	 * 如果设置了immediate_exit，在这里直接退出；
+	 * 
+	 * 可是如果已经进入了vcpu_run()呢？里面有一个循环，怎么保证immediate_exit
+	 * 的实时性呢？
+	 * - 这个东西就是搭配signal用的，是在signal handler中设置的，这意味着肯
+	 *   定去过用户态了，肯定会经过这里；
+	 */
 	if (kvm_run->immediate_exit)
 		r = -EINTR;
 	else

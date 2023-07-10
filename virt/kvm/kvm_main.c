@@ -2948,6 +2948,9 @@ static long kvm_vcpu_ioctl(struct file *filp,
 	if (r != -ENOIOCTLCMD)
 		return r;
 
+	/*
+	 * 这个锁锁住整个kvm_vcpu_ioctl()
+	 */
 	if (mutex_lock_killable(&vcpu->mutex))
 		return -EINTR;
 	switch (ioctl) {

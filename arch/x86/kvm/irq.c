@@ -106,6 +106,9 @@ static int kvm_cpu_get_extint(struct kvm_vcpu *v)
 		return -1;
 	}
 
+	/*
+	 * 这种是KVM_IRQCHIP_NONE对应的情况，即都在qemu模拟：
+	 */
 	if (!lapic_in_kernel(v))
 		/*
 		 * 这种情况对kvm_queue_interrupt来说不是白白转了一圈吗？
@@ -113,11 +116,18 @@ static int kvm_cpu_get_extint(struct kvm_vcpu *v)
 		return v->arch.interrupt.nr;
 
 	if (irqchip_split(v->kvm)) {
+		/*
+		 * 对应KVM_IRQCHIP_SPLIT模式，下面这个字段是通过KVM_INTERRUPT命
+		 * 令写入的；
+		 */
 		int vector = v->arch.pending_external_vector;
 
 		v->arch.pending_external_vector = -1;
 		return vector;
 	} else
+		/*
+		 * 对应KVM_IRQCHIP_KERNEL模式；
+		 */
 		return kvm_pic_read_irq(v->kvm); /* PIC */
 }
 

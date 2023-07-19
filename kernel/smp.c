@@ -29,6 +29,9 @@ enum {
 };
 
 struct call_function_data {
+	/*
+	 * 结构体类型为__call_single_data
+	 */
 	call_single_data_t	__percpu *csd;
 	cpumask_var_t		cpumask;
 	cpumask_var_t		cpumask_ipi;
@@ -106,6 +109,9 @@ void __init call_function_init(void)
  */
 static __always_inline void csd_lock_wait(struct __call_single_data *csd)
 {
+	/*
+	 * 里面是循环死等；
+	 */
 	smp_cond_load_acquire(&csd->flags, !(VAL & CSD_FLAG_LOCK));
 }
 
@@ -506,6 +512,9 @@ void smp_call_function_many(const struct cpumask *mask,
 			csd->flags |= CSD_FLAG_SYNCHRONOUS;
 		csd->func = func;
 		csd->info = info;
+		/*
+		 * 这个llist_add()内部是包含了原子指令的
+		 */
 		if (llist_add(&csd->llist, &per_cpu(call_single_queue, cpu)))
 			__cpumask_set_cpu(cpu, cfd->cpumask_ipi);
 	}
@@ -518,6 +527,9 @@ void smp_call_function_many(const struct cpumask *mask,
 			call_single_data_t *csd;
 
 			csd = per_cpu_ptr(cfd->csd, cpu);
+			/*
+			 * 里面是循环死等
+			 */
 			csd_lock_wait(csd);
 		}
 	}
@@ -541,8 +553,17 @@ EXPORT_SYMBOL(smp_call_function_many);
  */
 void smp_call_function(smp_call_func_t func, void *info, int wait)
 {
+	/*
+	 * 关抢占
+	 */
 	preempt_disable();
+	/*
+	 * func必须足够快，且不阻塞；
+	 */
 	smp_call_function_many(cpu_online_mask, func, info, wait);
+	/*
+	 * 开抢占，又可能引发调度
+	 */
 	preempt_enable();
 }
 EXPORT_SYMBOL(smp_call_function);

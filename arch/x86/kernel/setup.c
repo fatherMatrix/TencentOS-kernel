@@ -953,7 +953,8 @@ void __init setup_arch(char **cmdline_p)
 
 	iomem_resource.end = (1ULL << boot_cpu_data.x86_phys_bits) - 1;
 	/*
-	 * 处理e820表；
+	 * 从bios给的e820表中取出数据，生成kernel自己使用的e820表数据结构
+	 * e820_table/e820_table_kexec/e820_table_firmware，并将其打印出来；
 	 */
 	e820__memory_setup();
 	parse_setup_data();
@@ -1256,6 +1257,10 @@ void __init setup_arch(char **cmdline_p)
 
 	early_acpi_boot_init();
 
+	/*
+	 * 当前看到的只是配置了memblock的numa信息；
+	 * - 这个函数的名字起的真不好；
+	 */
 	initmem_init();
 	dma_contiguous_reserve(max_pfn_mapped << PAGE_SHIFT);
 

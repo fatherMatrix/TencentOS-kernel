@@ -621,6 +621,9 @@ static int __init numa_init(int (*init_func)(void))
 	int i;
 	int ret;
 
+	/*
+	 * 先设置一个非法的nid
+	 */
 	for (i = 0; i < MAX_LOCAL_APIC; i++)
 		set_apicid_to_node(i, NUMA_NO_NODE);
 
@@ -636,6 +639,9 @@ static int __init numa_init(int (*init_func)(void))
 	WARN_ON(memblock_clear_hotplug(0, ULLONG_MAX));
 	numa_reset_distance();
 
+	/*
+	 * 对应x86_acpi_numa_init()
+	 */
 	ret = init_func();
 	if (ret < 0)
 		return ret;

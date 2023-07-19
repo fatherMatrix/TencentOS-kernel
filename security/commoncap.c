@@ -514,6 +514,9 @@ int cap_convert_nscap(struct dentry *dentry, void **ivalue, size_t size)
 		return -EINVAL;
 	if (!validheader(size, cap))
 		return -EINVAL;
+	/*
+	 * 权限检查
+	 */
 	if (!capable_wrt_inode_uidgid(inode, CAP_SETFCAP))
 		return -EPERM;
 	if (size == XATTR_CAPS_SZ_2)
@@ -1052,6 +1055,11 @@ static inline void cap_emulate_setxuid(struct cred *new, const struct cred *old)
 {
 	kuid_t root_uid = make_kuid(old->user_ns, 0);
 
+	/*
+	 * 如果原[x]uid中有一个是root，且setxuid后任何一个[x]uid都不是root，即
+	 * 完全改变用户时进入下面的分支；清空permitted/effective/ambient三个，
+	 * 符合对"cat /proc/<pid>/status | grep Cap"的观察；
+	 */
 	if ((uid_eq(old->uid, root_uid) ||
 	     uid_eq(old->euid, root_uid) ||
 	     uid_eq(old->suid, root_uid)) &&
@@ -1070,8 +1078,14 @@ static inline void cap_emulate_setxuid(struct cred *new, const struct cred *old)
 		 */
 		cap_clear(new->cap_ambient);
 	}
+	/*
+	 * 更改有效用户到非root
+	 */
 	if (uid_eq(old->euid, root_uid) && !uid_eq(new->euid, root_uid))
 		cap_clear(new->cap_effective);
+	/*
+	 * 从非root更改到root
+	 */
 	if (!uid_eq(old->euid, root_uid) && uid_eq(new->euid, root_uid))
 		new->cap_effective = new->cap_permitted;
 }
@@ -1096,6 +1110,7 @@ int cap_task_fix_setuid(struct cred *new, const struct cred *old, int flags)
 		 *
 		 * 默认情况下，下面这个分支是走得进去的；
 		 * - 非默认情况是怎么导致的？
+		 *   x 配置了SECURE_NO_SETUID_FIXUP宏
 		 */
 		if (!issecure(SECURE_NO_SETUID_FIXUP))
 			cap_emulate_setxuid(new, old);

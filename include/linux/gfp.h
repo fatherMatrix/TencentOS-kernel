@@ -348,6 +348,9 @@ static inline bool gfpflags_normal_context(const gfp_t gfp_flags)
 		__GFP_DIRECT_RECLAIM;
 }
 
+/*
+ * OPT_ZONE_XXX用于在未配置XXX区域时转换为ZONE_NORMAL
+ */
 #ifdef CONFIG_HIGHMEM
 #define OPT_ZONE_HIGHMEM ZONE_HIGHMEM
 #else
@@ -377,6 +380,8 @@ static inline bool gfpflags_normal_context(const gfp_t gfp_flags)
  * policy. Therefore __GFP_MOVABLE plus another zone selector is valid.
  * Only 1 bit of the lowest 3 bits (DMA,DMA32,HIGHMEM) can be set to "1".
  *
+ * 只有MOVABLE可以和其他的类型结合；
+ *
  *       bit       result
  *       =================
  *       0x0    => NORMAL
@@ -399,6 +404,9 @@ static inline bool gfpflags_normal_context(const gfp_t gfp_flags)
  * GFP_ZONES_SHIFT must be <= 2 on 32 bit platforms.
  */
 
+/*
+ * GFP_ZONES_SHITF是区域类型占用的位数
+ */
 #if defined(CONFIG_ZONE_DEVICE) && (MAX_NR_ZONES-1) <= 4
 /* ZONE_DEVICE is not a valid GFP zone specifier */
 #define GFP_ZONES_SHIFT 2
@@ -438,11 +446,23 @@ static inline bool gfpflags_normal_context(const gfp_t gfp_flags)
 	| 1 << (___GFP_MOVABLE | ___GFP_DMA32 | ___GFP_DMA | ___GFP_HIGHMEM)  \
 )
 
+/*
+ * 根据分配标志得到首选的分配区域
+ */
 static inline enum zone_type gfp_zone(gfp_t flags)
 {
 	enum zone_type z;
+	/*
+	 * 首先分离出区域标志位
+	 */
 	int bit = (__force int) (flags & GFP_ZONEMASK);
 
+	/*
+	 * 算出在映射表中的偏移（区域标志位 * 区域类型所占位数）；
+	 * 并把映射表右移偏移值；
+	 * 取出最低的区域类型位数；
+	 * 即为对应的分配区域；
+	 */
 	z = (GFP_ZONE_TABLE >> (bit * GFP_ZONES_SHIFT)) &
 					 ((1 << GFP_ZONES_SHIFT) - 1);
 	VM_BUG_ON((GFP_ZONE_BAD >> bit) & 1);

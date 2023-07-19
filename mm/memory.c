@@ -4024,6 +4024,9 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 	vm_fault_t ret;
 
 	pgd = pgd_offset(mm, address);
+	/*
+	 * pxd_alloc()中是包含了分配动作的；
+	 */
 	p4d = p4d_alloc(mm, pgd, address);
 	if (!p4d)
 		return VM_FAULT_OOM;

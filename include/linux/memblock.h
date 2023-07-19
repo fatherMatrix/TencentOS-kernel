@@ -51,6 +51,9 @@ struct memblock_region {
 	phys_addr_t size;
 	enum memblock_flags flags;
 #ifdef CONFIG_HAVE_MEMBLOCK_NODE_MAP
+	/*
+	 * 如果开启了memblock numa配置，使用该字段表示node id
+	 */
 	int nid;
 #endif
 };

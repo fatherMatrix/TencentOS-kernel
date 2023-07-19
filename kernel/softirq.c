@@ -460,7 +460,14 @@ void irq_exit(void)
 	lockdep_assert_irqs_disabled();
 #endif
 	account_irq_exit_time(current);
+	/*
+	 * 在执行软中断之前，减小preempt_count中的HARDIRQ；
+	 */
 	preempt_count_sub(HARDIRQ_OFFSET);
+	/*
+	 * 如果这里就是在中断上下文中，说明是个嵌套中断；
+	 * 如果不是嵌套中断的话，这里一定会去执行invoke_softirq()的
+	 */
 	if (!in_interrupt() && local_softirq_pending())
 		invoke_softirq();
 

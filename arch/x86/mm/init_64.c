@@ -864,7 +864,6 @@ void __init paging_init(void)
 	/*
 	 * 根据memblock.memory中物理内存的分布情况，分配对应的mem_section并初始
 	 * 化对应字段表示在线；
-	 * - 但是似乎没有看到设置mem_section->section_mem_map的地址部分；
 	 */
 	sparse_memory_present_with_active_regions(MAX_NUMNODES);
 	/*

@@ -97,7 +97,13 @@ extern int page_group_by_mobility_disabled;
 			PB_migrate_end, MIGRATETYPE_MASK)
 
 struct free_area {
+	/*
+	 * 根据可移动性分组；
+	 */
 	struct list_head	free_list[MIGRATE_TYPES];
+	/*
+	 * 剩余量计数
+	 */
 	unsigned long		nr_free;
 };
 
@@ -321,8 +327,22 @@ struct lruvec {
 typedef unsigned __bitwise isolate_mode_t;
 
 enum zone_watermarks {
+	/*
+	 * 如果内存区域的空闲页数小于最低水线，说明该内存区域的内存严重不足；
+	 * - 最低水线下的内存称为"紧急保留内存"，在内存严重不足的紧急情况下，给
+	 *   承诺"给我少量紧急保留内存使用，我可以释放更多内存"的进程使用；
+	 * - 进程标志位PF_MEMALLOC标志表示对应进程满足上述需求，典型的进程如
+	 *   kswapd页回收内核线程；
+	 * - 页申请标志位__GFP_MEMALLOC表示内存分配的调用者满足上述需求；
+	 */
 	WMARK_MIN,
+	/*
+	 * 如果内存区域的空闲页数小于低水线，说明该内存区域的内存轻微不足；
+	 */
 	WMARK_LOW,
+	/*
+	 * 如果内存区域的空闲页数大于高水线，说明该内存区域的内存充足；
+	 */
 	WMARK_HIGH,
 	NR_WMARK
 };
@@ -421,7 +441,13 @@ struct zone {
 	/* Read-mostly fields */
 
 	/* zone watermarks, access with *_wmark_pages(zone) macros */
+	/*
+	 * 三条水线的数组；
+	 */
 	unsigned long _watermark[NR_WMARK];
+	/*
+	 * 参见wmark_pages()，用于增加内存回收压力，降低fallback的可能性；
+	 */
 	unsigned long watermark_boost;
 
 	unsigned long nr_reserved_highatomic;
@@ -523,6 +549,9 @@ struct zone {
 	ZONE_PADDING(_pad1_)
 
 	/* free areas of different sizes */
+	/*
+	 * 不同order来分组
+	 */
 	struct free_area	free_area[MAX_ORDER];
 
 	/* zone flags, see below */
@@ -649,11 +678,16 @@ static inline bool zone_intersects(struct zone *zone,
 #define MAX_ZONES_PER_ZONELIST (MAX_NUMNODES * MAX_NR_ZONES)
 
 enum {
+	/*
+	 * 包含所有节点备用内存区域的列表
+	 */
 	ZONELIST_FALLBACK,	/* zonelist with fallback */
 #ifdef CONFIG_NUMA
 	/*
 	 * The NUMA zonelists are doubled because we need zonelists that
 	 * restrict the allocations to a single node for __GFP_THISNODE.
+	 *
+	 * 仅包含当前节点备用内存区域的列表
 	 */
 	ZONELIST_NOFALLBACK,	/* zonelist without fallback (__GFP_THISNODE) */
 #endif
@@ -710,7 +744,24 @@ struct deferred_split {
  */
 struct bootmem_data;
 typedef struct pglist_data {
+	/*
+	 * 切实表示一个zone
+	 */
 	struct zone node_zones[MAX_NR_ZONES];
+	/*
+	 * 这是一个指向struct zone的列表，用于内存分配时依次的备选方案；
+	 * - 按照某种顺序排序；
+	 * - 分为FALLBACK和NOFALLBACK
+	 *
+	 * 备用内存区域借用物理页必须遵循以下原则：
+	 * - 节点间借用需区域类型相同；
+	 * - 同节点间高区域可以借用低区域，反之禁止；
+	 *
+	 * 那么，先借其他节点的相同类型(区域优先），还是先借当前节点的不同类型（
+	 * 节点优先），则是可以配置的：
+	 * - 内核参数numa_zonelist_order
+	 * - 运行时/proc/sys/vm/numa_zonelist_order
+	 */
 	struct zonelist node_zonelists[MAX_ZONELISTS];
 	int nr_zones;
 #ifdef CONFIG_FLAT_NODE_MEM_MAP	/* means !SPARSEMEM */

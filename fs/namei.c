@@ -320,6 +320,9 @@ static int acl_permission_check(struct inode *inode, int mask)
 		/*
 		 * 当inode设置了ACL权限后，UGO权限中G部分表示ACL_MASK的权限。而
 		 * ACL_MASK权限表示ACL_USER、ACL_GROUP和ACL_OTHER权限的合集。
+		 * - 简单说，UGO中G部分并不是只用来表示Group的权限，在设置了某些
+		 *   ACL权限后可能显示其他的东西，参见：
+		 *   x https://www.cnblogs.com/sparkdev/p/9694015.html
 		 *
 		 * 此处如果(mode & S_IRWXG) == 0，意味着ACL_USER、ACL_GROUP和
 		 * ACL_OTHER都是空白，也无需继续进行check_acl()
@@ -331,8 +334,9 @@ static int acl_permission_check(struct inode *inode, int mask)
 		}
 
 		/* 
-		 * 只有当check_acl()返回-EAGAIN后，才会运行到这个位置。如果没有
-		 * 开启ACL，那么check_acl()直接返回-EAGAIN。
+		 * 只有当inode中没有acl规则或者有acl规则但check_acl()返回-EAGAIN
+		 * 后，才会运行到这个位置。如果没有开启ACL，那么check_acl()直接
+		 * 返回-EAGAIN。
 		 */
 		if (in_group_p(inode->i_gid))
 			/* 
@@ -385,7 +389,7 @@ int generic_permission(struct inode *inode, int mask)
 	/*
 	 * Do the basic permission checks.
 	 *
-	 * mode和acl权限检查；
+	 * ugo和acl权限检查；
 	 */
 	ret = acl_permission_check(inode, mask);
 	/*
@@ -1147,6 +1151,11 @@ static int may_create_in_sticky(umode_t dir_mode, kuid_t dir_uid,
 	    (!sysctl_protected_regular && S_ISREG(inode->i_mode)) ||
 	    likely(!(dir_mode & S_ISVTX)) ||
 	    uid_eq(inode->i_uid, dir_uid) ||
+	    /*
+	     * 因为d_alloc_parallel()的并发，所以这里拿到的新的inode并不一定真
+	     * 的属于current；
+	     * - 但是不属于又如何呢？反正sticky文件都是可以创建的；
+	     */
 	    uid_eq(current_fsuid(), inode->i_uid))
 		return 0;
 
@@ -3329,6 +3338,9 @@ EXPORT_SYMBOL(__check_sticky);
  * 10. We can't remove a root or mountpoint.
  * 11. We don't allow removal of NFS sillyrenamed files; it's handled by
  *     nfs_async_unlink().
+ *
+ * 值得注意的是：删除文件只需要拥有该文件父目录的MAY_WRITE和MAY_EXEC权限即可，
+ * 不要求拥有被删除文件的权限（sticky dir下的文件除外）；
  */
 static int may_delete(struct inode *dir, struct dentry *victim, bool isdir)
 {
@@ -3763,6 +3775,9 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 				goto no_open;
 			/* No side effects, safe to clear O_CREAT */
 		} else {
+			/*
+			 * 检查当前用户是否有父目录的写权限；
+			 */
 			create_error = may_o_create(&nd->path, dentry, mode);
 			if (create_error) {
 				open_flag &= ~O_CREAT;
@@ -3818,6 +3833,11 @@ no_open:
 	}
 
 	/* Negative dentry, just create the file */
+
+	/*
+	 * 如果current_fsuid()在当前父目录没有创建文件的权限，那么O_CREAT在上面
+	 * 被清除掉了，这个分支就会被跳过；
+	 */
 	if (!dentry->d_inode && (open_flag & O_CREAT)) {
 		file->f_mode |= FMODE_CREATED;
 		audit_inode_child(dir_inode, dentry, AUDIT_TYPE_CHILD_CREATE);
@@ -4007,6 +4027,9 @@ finish_lookup:
 	error = step_into(nd, &path, 0, inode, seq);
 	if (unlikely(error))
 		return error;
+	/*
+	 * 到这里，nd->path中保存的应该是open目标文件的信息了？
+	 */
 finish_open:
 	/* Why this, you ask?  _Now_ we might have grown LOOKUP_JUMPED... */
 	error = complete_walk(nd);
@@ -4788,14 +4811,14 @@ retry_deleg:
 		if (d_is_negative(dentry))
 			goto slashes;
 		/*
-		 * 待删除文件inode引用计数加一
+		 * 待删除文件inode引用计数加一，将该inode保持在内存中；
 		 */
 		ihold(inode);
 		error = security_path_unlink(&path, dentry);
 		if (error)
 			goto exit2;
 		/*
-		 * unlink
+		 * unlink，在文件系统中减少inode对应的计数，表示删除此文件；
 		 */
 		error = vfs_unlink(path.dentry->d_inode, dentry, &delegated_inode);
 exit2:
@@ -4805,6 +4828,9 @@ exit2:
 		dput(dentry);
 	}
 	inode_unlock(path.dentry->d_inode);
+	/*
+	 * 释放内存中的inode，在里面会进行文件系统上数据的清理工作；
+	 */
 	if (inode)
 		iput(inode);	/* truncate the inode here */
 	inode = NULL;
@@ -4834,6 +4860,9 @@ slashes:
 	goto exit2;
 }
 
+/*
+ * 这个系统调用可以删除目录，也可以删除文件；
+ */
 SYSCALL_DEFINE3(unlinkat, int, dfd, const char __user *, pathname, int, flag)
 {
 	if ((flag & ~AT_REMOVEDIR) != 0)
@@ -4845,6 +4874,9 @@ SYSCALL_DEFINE3(unlinkat, int, dfd, const char __user *, pathname, int, flag)
 	return do_unlinkat(dfd, getname(pathname));
 }
 
+/*
+ * 这个系统调用只能用于删除普通文件，不能删除目录；
+ */
 SYSCALL_DEFINE1(unlink, const char __user *, pathname)
 {
 	return do_unlinkat(AT_FDCWD, getname(pathname));

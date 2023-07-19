@@ -161,6 +161,11 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	inode->i_opflags = 0;
 	if (sb->s_xattr)
 		inode->i_opflags |= IOP_XATTR;
+	/*
+	 * 这里给inode->i_uid,i_gid都设置了0，那么什么时候去设置正确的用户呢？
+	 * - 这里是公共的初始化函数，所以这里只能初始化为0，在本函数返回后，会在
+	 *   上层函数__ext4_new_inode()中设置指定的uid,gid；
+	 */
 	i_uid_write(inode, 0);
 	i_gid_write(inode, 0);
 	atomic_set(&inode->i_writecount, 0);

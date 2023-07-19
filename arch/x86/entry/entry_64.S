@@ -527,6 +527,9 @@ END(spurious_entries_start)
 ENTRY(interrupt_entry)
 	UNWIND_HINT_IRET_REGS offset=16
 	ASM_CLAC
+	/*
+	 * 这里清除的是DF标志，用于指定拷贝操作的方向；
+	 */
 	cld
 
 	/*
@@ -543,7 +546,7 @@ ENTRY(interrupt_entry)
 
 	/*
 	 * swapgs指令，负责切换gs的寄存器值，保证内核中per-cpu变量可用；参见sdm
-	 * 中IA32_GS_BASE与IA32_KERNEL_GS_BASE寄存器即swapgs指令解释；
+	 * 中IA32_GS_BASE与IA32_KERNEL_GS_BASE寄存器及swapgs指令解释；
 	 * - 切换回用户态时应该有个对应的swapgs指令吧？在哪儿呢？
 	 */
 	SWAPGS

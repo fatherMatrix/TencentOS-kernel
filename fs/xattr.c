@@ -560,7 +560,13 @@ setxattr(struct dentry *d, const char __user *name, const void __user *value,
 			goto out;
 		}
 		/*
-		 * 如果要改ACL()或default ACL()，
+		 * 如果要改ACL()或default ACL()，修正acl中的uid/gid等。
+		 * - 诶，如果文件被拷贝到另外的机器上，且uid/gid不同该如何？
+		 *
+		 * 这里并没有像下面的XATTR_NAME_CAPS一样检查权限，是因为具体文
+		 * 件系统是通过struct handlers[]实现具体的setxattr功能，其中用
+		 * 于设置acl的是posix_acl_access_xattr_handler，其中会进行权限
+		 * 检查；
 		 */
 		if ((strcmp(kname, XATTR_NAME_POSIX_ACL_ACCESS) == 0) ||
 		    (strcmp(kname, XATTR_NAME_POSIX_ACL_DEFAULT) == 0))
@@ -569,6 +575,9 @@ setxattr(struct dentry *d, const char __user *name, const void __user *value,
 		 * 如果要改cap()，也要做一些动作；
 		 */
 		else if (strcmp(kname, XATTR_NAME_CAPS) == 0) {
+			/*
+			 * 这里面会检查是否具有CAP_SETFCAP权限；
+			 */
 			error = cap_convert_nscap(d, &kvalue, size);
 			if (error < 0)
 				goto out;
@@ -584,6 +593,7 @@ setxattr(struct dentry *d, const char __user *name, const void __user *value,
 	 *   - 是否拷贝xattr取决于--preserve选项
 	 *
 	 * 其实在内核中实现biba policy的解析是最好的，失策失策！
+	 * - 确实，把策略解析在内核中实现后，一切都优雅了；
 	 */
 	error = vfs_setxattr(d, kname, kvalue, size, flags);
 out:

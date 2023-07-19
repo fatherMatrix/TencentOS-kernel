@@ -1639,6 +1639,9 @@ int prepare_binprm(struct linux_binprm *bprm)
 	 * 这里面会处理set-user-id；
 	 * - 如果有set-user-id标志位，那么从下面出来后bprm->cred->euid就成了对
 	 *   应的user id了；
+	 * 
+	 * bprm->cred最终在那里赋值给task_struct->cred的？
+	 * - load_elf_binary() -> install_exec_creds()
 	 */
 	bprm_fill_uid(bprm);
 
@@ -1722,6 +1725,9 @@ int search_binary_handler(struct linux_binprm *bprm)
 		read_unlock(&binfmt_lock);
 
 		bprm->recursion_depth++;
+		/*
+		 * 对于elf文件，这里是load_elf_binary()
+		 */
 		retval = fmt->load_binary(bprm);
 		bprm->recursion_depth--;
 
@@ -1765,6 +1771,9 @@ static int exec_binprm(struct linux_binprm *bprm)
 	old_vpid = task_pid_nr_ns(current, task_active_pid_ns(current->parent));
 	rcu_read_unlock();
 
+	/*
+	 * 这里不仅仅是search，还包括了执行；
+	 */
 	ret = search_binary_handler(bprm);
 	if (ret >= 0) {
 		audit_bprm(bprm);
@@ -1817,19 +1826,33 @@ static int __do_execve_file(int fd, struct filename *filename,
 	if (!bprm)
 		goto out_files;
 
+	/*
+	 * 根据当前进程（execve调用者）的cred，准备一个新的cred给bprm；bprm->cred
+	 * 最终会通过commit_creds()给子进程使用；
+	 * - 参见load_elf_binary() -> install_exec_creds()
+	 */
 	retval = prepare_bprm_creds(bprm);
 	if (retval)
 		goto out_free;
 
+	/*
+	 * 检查bprm执行的潜在风险，进而设置其unsafe标志；
+	 */
 	check_unsafe_exec(bprm);
 	current->in_execve = 1;
 
+	/*
+	 * 打开待执行的可执行文件，返回对应的file结构体；
+	 */
 	if (!file)
 		file = do_open_execat(fd, filename, flags);
 	retval = PTR_ERR(file);
 	if (IS_ERR(file))
 		goto out_unmark;
 
+	/*
+	 * execve()是一个很好的负载均衡点
+	 */
 	sched_exec();
 
 	bprm->file = file;
@@ -1858,6 +1881,9 @@ static int __do_execve_file(int fd, struct filename *filename,
 	}
 	bprm->interp = bprm->filename;
 
+	/*
+	 * 分配新进程的mm_struct
+	 */
 	retval = bprm_mm_init(bprm);
 	if (retval)
 		goto out_unmark;
@@ -1873,6 +1899,9 @@ static int __do_execve_file(int fd, struct filename *filename,
 		__this_cpu_dec(execve_count);
 	}
 
+	/*
+	 * 用于设置新进程的授权，并将可执行文件的内容读到缓冲区中；
+	 */
 	retval = prepare_binprm(bprm);
 	if (retval < 0)
 		goto out;
@@ -1890,6 +1919,9 @@ static int __do_execve_file(int fd, struct filename *filename,
 	if (retval < 0)
 		goto out;
 
+	/*
+	 * 开始执行新进程；
+	 */
 	retval = exec_binprm(bprm);
 	if (retval < 0)
 		goto out;

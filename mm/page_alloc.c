@@ -4762,17 +4762,30 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order, int preferred_nid,
 	unsigned int alloc_flags = ALLOC_WMARK_LOW;
 	unsigned long long alloc_entry_time;
 	gfp_t alloc_mask; /* The gfp_t that was actually used for allocation */
+	/*
+	 * 内存分配过程中需要在函数间传递的诸多参数；
+	 */
 	struct alloc_context ac = { };
 
 	/*
 	 * There are several places where we assume that the order value is sane
 	 * so bail out early if the request is out of bound.
+	 *
+	 * 伙伴系统限制分配的最大阶数；
 	 */
 	if (unlikely(order >= MAX_ORDER)) {
 		WARN_ON_ONCE(!(gfp_mask & __GFP_NOWARN));
 		return NULL;
 	}
 
+	/*
+	 * gfp_allowed_mask表示当前系统允许的gfp标志；几个不同的系统阶段包括：
+	 * - boot时
+	 * - boot后
+	 * - 休眠或电源管理相关时
+	 *
+	 * 此处意在保证gfp_mask的合法性；
+	 */
 	gfp_mask &= gfp_allowed_mask;
 	alloc_mask = gfp_mask;
 	if (!prepare_alloc_pages(gfp_mask, order, preferred_nid, nodemask, &ac, &alloc_mask, &alloc_flags))

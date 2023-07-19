@@ -1269,7 +1269,11 @@ static noinline void __init kernel_init_freeable(void)
 	 */
 	wait_for_completion(&kthreadd_done);
 
-	/* Now the scheduler is fully set up and can do blocking allocations */
+	/* 
+	 * Now the scheduler is fully set up and can do blocking allocations
+	 *
+	 * 系统boot时该变量为GFP_BOOT_MASK，设置为全部的BITS用于支持阻塞分配；
+	 */
 	gfp_allowed_mask = __GFP_BITS_MASK;
 
 	/*

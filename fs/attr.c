@@ -56,6 +56,9 @@ static bool chgrp_ok(const struct inode *inode, kgid_t gid)
 	if (uid_eq(current_fsuid(), inode->i_uid) &&
 	    (in_group_p(gid) || gid_eq(gid, inode->i_gid)))
 		return true;
+	/*
+	 * chgrp()对应的capability也是CAP_CHOWN
+	 */
 	if (capable_wrt_inode_uidgid(inode, CAP_CHOWN))
 		return true;
 	if (gid_eq(inode->i_gid, INVALID_GID) &&

@@ -114,7 +114,7 @@ static const __initconst struct idt_data def_idts[] = {
  */
 static const __initconst struct idt_data apic_idts[] = {
 /*
- * 这里面包含的都是LAPIC上中断源最直接的处理函数
+ * 这里面包含的都是LAPIC上中断源最直接的处理函数，IDT表里写的处理地址；
  * - IOAPIC上的处理函数是common_interrupt，跟LAPIC走的不是同一个路径
  */
 #ifdef CONFIG_SMP

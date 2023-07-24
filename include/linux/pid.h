@@ -76,7 +76,7 @@ struct upid {
 struct pid
 {
 	refcount_t count;		/* 引用计数 */
-	unsigned int level;		/* 在命名空间中所属层次 */
+	unsigned int level;		/* 在命名空间中有几个层次 */
 	/* lists of tasks that use this pid */
 	struct hlist_head tasks[PIDTYPE_MAX];
 	/* wait queue for pidfd notifications */

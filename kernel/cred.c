@@ -354,7 +354,7 @@ int copy_creds(struct task_struct *p, unsigned long clone_flags)
 		clone_flags & CLONE_THREAD
 	    ) {
 		/*
-		 * 同一个进程内的线程是共享cred的
+		 * 同一个进程内的线程是共享cred的，这里直接赋值即可；
 		 */
 		p->real_cred = get_cred(p->cred);
 		get_cred(p->cred);
@@ -366,6 +366,9 @@ int copy_creds(struct task_struct *p, unsigned long clone_flags)
 		return 0;
 	}
 
+	/*
+	 * 分配新的cred内存；
+	 */
 	new = prepare_creds();
 	if (!new)
 		return -ENOMEM;
@@ -396,6 +399,9 @@ int copy_creds(struct task_struct *p, unsigned long clone_flags)
 #endif
 
 	atomic_inc(&new->user->processes);
+	/*
+	 * 因为进程p还没有运行，所以不需要使用commit_creds()
+	 */
 	p->cred = p->real_cred = get_cred(new);
 	alter_cred_subscribers(new, 2);
 	validate_creds(new);
@@ -439,6 +445,8 @@ static bool cred_cap_issubset(const struct cred *set, const struct cred *subset)
  * the old set.  Both the objective and the subjective credentials pointers are
  * updated.  This function may not be called if the subjective credentials are
  * in an overridden state.
+ *    ^^^^^^^^^^^^^^^^^^^
+ *  啥意思？do_faccessat()?
  *
  * This function eats the caller's reference to the new credentials.
  *
@@ -498,6 +506,9 @@ int commit_creds(struct cred *new)
 	alter_cred_subscribers(new, 2);
 	if (new->user != old->user)
 		atomic_inc(&new->user->processes);
+	/*
+	 * 使用rcu替换cred和real_cred
+	 */
 	rcu_assign_pointer(task->real_cred, new);
 	rcu_assign_pointer(task->cred, new);
 	if (new->user != old->user)

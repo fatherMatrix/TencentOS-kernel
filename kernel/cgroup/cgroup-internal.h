@@ -79,9 +79,11 @@ struct cgrp_cset_link {
 	struct css_set		*cset;
 
 	/* list of cgrp_cset_links anchored at cgrp->cset_links */
+	// 链表元素
 	struct list_head	cset_link;
 
 	/* list of cgrp_cset_links anchored at css_set->cgrp_links */
+	// 链表元素
 	struct list_head	cgrp_link;
 };
 

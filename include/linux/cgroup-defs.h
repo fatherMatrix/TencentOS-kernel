@@ -187,6 +187,9 @@ struct cgroup_subsys_state {
  * object and speeds up fork()/exit(), since a single inc/dec and a
  * list_add()/del() can bump the reference count on the entire cgroup
  * set for a task.
+ *
+ * css_set本身是一个多对多数据结构的中间连接器，一边连接task_struct，一边连接
+ * cgroup。
  */
 struct css_set {
 	/*
@@ -219,6 +222,10 @@ struct css_set {
 	 * process of being migrated out or in.  Protected by
 	 * css_set_rwsem, but, during migration, once tasks are moved to
 	 * mg_tasks, it can be read safely while holding cgroup_mutex.
+	 *
+	 * 作为链表头来链接所有使用本css_set的task_struct，链表元素是
+	 * task_struct->cg_list;
+	 * - 但是，task是分很多状态的，不同状态的task需要链接到对应的链表里；
 	 */
 	struct list_head tasks;
 	struct list_head mg_tasks;
@@ -249,6 +256,8 @@ struct css_set {
 	/*
 	 * List of cgrp_cset_links pointing at cgroups referenced from this
 	 * css_set.  Protected by css_set_lock.
+	 *
+	 * 作为链表元素链入css_set对应的cgrp_cset_link->cset_link；
 	 */
 	struct list_head cgrp_links;
 
@@ -432,6 +441,8 @@ struct cgroup {
 	/*
 	 * List of cgrp_cset_links pointing at css_sets with tasks in this
 	 * cgroup.  Protected by css_set_lock.
+	 *
+	 * 作为链表元素加入css_set->cgrp_links;
 	 */
 	struct list_head cset_links;
 

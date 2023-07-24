@@ -651,6 +651,9 @@ static void exit_notify(struct task_struct *tsk, int group_dead)
 	struct task_struct *p, *n;
 	LIST_HEAD(dead);
 
+	/*
+	 * 对tasklist_lock加写锁；
+	 */
 	write_lock_irq(&tasklist_lock);
 	forget_original_parent(tsk, &dead);
 

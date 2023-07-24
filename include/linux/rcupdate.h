@@ -355,7 +355,9 @@ static inline void rcu_preempt_sleep_check(void) { }
  *
  * Assigns the specified value to the specified RCU-protected
  * pointer, ensuring that any concurrent RCU readers will see
+ *          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * any prior initialization.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^
  *
  * Inserts memory barriers on architectures that require them
  * (which is most of them), and also prevents the compiler from
@@ -378,6 +380,9 @@ static inline void rcu_preempt_sleep_check(void) { }
  * macros, this execute-arguments-only-once property is important, so
  * please be careful when making changes to rcu_assign_pointer() and the
  * other macros that it invokes.
+ *
+ * smp_store_release()中包含smp_mb()，保证rcu_assign_pointer()之前的内存操作早
+ * 于p=v生效；
  */
 #define rcu_assign_pointer(p, v)					      \
 do {									      \
@@ -518,6 +523,9 @@ do {									      \
  * @p: The pointer to read, prior to dereferencing
  *
  * This is a simple wrapper around rcu_dereference_check().
+ *
+ * 之所以要有这个宏，主要是用来防止Alpha架构上的内存依赖屏障，在x86和arm架构上
+ * 是不会有问题的；
  */
 #define rcu_dereference(p) rcu_dereference_check(p, 0)
 

@@ -174,6 +174,9 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 	struct pt_regs *childregs;
 	int ret;
 
+	/*
+	 * 获取当前进程进入内核态时压入内核栈的用户态寄存器pt_regs结构体；
+	 */
 	childregs = task_pt_regs(p);
 	fork_frame = container_of(childregs, struct fork_frame, regs);
 	frame = &fork_frame->frame;

@@ -2986,6 +2986,8 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	/*
 	 * We're setting the CPU for the first time, we don't migrate,
 	 * so use __set_task_cpu().
+	 *
+	 * 将新创建的进程先放到当前cpu的调度队列上；
 	 */
 	__set_task_cpu(p, smp_processor_id());
 	if (p->sched_class->task_fork)

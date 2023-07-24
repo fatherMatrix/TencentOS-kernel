@@ -2856,6 +2856,9 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 	if (!pte_unmap_same(vma->vm_mm, vmf->pmd, vmf->pte, vmf->orig_pte))
 		goto out;
 
+	/*
+	 * 将页表项转换为交换项，交换项包含了交换区的索引和偏移
+	 */
 	entry = pte_to_swp_entry(vmf->orig_pte);
 	if (unlikely(non_swap_entry(entry))) {
 		if (is_migration_entry(entry)) {
@@ -2875,6 +2878,9 @@ vm_fault_t do_swap_page(struct vm_fault *vmf)
 
 
 	delayacct_set_flag(DELAYACCT_PF_SWAPIN);
+	/*
+	 * 根据交换区的偏移在交换缓存中查找对应的页；
+	 */
 	page = lookup_swap_cache(entry, vma, vmf->address);
 	swapcache = page;
 

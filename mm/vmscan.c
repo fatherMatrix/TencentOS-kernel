@@ -1325,6 +1325,13 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 								    page_list))
 						goto activate_locked;
 				}
+				/*
+				 * 对于匿名页，考虑加入到交换缓存中；
+				 * - 返回1表示成功；
+				 * - 返回0表示失败；
+				 *
+				 * 如果失败了，进入下面的if分支；
+				 */
 				if (!add_to_swap(page)) {
 					if (!PageTransHuge(page))
 						goto activate_locked_split;
@@ -1342,6 +1349,10 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 				may_enter_fs = 1;
 
 				/* Adding to swap updated mapping */
+				/*
+				 * 对于swap之后的额page，这里返回的是page所在的
+				 * swap分区的交换区缓存对应的address_space；
+				 */
 				mapping = page_mapping(page);
 			}
 		} else if (unlikely(PageTransHuge(page))) {
@@ -1416,6 +1427,10 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			 * starts and then write it out here.
 			 */
 			try_to_unmap_flush_dirty();
+			/*
+			 * 调用pageout()将脏页写回交换区的后备存储设备
+			 * - 似乎只是submit_bio()后返回了，没有wait的部分；
+			 */
 			switch (pageout(page, mapping, sc)) {
 			case PAGE_KEEP:
 				goto keep_locked;
@@ -1483,6 +1498,11 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			}
 		}
 
+		/*
+		 * 对于匿名页，如果有交换区的话，在将内容写入交换区后备设备后，
+		 * 在这里调用remove_mapping将交换区缓存中的内容删除，在这里开始
+		 * 才真正节省了内存；
+		 */
 		if (PageAnon(page) && !PageSwapBacked(page)) {
 			/* follow __remove_mapping for reference */
 			if (!page_ref_freeze(page, 1))

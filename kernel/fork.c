@@ -1806,6 +1806,7 @@ static void copy_oom_score_adj(u64 clone_flags, struct task_struct *tsk)
  * It copies the registers, and all the appropriate
  * parts of the process environment (as per the clone
  * flags). The actual kick-off is left to the caller.
+ *         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  */
 static __latent_entropy struct task_struct *copy_process(
 					struct pid *pid,
@@ -1930,6 +1931,9 @@ static __latent_entropy struct task_struct *copy_process(
 	}
 	current->flags &= ~PF_NPROC_EXCEEDED;
 
+	/*
+	 * 为新进程创建cred结构体
+	 */
 	retval = copy_creds(p, clone_flags);
 	if (retval < 0)
 		goto bad_fork_free;
@@ -2027,7 +2031,11 @@ static __latent_entropy struct task_struct *copy_process(
 	p->sequential_io_avg	= 0;
 #endif
 
-	/* Perform scheduler related setup. Assign this task to a CPU. */
+	/*
+	 * Perform scheduler related setup. Assign this task to a CPU.
+	 *
+	 * 为新进程设置调度器相关的参数；
+	 */
 	retval = sched_fork(clone_flags, p);
 	if (retval)
 		goto bad_fork_cleanup_policy;
@@ -2043,6 +2051,9 @@ static __latent_entropy struct task_struct *copy_process(
 	retval = security_task_alloc(p, clone_flags);
 	if (retval)
 		goto bad_fork_cleanup_audit;
+	/*
+	 * 处理system v信号量
+	 */
 	retval = copy_semundo(clone_flags, p);
 	if (retval)
 		goto bad_fork_cleanup_security;
@@ -2067,6 +2078,9 @@ static __latent_entropy struct task_struct *copy_process(
 	retval = copy_io(clone_flags, p);
 	if (retval)
 		goto bad_fork_cleanup_namespaces;
+	/*
+	 * 拷贝并修改寄存器的值；
+	 */
 	retval = copy_thread_tls(clone_flags, args->stack, args->stack_size, p,
 				 args->tls);
 	if (retval)
@@ -2242,6 +2256,9 @@ static __latent_entropy struct task_struct *copy_process(
 			p->signal->has_child_subreaper = p->real_parent->signal->has_child_subreaper ||
 							 p->real_parent->signal->is_child_subreaper;
 			list_add_tail(&p->sibling, &p->real_parent->children);
+			/*
+			 * 上面已经加了tasklist_lock读写锁；
+			 */
 			list_add_tail_rcu(&p->tasks, &init_task.tasks);
 			attach_pid(p, PIDTYPE_TGID);
 			attach_pid(p, PIDTYPE_PGID);
@@ -2410,6 +2427,7 @@ long _do_fork(struct kernel_clone_args *args)
 
 	/*
 	 * 拷贝进程，产生新的task_struct
+	 * - 从这里返回时，新的进程已经准备好参与调度了；
 	 */
 	p = copy_process(NULL, trace, NUMA_NO_NODE, args);
 	add_latent_entropy();
@@ -2427,6 +2445,7 @@ long _do_fork(struct kernel_clone_args *args)
 	 * 获取新创建task_struct在当前current进程所在的当前pid_namespace中的pid
 	 * 并保存到nr中；
 	 * - nr将作为fork()系统调用的返回值，那么子进程的返回值是怎么变成0的？
+	 *   > 在拷贝栈信息的时候，直接修改了内核栈栈底保存的返回值信息；
 	 */
 	pid = get_task_pid(p, PIDTYPE_PID);
 	nr = pid_vnr(pid);

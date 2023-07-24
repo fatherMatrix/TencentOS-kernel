@@ -112,6 +112,13 @@ static inline void list_add_rcu(struct list_head *new, struct list_head *head)
  * However, it is perfectly legal to run concurrently with
  * the _rcu list-traversal primitives, such as
  * list_for_each_entry_rcu().
+ *
+ * rculist是不能反向遍历的；
+ *
+ * list_add_tail_rcu()并发关系：
+ * - 不可以和list_add_tail_rcu()/list_del_rcu()并发；
+ * - 可以和list_for_each_entry_rcu()并发；
+ *   x rcu list不能反向遍历的，这是由__list_add_rcu()中的指令顺序决定的；
  */
 static inline void list_add_tail_rcu(struct list_head *new,
 					struct list_head *head)

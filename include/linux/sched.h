@@ -851,6 +851,8 @@ struct task_struct {
 
 	/*
 	 * Children/sibling form the list of natural children:
+	 *
+	 * 形成父子、兄弟进程关系；
 	 */
 	struct list_head		children;
 	struct list_head		sibling;
@@ -1124,8 +1126,15 @@ struct task_struct {
 #endif
 #ifdef CONFIG_CGROUPS
 	/* Control Group info protected by css_set_lock: */
+	/* 指向该task对应的css_set */
 	struct css_set __rcu		*cgroups;
-	/* cg_list protected by css_set_lock and tsk->alloc_lock: */
+	/* 
+	 * cg_list protected by css_set_lock and tsk->alloc_lock:
+	 *
+	 * 使用同一个css_set的所有进程通过cg_list字段链接起来，链表头是
+	 * css_set->tasks；
+	 * - 主要是用来方便通过cgroup查找到所有的task
+	 */
 	struct list_head		cg_list;
 #endif
 #ifdef CONFIG_X86_CPU_RESCTRL

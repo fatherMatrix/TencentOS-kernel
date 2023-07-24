@@ -109,10 +109,15 @@ static inline int current_is_kswapd(void)
  * bootbits...
  *
  * 交换区第一页称为交换区首部，用数据结构swap_header表示
+ * - 刚好一个page的大小；
  */
 union swap_header {
 	struct {
 		char reserved[PAGE_SIZE - 10];
+		/*
+		 * 最后10字节是魔数，用来区分交换区格式，内核已经不再支持旧的交
+		 * 换区格式"SWAP-SPACE"，只支持格式"SWAPSPACE2"；
+		 */
 		char magic[10];			/* SWAP-SPACE or SWAPSPACE2 */
 	} magic;
 	struct {
@@ -167,13 +172,21 @@ struct zone;
  * 磁盘分区的块是连续的，所以只需要一个交换区间。如果交换区是文件，因为文件对应
  * 的磁盘块不一定是连续的，所以对于每个连续的磁盘块范围，需要使用一个交换区间来
  * 存储交换区的连续槽位和磁盘块范围的映射关系。
+ * - 关键是连续；
  */
 struct swap_extent {
 	struct rb_node rb_node;
+	/*
+	 * 起始槽位页号
+	 */
 	pgoff_t start_page;
+	/*
+	 * 槽位数量
+	 */
 	pgoff_t nr_pages;
 	/*
-	 * 默认认为block size是PAGE_SIZE
+	 * 起始磁盘块号
+	 * - 默认认为block size是PAGE_SIZE
 	 */
 	sector_t start_block;
 };
@@ -290,11 +303,19 @@ struct swap_info_struct {
 	 * 交换映射，指向一个数组，每字节对应交换区中的每个槽位，低6位存储每个
 	 * 槽位的使用计数，也就是共享换出页的进程的数量；高2位是标志位，
 	 * SWAP_HAS_CACHE表示页在交换缓存中。
+	 * - 每当一个进程从交换区换入页的时候，就会把该页对应槽位的使用计数减
+	 *   1，减到0时说明共享内存页的所有进程已经请求换入页；
 	 */
 	unsigned char *swap_map;	/* vmalloc'ed array of usage counts */
 	struct swap_cluster_info *cluster_info; /* cluster info. Only for SSD */
 	struct swap_cluster_list free_clusters; /* free clusters list */
+	/*
+	 * 数组swap_map中第一个空闲数组项的索引；
+	 */
 	unsigned int lowest_bit;	/* index of first free in swap_map */
+	/*
+	 * 数组swap_map中最后一个空闲数组项的索引；
+	 */
 	unsigned int highest_bit;	/* index of last free in swap_map */
 	/*
 	 * 交换区可用槽位的总数
@@ -313,6 +334,10 @@ struct swap_info_struct {
 	 */
 	unsigned int cluster_nr;	/* countdown to next cluster search */
 	struct percpu_cluster __percpu *percpu_cluster; /* per cpu's swap location */
+	/*
+	 * 交换区间
+	 * - 参见struct swap_extent
+	 */
 	struct rb_root swap_extent_root;/* root of the swap extent rbtree */
 	/*
 	 * 指向块设备。
@@ -502,6 +527,11 @@ int generic_swapfile_activate(struct swap_info_struct *, struct file *,
 #define SWAP_ADDRESS_SPACE_SHIFT	14
 #define SWAP_ADDRESS_SPACE_PAGES	(1 << SWAP_ADDRESS_SPACE_SHIFT)
 extern struct address_space *swapper_spaces[];
+/*
+ * swap_entry_t中的type部分表示交换区对应的swap_info_struct在swap_info数组中的
+ * 下标；offset部分分为两部分：~SWAP_ADDRESS_SPACE_SHIFT部分表示在本交换区中的
+ * 哪个交换区缓存中，0～SWAP_ADDRESS_SPACE_SHIFT表示在特定交换区缓存中的页偏移；
+ */
 #define swap_address_space(entry)			    \
 	(&swapper_spaces[swp_type(entry)][swp_offset(entry) \
 		>> SWAP_ADDRESS_SPACE_SHIFT])

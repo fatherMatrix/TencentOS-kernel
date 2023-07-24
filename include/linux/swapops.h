@@ -37,6 +37,8 @@ static inline swp_entry_t swp_entry(unsigned long type, pgoff_t offset)
 /*
  * Extract the `type' field from a swp_entry_t.  The swp_entry_t is in
  * arch-independent format
+ *
+ * type表示交换区在swap_info全局数组中的下标；
  */
 static inline unsigned swp_type(swp_entry_t entry)
 {

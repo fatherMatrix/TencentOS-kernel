@@ -10,6 +10,9 @@
 #define THRESHOLD_ACTIVATE_SWAP_SLOTS_CACHE	(5*SWAP_SLOTS_CACHE_SIZE)
 #define THRESHOLD_DEACTIVATE_SWAP_SLOTS_CACHE	(2*SWAP_SLOTS_CACHE_SIZE)
 
+/*
+ * 为了加快为换出页分配交换槽位的速度，每个处理器有一个交换槽位缓存swp_slots
+ */
 struct swap_slots_cache {
 	bool		lock_initialized;
 	struct mutex	alloc_lock; /* protects slots, nr, cur */

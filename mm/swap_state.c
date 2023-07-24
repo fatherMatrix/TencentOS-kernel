@@ -37,6 +37,24 @@ static const struct address_space_operations swap_aops = {
 #endif
 };
 
+/*
+ * 每个交换区有若干个交换缓存，每2 ** 14页对应一个交换缓存，交换缓存的数量是：
+ * 		交换区的总页数 / (2 ** 14)
+ * 关系图是：
+ *
+ * +-------------------+  +-->+-------------------+
+ * |         0         |  |   |   address_space   |
+ * +-------------------+  |   +-------------------+
+ * |         1         |--+   |   address_space   |
+ * +-------------------+      +-------------------+
+ * |        ...        |      |   address_space   |
+ * +-------------------+      +-------------------+
+ * | MAX_SWAPFILES - 1 |      |   address_space   |
+ * +-------------------+      +-------------------+
+ *   swapper_spaces数组         一个交换区对应的所
+ *                              有交换缓存，总数量
+ *                              是上面的公式
+ */
 struct address_space *swapper_spaces[MAX_SWAPFILES] __read_mostly;
 static unsigned int nr_swapper_spaces[MAX_SWAPFILES] __read_mostly;
 static bool enable_vma_readahead __read_mostly = true;
@@ -208,6 +226,8 @@ int add_to_swap(struct page *page)
 	 */
 	/*
 	 * Add it to the swap cache.
+	 *
+	 * 将page加到基数树中；
 	 */
 	err = add_to_swap_cache(page, entry,
 			__GFP_HIGH|__GFP_NOMEMALLOC|__GFP_NOWARN);
@@ -612,18 +632,38 @@ int init_swap_address_space(unsigned int type, unsigned long nr_pages)
 	struct address_space *spaces, *space;
 	unsigned int i, nr;
 
+	/*
+	 * 计算需要多少address_space结构体；
+	 */
 	nr = DIV_ROUND_UP(nr_pages, SWAP_ADDRESS_SPACE_PAGES);
+	/*
+	 * 分配内存；
+	 */
 	spaces = kvcalloc(nr, sizeof(struct address_space), GFP_KERNEL);
 	if (!spaces)
 		return -ENOMEM;
+
+	/*
+	 * 初始化必要字段；
+	 */
 	for (i = 0; i < nr; i++) {
 		space = spaces + i;
+		/*
+		 * 初始化基数树
+		 */
 		xa_init_flags(&space->i_pages, XA_FLAGS_LOCK_IRQ);
 		atomic_set(&space->i_mmap_writable, 0);
+		/*
+		 * 设置aops结构体；
+		 */
 		space->a_ops = &swap_aops;
 		/* swap cache doesn't use writeback related tags */
 		mapping_set_no_writeback_tags(space);
 	}
+	/*
+	 * 将交换缓存的页数也入全局数组nr_swapper_spaces对应的位置；
+	 * 将交换缓存的数组首地址写入全局数组swapper_spaces对应的位置；
+	 */
 	nr_swapper_spaces[type] = nr;
 	swapper_spaces[type] = spaces;
 

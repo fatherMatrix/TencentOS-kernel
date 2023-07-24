@@ -34,6 +34,9 @@
 #include <linux/mutex.h>
 #include <linux/mm.h>
 
+/*
+ * 用于加快为换出页分配交换槽位的速度
+ */
 static DEFINE_PER_CPU(struct swap_slots_cache, swp_slots);
 static bool	swap_slot_cache_active;
 bool	swap_slot_cache_enabled;
@@ -336,11 +339,18 @@ swp_entry_t get_swap_page(struct page *page)
 		if (cache->slots) {
 repeat:
 			if (cache->nr) {
+				/*
+				 * 如果swap_slots_cache中还有空闲槽位；
+				 */
 				pentry = &cache->slots[cache->cur++];
 				entry = *pentry;
 				pentry->val = 0;
 				cache->nr--;
 			} else {
+				/*
+				 * 如果swap_slots_cache中没有空闲槽位；
+				 * - 需要重新分配；
+				 */
 				if (refill_swap_slots_cache(cache))
 					goto repeat;
 			}

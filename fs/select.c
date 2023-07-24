@@ -824,8 +824,17 @@ SYSCALL_DEFINE1(old_select, struct sel_arg_struct __user *, arg)
 #endif
 
 struct poll_list {
+	/*
+	 * 链接下一个poll_list结构体
+	 */
 	struct poll_list *next;
+	/*
+	 * 尾部数组的长度
+	 */
 	int len;
+	/*
+	 * 尾部数组，用于存放用户态传过来的pollfd结构体
+	 */
 	struct pollfd entries[0];
 };
 
@@ -973,6 +982,10 @@ static int do_sys_poll(struct pollfd __user *ufds, unsigned int nfds,
 	if (nfds > rlimit(RLIMIT_NOFILE))
 		return -EINVAL;
 
+	/*
+	 * 这里就是做了个优化，先用分配在栈上的poll_list数组，期望数量足够；如果
+	 * 栈上的poll_list数组确实不够用，再分配额外的内存保存剩余的pollfd；
+	 */
 	len = min_t(unsigned int, nfds, N_STACK_PPS);
 	for (;;) {
 		walk->next = NULL;
@@ -980,6 +993,10 @@ static int do_sys_poll(struct pollfd __user *ufds, unsigned int nfds,
 		if (!len)
 			break;
 
+		/*
+		 * 将从用户态拷贝过来的struct pollfd放到struct poll_list的尾部数
+		 * 组的内存空间里；
+		 */
 		if (copy_from_user(walk->entries, ufds + nfds-todo,
 					sizeof(struct pollfd) * walk->len))
 			goto out_fds;
@@ -988,6 +1005,11 @@ static int do_sys_poll(struct pollfd __user *ufds, unsigned int nfds,
 		if (!todo)
 			break;
 
+		/*
+		 * 栈上放不下的struct pollfd放到额外分配的内存里，但是会把栈上的
+		 * struct poll_list->next指向额外分配的struct poll_list，做到链
+		 * 接；
+		 */
 		len = min(todo, POLLFD_PER_PAGE);
 		walk = walk->next = kmalloc(struct_size(walk, entries, len),
 					    GFP_KERNEL);

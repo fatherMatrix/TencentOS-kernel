@@ -176,6 +176,9 @@ int generic_swapfile_activate(struct swap_info_struct *sis,
 
 		cond_resched();
 
+		/*
+		 * bmap()用于查找文件对应block在磁盘/磁盘分区上的sector
+		 */
 		first_block = bmap(inode, probe_block);
 		if (first_block == 0)
 			goto bad_bmap;

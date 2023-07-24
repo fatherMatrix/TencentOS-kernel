@@ -63,6 +63,10 @@ static inline unsigned long array_index_mask_nospec(unsigned long index,
 #define __smp_wmb()	barrier()
 #define __smp_store_mb(var, value) do { (void)xchg(&var, value); } while (0)
 
+/*
+ * 对于x86来说，其内存模型是TSO，不会出现SS乱序，所以这里只需要barrier()即可，
+ * 对于其他架构，这里必须用smp_mb()；
+ */
 #define __smp_store_release(p, v)					\
 do {									\
 	compiletime_assert_atomic_type(*p);				\

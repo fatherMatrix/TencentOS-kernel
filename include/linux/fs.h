@@ -454,7 +454,9 @@ int pagecache_write_end(struct file *, struct address_space *mapping,
 struct address_space {
 	struct inode		*host;
 	/*
-	 * 基数树
+	 * 基数树用于将偏移映射到对应的struct page
+	 * - page cache
+	 * - 交换区
 	 */
 	struct xarray		i_pages;
 	gfp_t			gfp_mask;
@@ -473,6 +475,9 @@ struct address_space {
 	unsigned long		nrpages;
 	unsigned long		nrexceptional;
 	pgoff_t			writeback_index;
+	/*
+	 * 对于交换区，这里是swap_aops；
+	 */
 	const struct address_space_operations *a_ops;
 	unsigned long		flags;
 	errseq_t		wb_err;

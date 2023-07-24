@@ -5945,6 +5945,9 @@ static void __init cgroup_init_subsys(struct cgroup_subsys *ss, bool early)
  */
 int __init cgroup_init_early(void)
 {
+	/*
+	 * __initdata，难道初始化之后就不需要了吗？
+	 */
 	static struct cgroup_fs_context __initdata ctx;
 	struct cgroup_subsys *ss;
 	int i;
@@ -5955,6 +5958,10 @@ int __init cgroup_init_early(void)
 
 	RCU_INIT_POINTER(init_task.cgroups, &init_css_set);
 
+	/*
+	 * i从0开始增长；
+	 * ss取出全局数组cgroup_subsys中的项；
+	 */
 	for_each_subsys(ss, i) {
 		WARN(!ss->css_alloc || !ss->css_free || ss->name || ss->id,
 		     "invalid cgroup_subsys %d:%s css_alloc=%p css_free=%p id:name=%d:%s\n",
@@ -5991,6 +5998,9 @@ int __init cgroup_init(void)
 	BUG_ON(cgroup_init_cftypes(NULL, cgroup_base_files));
 	BUG_ON(cgroup_init_cftypes(NULL, cgroup1_base_files));
 
+	/*
+	 * 初始化per cpu的自旋锁cgroup_rstat_cpu_lock
+	 */
 	cgroup_rstat_boot();
 
 	/*

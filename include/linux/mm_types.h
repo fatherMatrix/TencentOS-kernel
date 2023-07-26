@@ -81,16 +81,19 @@ struct page {
 			 * @lru: Pageout list, eg. active_list protected by
 			 * pgdat->lru_lock.  Sometimes used as a generic list
 			 * by the page owner.
+			 *
+			 * 如果是pcp中的页，该字段作为元素链入pcp->lists[miagratetype]；
 			 */
 			struct list_head lru;
 			/* See page-flags.h for PAGE_MAPPING_FLAGS */
 			struct address_space *mapping;
 			/*
-			 * 如果page是文件页，则表示在文件中的偏移，单位是页;
-			 * 如果page是匿名页，则设置为page虚拟地址/PAGE_SIZE；
+			 * 如果是文件页，则表示在文件中的偏移，单位是页;
+			 * 如果是匿名页，则设置为page虚拟地址/PAGE_SIZE；
 			 * - 也有版本是在对应vma中的偏移，单位是页；但这里不是；
 			 *   其含义本质上依赖于vma->pgoff的含义；
 			 * - 参见__page_set_anon_rmap()和insert_vm_struct()
+			 * 如果是pcp中的页，则表示其迁移类型
 			 */
 			pgoff_t index;		/* Our offset within mapping. */
 			/**

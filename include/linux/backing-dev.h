@@ -49,6 +49,9 @@ void wb_wakeup_delayed(struct bdi_writeback *wb);
 void wb_wait_for_completion(struct wb_completion *done);
 
 extern spinlock_t bdi_lock;
+/*
+ * 全局backing_dev_info数据结构链表
+ */
 extern struct list_head bdi_list;
 
 extern struct workqueue_struct *bdi_wq;

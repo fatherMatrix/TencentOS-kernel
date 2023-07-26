@@ -158,6 +158,9 @@ struct bio {
 	struct bvec_iter	bi_iter;
 
 	atomic_t		__bi_remaining;
+	/*
+	 * bio完成后的回调函数
+	 */
 	bio_end_io_t		*bi_end_io;
 
 	void			*bi_private;

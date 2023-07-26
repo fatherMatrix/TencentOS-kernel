@@ -38,10 +38,21 @@
 
 /*
  * Passed into wb_writeback(), essentially a subset of writeback_control
+ *
+ * 描述一个回写任务；
  */
 struct wb_writeback_work {
+	/*
+	 * 待回写页面数量
+	 */
 	long nr_pages;
+	/*
+	 * writeback所属的superblock
+	 */
 	struct super_block *sb;
+	/*
+	 * 指定同步模式
+	 */
 	enum writeback_sync_modes sync_mode;
 	unsigned int tagged_writepages:1;
 	unsigned int for_kupdate:1;
@@ -1947,6 +1958,9 @@ static struct wb_writeback_work *get_next_work_item(struct bdi_writeback *wb)
 
 	spin_lock_bh(&wb->work_lock);
 	if (!list_empty(&wb->work_list)) {
+		/*
+		 * 取出一个回写任务
+		 */
 		work = list_entry(wb->work_list.next,
 				  struct wb_writeback_work, list);
 		list_del_init(&work->list);

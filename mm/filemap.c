@@ -1054,6 +1054,9 @@ static int wake_page_function(wait_queue_entry_t *wait, unsigned mode, int sync,
 	struct wait_page_queue *wait_page
 		= container_of(wait, struct wait_page_queue, wait);
 
+	/*
+	 * 如果不是我们要关心的page，直接返回；
+	 */
 	if (wait_page->page != key->page)
 	       return 0;
 	key->page_match = 1;
@@ -1072,6 +1075,9 @@ static int wake_page_function(wait_queue_entry_t *wait, unsigned mode, int sync,
 	if (test_bit(key->bit_nr, &key->page->flags))
 		return -1;
 
+	/*
+	 * 执行真正的唤醒函数
+	 */
 	return autoremove_wake_function(wait, mode, sync, key);
 }
 
@@ -3236,6 +3242,9 @@ generic_file_direct_write(struct kiocb *iocb, struct iov_iter *from)
 		goto out;
 	}
 
+	/*
+	 * 对ext4文件系统，这里是ext4_direct_IO()
+	 */
 	written = mapping->a_ops->direct_IO(iocb, from);
 
 	/*
@@ -3496,6 +3505,9 @@ ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 		 * semantics.
 		 */
 		endbyte = pos + status - 1;
+		/*
+		 * 等待
+		 */
 		err = filemap_write_and_wait_range(mapping, pos, endbyte);
 		if (err == 0) {
 			iocb->ki_pos = endbyte + 1;

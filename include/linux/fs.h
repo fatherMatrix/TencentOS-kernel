@@ -469,6 +469,7 @@ struct address_space {
 	 * 将相关的vma组织成一棵红黑树;
 	 * - 一个文件可能会被映射到多个进程的多个VMA中，所有的这些VMA都被挂入到
 	 *   i_mmap指向的Priority search tree中。
+	 * - 树节点是vm_area_struct->shared.rb；
 	 */
 	struct rb_root_cached	i_mmap;
 	struct rw_semaphore	i_mmap_rwsem;
@@ -545,6 +546,9 @@ struct block_device {
 	 * 请求队列
 	 */
 	struct request_queue *  bd_queue;
+	/*
+	 * bdi系统
+	 */
 	struct backing_dev_info *bd_bdi;
 	struct list_head	bd_list;
 	/*

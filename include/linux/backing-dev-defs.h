@@ -132,12 +132,23 @@ struct bdi_writeback {
 	struct backing_dev_info *bdi;	/* our parent bdi */
 
 	unsigned long state;		/* Always use atomic bitops on this */
+	/*
+	 * 上次刷写数据的时间，用于周期性回写数据
+	 */
 	unsigned long last_old_flush;	/* last old data flush */
 
-	/* 本磁盘对应的脏inode链表 */
+	/*
+	 * 本磁盘对应的脏inode链表
+	 */
 	struct list_head b_dirty;	/* dirty inodes */
+	/*
+	 * 用于暂存即将要被writeback处理的inode
+	 */
 	struct list_head b_io;		/* parked for writeback */
 	struct list_head b_more_io;	/* parked for more writeback */
+	/*
+	 * 暂存在cache过期的inode
+	 */
 	struct list_head b_dirty_time;	/* time stamps are dirty */
 	spinlock_t list_lock;		/* protects the b_* lists */
 
@@ -165,7 +176,13 @@ struct bdi_writeback {
 	enum wb_reason start_all_reason;
 
 	spinlock_t work_lock;		/* protects work_list & dwork scheduling */
+	/*
+	 * 回写任务列表，链表元素是wb_writeback_work->list
+	 */
 	struct list_head work_list;
+	/*
+	 * 处理任务的函数
+	 */
 	struct delayed_work dwork;	/* work item used for writeback */
 
 	unsigned long dirty_sleep;	/* last wait */
@@ -213,7 +230,13 @@ struct backing_dev_info {
 	 */
 	atomic_long_t tot_write_bandwidth;
 
+	/*
+	 * 封装了内核线程和要回写的inode链表
+	 */
 	struct bdi_writeback wb;  /* the root writeback info for this bdi */
+	/*
+	 * 该backing_dev_info对应的bdi_writeback链表，链表元素是bdi_writeback->bdi_node
+	 */
 	struct list_head wb_list; /* list of all wbs */
 #ifdef CONFIG_CGROUP_WRITEBACK
 	struct radix_tree_root cgwb_tree; /* radix tree of active cgroup wbs */

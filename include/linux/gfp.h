@@ -418,6 +418,9 @@ static inline bool gfpflags_normal_context(const gfp_t gfp_flags)
 #error GFP_ZONES_SHIFT too large to create GFP_ZONE_TABLE integer
 #endif
 
+/*
+ * 内核使用宏GFP_ZONE_TABLE定义了分配标志(GFP_xxx)到区域类型(ZONE_yyy)的映射表；
+ */
 #define GFP_ZONE_TABLE ( \
 	(ZONE_NORMAL << 0 * GFP_ZONES_SHIFT)				       \
 	| (OPT_ZONE_DMA << ___GFP_DMA * GFP_ZONES_SHIFT)		       \

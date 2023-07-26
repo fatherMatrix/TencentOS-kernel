@@ -13,6 +13,9 @@
 
 #include <linux/types.h>
 
+/*
+ * 这里只有3个bit，应该是只对应实际的3中迁移类型；
+ */
 #define PB_migratetype_bits 3
 /* Bit indices that affect a whole block of pages */
 enum pageblock_bits {
@@ -28,24 +31,24 @@ enum pageblock_bits {
 	NR_PAGEBLOCK_BITS
 };
 
-#ifdef CONFIG_HUGETLB_PAGE
+#ifdef CONFIG_HUGETLB_PAGE				// 1. 如果定义了HUGETLB_PAGE (true)
 
-#ifdef CONFIG_HUGETLB_PAGE_SIZE_VARIABLE
+#ifdef CONFIG_HUGETLB_PAGE_SIZE_VARIABLE		// 2. 如果巨型页长度是可变的 (false)
 
 /* Huge page sizes are variable */
-extern unsigned int pageblock_order;
+extern unsigned int pageblock_order;			// Cond.1 == true && Cond.2 == true
 
 #else /* CONFIG_HUGETLB_PAGE_SIZE_VARIABLE */
 
 /* Huge pages are a constant size */
-#define pageblock_order		HUGETLB_PAGE_ORDER
+#define pageblock_order		HUGETLB_PAGE_ORDER	// Cond.1 == true && Cond.2 == false
 
 #endif /* CONFIG_HUGETLB_PAGE_SIZE_VARIABLE */
 
 #else /* CONFIG_HUGETLB_PAGE */
 
 /* If huge pages are not used, group by MAX_ORDER_NR_PAGES */
-#define pageblock_order		(MAX_ORDER-1)
+#define pageblock_order		(MAX_ORDER-1)		// Cond.1 == false && Cond.2 == false
 
 #endif /* CONFIG_HUGETLB_PAGE */
 

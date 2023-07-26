@@ -111,10 +111,19 @@ extern pmd_t *mm_find_pmd(struct mm_struct *mm, unsigned long address);
  * by a const pointer.
  */
 struct alloc_context {
+	/*
+	 * 选ZONELIST_FALLBACK，或者ZONELIST_NOFALLBACK
+	 */
 	struct zonelist *zonelist;
 	nodemask_t *nodemask;
 	struct zoneref *preferred_zoneref;
+	/*
+	 * gfp中的迁移类型
+	 */
 	int migratetype;
+	/*
+	 * 首选的zone类型，high的意思是：可以去lower zone借用
+	 */
 	enum zone_type high_zoneidx;
 	bool spread_dirty_pages;
 };

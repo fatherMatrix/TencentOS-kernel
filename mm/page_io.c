@@ -321,12 +321,21 @@ int __swap_writepage(struct page *page, struct writeback_control *wbc,
 		return ret;
 	}
 
+	/*
+	 * 将对应的页写出去，写成功了返回0；
+	 */
 	ret = bdev_write_page(sis->bdev, swap_page_sector(page), page, wbc);
 	if (!ret) {
 		count_swpout_vm_event(page);
 		return 0;
 	}
 
+	/*
+	 * 上面如果写成功了，就应该返回出去了；
+	 * 
+	 * 下面的部分感觉是一种功能回退，如果bdev_write_page()失败了，回退到下面
+	 * 这种submit_bio()的老方式；
+	 */
 	ret = 0;
 	bio = get_swap_bio(GFP_NOIO, page, end_write_func);
 	if (bio == NULL) {

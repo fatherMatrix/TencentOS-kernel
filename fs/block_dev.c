@@ -752,6 +752,9 @@ int bdev_write_page(struct block_device *bdev, sector_t sector,
 		return result;
 
 	set_page_writeback(page);
+	/*
+	 * 对于zram，这里是zram_rw_page();
+	 */
 	result = ops->rw_page(bdev, sector + get_start_sect(bdev), page,
 			      REQ_OP_WRITE);
 	if (result) {

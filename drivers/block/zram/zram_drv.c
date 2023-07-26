@@ -1883,10 +1883,16 @@ static int zram_add(void)
 	struct request_queue *queue;
 	int ret, device_id;
 
+	/*
+	 * 分配内存
+	 */
 	zram = kzalloc(sizeof(struct zram), GFP_KERNEL);
 	if (!zram)
 		return -ENOMEM;
 
+	/*
+	 * 分配id并创建id到zram结构体指针的映射
+	 */
 	ret = idr_alloc(&zram_index_idr, zram, 0, 0, GFP_KERNEL);
 	if (ret < 0)
 		goto out_free_dev;
@@ -1896,6 +1902,9 @@ static int zram_add(void)
 #ifdef CONFIG_ZRAM_WRITEBACK
 	spin_lock_init(&zram->wb_limit_lock);
 #endif
+	/*
+	 * 分配request_queue
+	 */
 	queue = blk_alloc_queue(GFP_KERNEL);
 	if (!queue) {
 		pr_err("Error allocating disk queue for device %d\n",
@@ -1904,6 +1913,9 @@ static int zram_add(void)
 		goto out_free_idr;
 	}
 
+	/*
+	 * 配置request_queue的make_request_fn函数
+	 */
 	blk_queue_make_request(queue, zram_make_request);
 
 	/* gendisk structure */
@@ -2108,6 +2120,9 @@ static int __init zram_init(void)
 	}
 
 	zram_debugfs_create();
+	/*
+	 * 注册块设备号
+	 */
 	zram_major = register_blkdev(0, "zram");
 	if (zram_major <= 0) {
 		pr_err("Unable to get major number\n");

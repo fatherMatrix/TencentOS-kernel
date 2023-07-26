@@ -438,6 +438,7 @@ struct request_queue {
 
 	/*
 	 * backing_dev_info是随request queue的分配一起分配的
+	 * block_device中也有一个backing_dev_info，和这个是什么关系？
 	 */ 
 	struct backing_dev_info	*backing_dev_info;
 
@@ -1743,6 +1744,9 @@ struct block_device_operations {
 	 * 关闭块设备
 	 */
 	void (*release) (struct gendisk *, fmode_t);
+	/*
+	 * 和bdi系统以及submit_bio()的关系？
+	 */
 	int (*rw_page)(struct block_device *, sector_t, struct page *, unsigned int);
 	int (*ioctl) (struct block_device *, fmode_t, unsigned, unsigned long);
 	int (*compat_ioctl) (struct block_device *, fmode_t, unsigned, unsigned long);

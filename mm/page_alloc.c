@@ -2208,6 +2208,15 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 /*
  * This array describes the order lists are fallen back to when
  * the free lists for the desirable migrate type are depleted
+ *
+ * 申请某种特定迁移类型的页时，如果该迁移类型的页用完了，可以从
+ * 其他迁移类型盗用(steal)物理页。fallbacks定义了每种迁移类型的
+ * 备用类型优先级列表；
+ *
+ * 如果需要从备用类型盗用物理页，那么从最大的页块开始盗用，以避
+ * 免产生碎片；
+ *
+ * zone盗用和migrate type盗用的层次关系是？
  */
 static int fallbacks[MIGRATE_TYPES][4] = {
 	[MIGRATE_UNMOVABLE]   = { MIGRATE_RECLAIMABLE, MIGRATE_MOVABLE,   MIGRATE_TYPES },
@@ -3271,6 +3280,9 @@ struct page *rmqueue(struct zone *preferred_zone,
 	unsigned long flags;
 	struct page *page;
 
+	/*
+	 * 首先尝试使用pcp分配
+	 */
 	if (likely(order == 0)) {
 		page = rmqueue_pcplist(preferred_zone, zone, gfp_flags,
 					migratetype, alloc_flags);
@@ -3606,6 +3618,9 @@ retry:
 	/*
 	 * Scan zonelist, looking for a zone with enough free.
 	 * See also __cpuset_node_allowed() comment in kernel/cpuset.c.
+	 *
+	 * 先尝试zonelist中所有的zone，zonelist有可能是node优先，也可能是zone优
+	 * 先；
 	 */
 	no_fallback = alloc_flags & ALLOC_NOFRAGMENT;
 	z = ac->preferred_zoneref;
@@ -3614,6 +3629,9 @@ retry:
 		struct page *page;
 		unsigned long mark;
 
+		/*
+		 * ../prepare_alloc_pages()中决定是否使用pcp分配；
+		 */
 		if (cpusets_enabled() &&
 			(alloc_flags & ALLOC_CPUSET) &&
 			!__cpuset_zone_allowed(zone, gfp_mask))
@@ -4714,6 +4732,9 @@ static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
 	ac->nodemask = nodemask;
 	ac->migratetype = gfpflags_to_migratetype(gfp_mask);
 
+	/*
+	 * 是否可以使用pcp分配
+	 */
 	if (cpusets_enabled()) {
 		*alloc_mask |= __GFP_HARDWALL;
 		if (!ac->nodemask)
@@ -4746,6 +4767,8 @@ static inline void finalise_ac(gfp_t gfp_mask, struct alloc_context *ac)
 	 * The preferred zone is used for statistics but crucially it is
 	 * also used as the starting point for the zonelist iterator. It
 	 * may get reset for allocations that ignore memory policies.
+	 *
+	 * 选择preferred_zoneref
 	 */
 	ac->preferred_zoneref = first_zones_zonelist(ac->zonelist,
 					ac->high_zoneidx, ac->nodemask);
@@ -4788,10 +4811,18 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order, int preferred_nid,
 	 */
 	gfp_mask &= gfp_allowed_mask;
 	alloc_mask = gfp_mask;
+	/*
+	 * 解析传入参数，填充alloc_context结构体中的参数
+	 * - high zone
+	 * - migrate_type
+	 */
 	if (!prepare_alloc_pages(gfp_mask, order, preferred_nid, nodemask, &ac, &alloc_mask, &alloc_flags))
 		return NULL;
 
 	sli_memlat_stat_start(&alloc_entry_time);
+	/*
+	 * 根据high zone选择合适的zone
+	 */
 	finalise_ac(gfp_mask, &ac);
 
 	/*
@@ -4801,6 +4832,9 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order, int preferred_nid,
 	alloc_flags |= alloc_flags_nofragment(ac.preferred_zoneref->zone, gfp_mask);
 
 	/* First allocation attempt */
+	/*
+	 * 快速路径：使用低水线分配
+	 */
 	page = get_page_from_freelist(alloc_mask, order, alloc_flags, &ac);
 	if (likely(page))
 		goto out;

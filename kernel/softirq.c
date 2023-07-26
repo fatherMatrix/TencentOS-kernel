@@ -319,6 +319,10 @@ restart:
 	 */
 	local_irq_enable();
 
+	/*
+	 * 软中断处理函数的赋值在哪里？
+	 * - open_softirq()
+	 */
 	h = softirq_vec;
 
 	while ((softirq_bit = ffs(pending))) {

@@ -39,6 +39,15 @@
  */
 #define PAGE_ALLOC_COSTLY_ORDER 3
 
+/*
+ * 按可移动性分组的主要目的是：预防及处理内存碎片；
+ *
+ * MIGRATE_UNMOVABLE：直接映射的页
+ * MIGRATE_MOVABLE：用户态的页、vmalloc()分配的页
+ * MIGRATE_RECLAIMABLE：有后备存储设备的页
+ *
+ * 上面3种是真正的页迁移类型，后面的迁移类型都有特殊用途;
+ */
 enum migratetype {
 	MIGRATE_UNMOVABLE,
 	MIGRATE_MOVABLE,
@@ -353,15 +362,30 @@ enum zone_watermarks {
 #define wmark_pages(z, i) (z->_watermark[i] + z->watermark_boost)
 
 struct per_cpu_pages {
+	/*
+	 * 链表里的页数量
+	 */
 	int count;		/* number of pages in the list */
+	/*
+	 * 如果页的数量达到高水线，需要返回给buddy system
+	 */
 	int high;		/* high watermark, emptying needed */
+	/*
+	 * 批量添加或删除的页数量
+	 */
 	int batch;		/* chunk size for buddy add/remove */
 
 	/* Lists of pages, one per migrate type stored on the pcp-lists */
+	/*
+	 * 每种迁移类型有一个链表
+	 */
 	struct list_head lists[MIGRATE_PCPTYPES];
 };
 
 struct per_cpu_pageset {
+	/*
+	 * 主要结构体
+	 */
 	struct per_cpu_pages pcp;
 #ifdef CONFIG_NUMA
 	s8 expire;
@@ -460,6 +484,9 @@ struct zone {
 	 * there being tons of freeable ram on the higher zones).  This array is
 	 * recalculated at runtime if the sysctl_lowmem_reserve_ratio sysctl
 	 * changes.
+	 *
+	 * zone[i]->lowmem_reserve[j]表示区域类型i应该保留多少页不能借给区域类
+	 * 型j，iff j>i时有意义；
 	 */
 	long lowmem_reserve[MAX_NR_ZONES];
 
@@ -475,12 +502,21 @@ struct zone {
 	int node;
 #endif
 	struct pglist_data	*zone_pgdat;
+	/*
+	 * 每处理器页集合，用于加速分配
+	 */
 	struct per_cpu_pageset __percpu *pageset;
 
 #ifndef CONFIG_SPARSEMEM
 	/*
 	 * Flags for a pageblock_nr_pages block. See pageblock-flags.h.
 	 * In SPARSEMEM, this map is stored in struct mem_section
+	 *
+	 * 指向页块标志位图，页块的大小是分组阶数pageblock_order，这种页块称为
+	 * 分组页块；每个分组页块在位图中占用4位，其中3位用来存放页块的迁移类
+	 * 型。参见enum pageblock_bits；
+	 * - 内核在初始化时，将所有页块初始化为可移动类型，其他迁移类型的页是通
+	 *   过盗用产生的；参见memmap_init_zone()
 	 */
 	unsigned long		*pageblock_flags;
 #endif /* CONFIG_SPARSEMEM */
@@ -1064,6 +1100,9 @@ extern struct zone *next_zone(struct zone *zone);
  *
  * The user only needs to declare the zone variable, for_each_zone
  * fills it in.
+ *
+ * 这个宏通过在next_zone()中切换pglist_data指针做到可以遍历所有内
+ * 存节点上的zone；
  */
 #define for_each_zone(zone)			        \
 	for (zone = (first_online_pgdat())->node_zones; \
@@ -1247,7 +1286,13 @@ static inline unsigned long section_nr_to_pfn(unsigned long sec)
 
 struct mem_section_usage {
 	DECLARE_BITMAP(subsection_map, SUBSECTIONS_PER_SECTION);
-	/* See declaration of similar field in struct zone */
+	/*
+	 * See declaration of similar field in struct zone
+	 *
+	 * 对于SPARSE内存模型，pageblock_flags保存在zone结构体中；
+	 * 对于非SPARSE内存模型，pageblock_flags保存在mem_section_usage结构体中；
+	 * - 作用参见zone->pageblock_flags注释
+	 */
 	unsigned long pageblock_flags[0];
 };
 

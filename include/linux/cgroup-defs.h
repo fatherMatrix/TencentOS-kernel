@@ -188,8 +188,8 @@ struct cgroup_subsys_state {
  * list_add()/del() can bump the reference count on the entire cgroup
  * set for a task.
  *
- * css_set本身是一个多对多数据结构的中间连接器，一边连接task_struct，一边连接
- * cgroup。
+ * 用来组织同一组cgroup_subsys_state，以及使用同一组css的task；
+ * 然后代表这些task通过cgrp_cset_link与cgroup形成M:N的关系；
  */
 struct css_set {
 	/*
@@ -257,7 +257,7 @@ struct css_set {
 	 * List of cgrp_cset_links pointing at cgroups referenced from this
 	 * css_set.  Protected by css_set_lock.
 	 *
-	 * 作为链表元素链入css_set对应的cgrp_cset_link->cset_link；
+	 * 作为链表头链接cgrp_cset_link->cset_link；
 	 */
 	struct list_head cgrp_links;
 
@@ -442,7 +442,7 @@ struct cgroup {
 	 * List of cgrp_cset_links pointing at css_sets with tasks in this
 	 * cgroup.  Protected by css_set_lock.
 	 *
-	 * 作为链表元素加入css_set->cgrp_links;
+	 * 作为链表头链接cgrp_cset_link->cset_links;
 	 */
 	struct list_head cset_links;
 

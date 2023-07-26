@@ -700,6 +700,16 @@ asmlinkage __visible void __init start_kernel(void)
 	 * Allow workqueue creation and work item queueing/cancelling
 	 * early.  Work item execution depends on kthreads and starts after
 	 * workqueue_init().
+	 *
+	 * 工作队列初始化 - 第一阶段：
+	 * - 创建pool_workqueue 高速缓存池
+	 * - 初始化bound类型worker_pool
+	 * - 创建各种预定义的工作队列（unbound类型的worker_pool在这里被unbound
+	 *   类型的工作队列触发创建）
+	 * 
+	 * 第二阶段在workqueue_init()，主要负责：
+	 * - numa化
+	 * - 为每个worker_pool创建worker线程
 	 */
 	workqueue_init_early();
 
@@ -1285,6 +1295,9 @@ static noinline void __init kernel_init_freeable(void)
 
 	smp_prepare_cpus(setup_max_cpus);
 
+	/*
+	 * 初始化工作队列
+	 */
 	workqueue_init();
 
 	init_mm_internals();

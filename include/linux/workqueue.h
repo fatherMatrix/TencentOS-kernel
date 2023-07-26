@@ -100,7 +100,16 @@ enum {
 	WORKER_DESC_LEN		= 24,
 };
 
+/*
+ * 描述一个工作队列的工作任务
+ *                   ^^^^^^^^
+ */
 struct work_struct {
+	/*
+	 * 低8位用作标志位，WORK_STRUCT_PENDING/WORK_STRUCT_PWQ/...；
+	 * 高位用于存放上一次运行worker_pool的ID号或pool_workqueue的指针；
+	 * - pool_workqueue结构体按256字节对齐，地址低8位为NULL
+	 */
 	atomic_long_t data;
 	/* 链入工人池(worker_pool->worklist)和工人(worker->scheduled) */
 	struct list_head entry;
@@ -117,6 +126,11 @@ struct work_struct {
 #define WORK_DATA_STATIC_INIT()	\
 	ATOMIC_LONG_INIT((unsigned long)(WORK_STRUCT_NO_POOL | WORK_STRUCT_STATIC))
 
+/*
+ * 延迟工作项，是一个work_struct和timer定时器的结合。把延迟工作项添加到工作队列
+ * 中的时候，延迟一段时间才会真正地把工作项添加到工作队列中；
+ * - 字段wq用来记录定时器触发后，回调函数应该把工作项worker添加到哪个工作队列中
+ */
 struct delayed_work {
 	struct work_struct work;
 	struct timer_list timer;

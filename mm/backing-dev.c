@@ -306,6 +306,11 @@ static int wb_init(struct bdi_writeback *wb, struct backing_dev_info *bdi,
 
 	spin_lock_init(&wb->work_lock);
 	INIT_LIST_HEAD(&wb->work_list);
+	/*
+	 * 初始化delayed work为wb_workfn
+	 * - 定时器触发后，定时器回调函数delayed_work_timer_fn()中会
+	 *   queue_work(wb_workfn)
+	 */
 	INIT_DELAYED_WORK(&wb->dwork, wb_workfn);
 	wb->dirty_sleep = jiffies;
 
@@ -870,11 +875,17 @@ struct backing_dev_info *bdi_alloc_node(gfp_t gfp_mask, int node_id)
 {
 	struct backing_dev_info *bdi;
 
+	/*
+	 * 分配内存
+	 */
 	bdi = kmalloc_node(sizeof(struct backing_dev_info),
 			   gfp_mask | __GFP_ZERO, node_id);
 	if (!bdi)
 		return NULL;
 
+	/*
+	 * 初始化backing_dev_info结构体
+	 */
 	if (bdi_init(bdi)) {
 		kfree(bdi);
 		return NULL;

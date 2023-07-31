@@ -67,6 +67,9 @@ struct mem_cgroup;
 #endif
 
 struct page {
+	/*
+	 * - PG_slab表示页数语SLUB分配器
+	 */
 	unsigned long flags;		/* Atomic flags, some possibly
 					 * updated asynchronously */
 	/*
@@ -82,7 +85,10 @@ struct page {
 			 * pgdat->lru_lock.  Sometimes used as a generic list
 			 * by the page owner.
 			 *
-			 * 如果是pcp中的页，该字段作为元素链入pcp->lists[miagratetype]；
+			 * - 如果是pcp中的页，该字段作为元素链入
+			 *   pcp->lists[miagratetype]；
+			 * - 如果是SLUB中的页，该字段作为元素链入
+			 *   kmem_cache_node->partial链表；
 			 */
 			struct list_head lru;
 			/* See page-flags.h for PAGE_MAPPING_FLAGS */
@@ -99,8 +105,13 @@ struct page {
 			/**
 			 * @private: Mapping-private opaque data.
 			 * Usually used for buffer_heads if PagePrivate.
+			 *                  ^^^^^^^^^^^^    ^^^^^^^^^^^
 			 * Used for swp_entry_t if PageSwapCache.
+			 *          ^^^^^^^^^^^    ^^^^^^^^^^^^^
 			 * Indicates order in the buddy system if PageBuddy.
+			 *           ^^^^^                        ^^^^^^^^^
+			 * 或者当page处于compact_control->freepages链表中时
+			 * 也表示order;
 			 */
 			unsigned long private;
 		};
@@ -115,6 +126,11 @@ struct page {
 			union {
 				struct list_head slab_list;
 				struct {	/* Partial pages */
+					/*
+					 * SLUB：
+					 * 与kmem_cache_cpu->partial配合串联多个
+					 * slab
+					 */
 					struct page *next;
 #ifdef CONFIG_64BIT
 					int pages;	/* Nr of pages left */
@@ -125,15 +141,51 @@ struct page {
 #endif
 				};
 			};
+			/*
+			 * 当前页所属的kmem_cache实例
+			 * - slab中的对象释放时，首先通过对象的vaddr计算出paddr，
+			 *   然后根据paddr找到page，根据slab_cache中的字段找到
+			 *   自己所属的kmem_cache；
+			 */
 			struct kmem_cache *slab_cache; /* not slob */
 			/* Double-word boundary */
+			/*
+			 * - SLAB:
+			 *   指向空闲slab对象链表
+			 *   - 这个链表其实是一个数组，数组中的元素表示s_mem指
+			 *     向的slab对象数组的索引；
+			 *
+			 * - SLUB:
+			 *   指向第一个slab对象，后续对象通过slab对象的空闲指针
+			 *   串联起来；
+			 *   当本slab被frozen到per-cpu kmem_cache_cpu中时，本
+			 *   slab自己的freelist被置空，第一个slab对象由
+			 *   kmem_cache_cpu->freelist指向；
+			 */
 			void *freelist;		/* first free object */
 			union {
+				/*
+				 * 第一个对象的地址
+				 */
 				void *s_mem;	/* slab: first object */
 				unsigned long counters;		/* SLUB */
 				struct {			/* SLUB */
+					/*
+					 * 已分配对象的数量
+					 */
 					unsigned inuse:16;
+					/*
+					 * 对象数量
+					 */
 					unsigned objects:15;
+					/*
+					 * 标识slab是否被冻结在per-cpu slab缓存
+					 * 中：
+					 * - 如果slab在per-cpu缓存中，它处于冻
+					 *   结状态；
+					 * - 如果slab在内存节点的部分空闲slab链
+					 *   表中，它处于解冻状态；
+					 */
 					unsigned frozen:1;
 				};
 			};
@@ -189,7 +241,11 @@ struct page {
 	union {		/* This union is 4 bytes in size. */
 		/*
 		 * If the page can be mapped to userspace, encodes the number
+		 *                              ^^^^^^^^^
 		 * of times this page is referenced by a page table.
+		 *
+		 * 表示物理页被映射到多少个虚拟内存区域，初始值是-1；
+		 * - vmalloc的映射算不算？
 		 */
 		atomic_t _mapcount;
 
@@ -201,6 +257,10 @@ struct page {
 		 */
 		unsigned int page_type;
 
+		/*
+		 * - 已分配对象的数量
+		 * - 刚好也是freelist数组中空闲对象的下标；
+		 */
 		unsigned int active;		/* SLAB */
 		int units;			/* SLOB */
 	};
@@ -209,6 +269,9 @@ struct page {
 	atomic_t _refcount;
 
 #ifdef CONFIG_MEMCG
+	/*
+	 * page所属的mem_cgroup
+	 */
 	struct mem_cgroup *mem_cgroup;
 #endif
 

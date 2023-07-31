@@ -642,6 +642,9 @@ bool page_mapped(struct page *page)
 	page = compound_head(page);
 	if (atomic_read(compound_mapcount_ptr(page)) >= 0)
 		return true;
+	/*
+	 * 如果是hugetlbfs，直接返回false；
+	 */
 	if (PageHuge(page))
 		return false;
 	for (i = 0; i < compound_nr(page); i++) {

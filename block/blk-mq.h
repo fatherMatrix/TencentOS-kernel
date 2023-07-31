@@ -20,6 +20,9 @@ struct blk_mq_ctxs {
 struct blk_mq_ctx {
 	struct {
 		spinlock_t		lock;
+		/*
+		 * 作为链表头，链接request，元素是request->queuelist
+		 */
 		struct list_head	rq_lists[HCTX_MAX_TYPES];
 	} ____cacheline_aligned_in_smp;
 
@@ -27,6 +30,10 @@ struct blk_mq_ctx {
 	unsigned short		index_hw[HCTX_MAX_TYPES];
 	/*
  	 * 指向对应的硬件队列
+ 	 * - 和blk_mq_tag_set中的映射表功能是否重复？
+ 	 *
+ 	 * 一个软件队列只能对应唯一的硬件队列（不考虑类型的话）；
+ 	 * 一个硬件队列可以对应多个软件队列；
  	 */ 
 	struct blk_mq_hw_ctx 	*hctxs[HCTX_MAX_TYPES];
 

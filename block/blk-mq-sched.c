@@ -192,6 +192,8 @@ void blk_mq_sched_dispatch_requests(struct blk_mq_hw_ctx *hctx)
 	/*
 	 * If we have previous entries on our dispatch list, grab them first for
 	 * more fair dispatch.
+	 *
+	 * 将硬件队列hctx->dispatch链表上的request移动到局部链表rq_list上;
 	 */
 	if (!list_empty_careful(&hctx->dispatch)) {
 		spin_lock(&hctx->lock);
@@ -214,11 +216,23 @@ void blk_mq_sched_dispatch_requests(struct blk_mq_hw_ctx *hctx)
 	 * dispatch list.
 	 */
 	if (!list_empty(&rq_list)) {
+	/*
+	 * 如果rq_list上取到了request
+	 */
 		blk_mq_sched_mark_restart_hctx(hctx);
+		/*
+		 * 派发rq_list上的request
+		 */
 		if (blk_mq_dispatch_rq_list(q, &rq_list, false)) {
 			if (has_sched_dispatch)
+				/*
+				 * 如果有调度器，则派发调度器上的request
+				 */
 				blk_mq_do_dispatch_sched(hctx);
 			else
+				/*
+				 * 派发软件队列上的request
+				 */
 				blk_mq_do_dispatch_ctx(hctx);
 		}
 	} else if (has_sched_dispatch) {

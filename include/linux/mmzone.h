@@ -111,7 +111,7 @@ struct free_area {
 	 */
 	struct list_head	free_list[MIGRATE_TYPES];
 	/*
-	 * 剩余量计数
+	 * 剩余量计数，单位是当前free_area所属order的页块
 	 */
 	unsigned long		nr_free;
 };
@@ -163,6 +163,10 @@ static inline void del_page_from_free_area(struct page *page,
 {
 	list_del(&page->lru);
 	__ClearPageBuddy(page);
+	/*
+	 * 将这个连续的N-order页块打散，做成一页一页的；
+	 * - 诶，这是只是首页啊；
+	 */
 	set_page_private(page, 0);
 	area->nr_free--;
 }
@@ -635,6 +639,9 @@ struct zone {
 
 	ZONE_PADDING(_pad3_)
 	/* Zone statistics */
+	/*
+	 * 统计计数
+	 */
 	atomic_long_t		vm_stat[NR_VM_ZONE_STAT_ITEMS];
 	atomic_long_t		vm_numa_stat[NR_VM_NUMA_STAT_ITEMS];
 
@@ -850,6 +857,9 @@ typedef struct pglist_data {
 #ifdef CONFIG_NUMA
 	/*
 	 * zone reclaim becomes active if more unmapped pages exist.
+	 * ^^^^^^^^^^^^
+	 *
+	 * 参见node_reclaim
 	 */
 	unsigned long		min_unmapped_pages;
 	unsigned long		min_slab_pages;

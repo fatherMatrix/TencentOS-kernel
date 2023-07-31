@@ -7,14 +7,47 @@
 
 static DEFINE_MUTEX(swap_cgroup_mutex);
 struct swap_cgroup_ctrl {
+	/*
+	 * 这是一个struct page *数组，指向交换区槽位的swap_cgroup实例所在的物理
+	 * 页的page结构体；
+	 *
+	 * +------+          +--------->+------+
+	 * | page |----------+          |      |
+	 * +------+          |          | PAGE |
+	 * | page |----------+          |      |
+	 * +------+          |    +---->+------+
+	 * | page |----------+    |     |      |
+	 * +------+          |    |     | PAGE |
+	 * | .... |----------+    |     |      |
+	 * +------+               |     +------+
+	 * | page |---------------+
+	 * +------+               |
+	 * | page |---------------+
+	 * +------+               |
+	 * | page |---------------+
+	 * +------+               |
+	 * | .... |---------------+
+	 * +------+
+	 *    map
+	 */
 	struct page **map;
+	/*
+	 * map指针数组的长度，等于（交换区的总页数/SC_PER_PAGE）
+	 * - SC_PER_PAGE表示一个物理页可以容纳的swap_cgroup实例数量
+	 */
 	unsigned long length;
 	spinlock_t	lock;
 };
 
+/*
+ * 每个交换区对应一个
+ */
 static struct swap_cgroup_ctrl swap_cgroup_ctrl[MAX_SWAPFILES];
 
 struct swap_cgroup {
+	/*
+	 * mem_cgroup的标识符
+	 */
 	unsigned short		id;
 };
 #define SC_PER_PAGE	(PAGE_SIZE/sizeof(struct swap_cgroup))

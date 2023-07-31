@@ -382,6 +382,14 @@ static void __lru_cache_add(struct page *page)
 	struct pagevec *pvec = &get_cpu_var(lru_add_pvec);
 
 	get_page(page);
+	/*
+	 * pagevec_add()将page加入到per-cpu的pagevec中，并返回pagevec中剩余的槽
+	 * 数；如果返回0，则继续调用__pagevec_lru_add()将pagevec中的page批量挂
+	 * 到memcg中的lru链表上；
+	 *
+	 * 如果page是一个复合页，也要将page绕过pagevec直接放到lru链表里；
+	 * - 里面并没有对复合页做特殊处理，猜测lru_cache_add()本身要求page是首页；
+	 */
 	if (!pagevec_add(pvec, page) || PageCompound(page))
 		__pagevec_lru_add(pvec);
 	put_cpu_var(lru_add_pvec);
@@ -864,6 +872,9 @@ static void __pagevec_lru_add_fn(struct page *page, struct lruvec *lruvec)
 
 	VM_BUG_ON_PAGE(PageLRU(page), page);
 
+	/*
+	 * 设置PG_lru标志位
+	 */
 	SetPageLRU(page);
 	/*
 	 * Page becomes evictable in two ways:
@@ -893,13 +904,22 @@ static void __pagevec_lru_add_fn(struct page *page, struct lruvec *lruvec)
 	 */
 	smp_mb();
 
+	/*
+	 * 选出page对应的lru类型
+	 */
 	if (page_evictable(page)) {
+	/*
+	 * 如果page可回收
+	 */
 		lru = page_lru(page);
 		update_page_reclaim_stat(lruvec, page_is_file_cache(page),
 					 PageActive(page));
 		if (was_unevictable)
 			count_vm_event(UNEVICTABLE_PGRESCUED);
 	} else {
+	/*
+	 * 如果page不可回收
+	 */
 		lru = LRU_UNEVICTABLE;
 		ClearPageActive(page);
 		SetPageUnevictable(page);
@@ -907,6 +927,9 @@ static void __pagevec_lru_add_fn(struct page *page, struct lruvec *lruvec)
 			count_vm_event(UNEVICTABLE_PGCULLED);
 	}
 
+	/*
+	 * 将其放到上面选出的lru链表上；
+	 */
 	add_page_to_lru_list(page, lruvec, lru);
 	trace_mm_lru_insertion(page, lru);
 }
@@ -923,7 +946,17 @@ void __pagevec_lru_add(struct pagevec *pvec)
 
 	for (i = 0; i < pagevec_count(pvec); i++) {
 		struct page *page = pvec->pages[i];
+		/*
+		 * 锁一下page对应的lruvec，因为有可能pagevec中的所有page都在同
+		 * 一个lruvec中，所以这里使用relock_xxx()，其含义是如果当前的
+		 * lruvec是page对应的lruvec，则不用继续上锁；否则，放弃当前
+		 * lruvec上的锁，给page对应的lruvec加锁，然后更新当前的lruvec;
+		 */
 		lruvec = relock_page_lruvec_irqsave(page, lruvec, &flags);
+		/*
+		 * 将page放到已经上锁的lruvec上
+		 * - 其中设置了page的PG_lru标志位；
+		 */
 		__pagevec_lru_add_fn(page, lruvec);
 	}
 	if (lruvec)

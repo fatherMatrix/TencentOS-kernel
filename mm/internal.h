@@ -191,7 +191,13 @@ struct compact_control {
 	struct list_head migratepages;	/* List of pages being migrated */
 	unsigned int nr_freepages;	/* Number of isolated free pages */
 	unsigned int nr_migratepages;	/* Number of pages to migrate */
+	/*
+	 * 缓存空闲扫描器当前扫到哪里了
+	 */
 	unsigned long free_pfn;		/* isolate_freepages search base */
+	/*
+	 * 缓存迁移扫描器当前扫到哪里了
+	 */
 	unsigned long migrate_pfn;	/* isolate_migratepages search base */
 	unsigned long fast_start_pfn;	/* a pfn to start linear scan from */
 	struct zone *zone;

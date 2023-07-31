@@ -310,6 +310,10 @@ static int wb_init(struct bdi_writeback *wb, struct backing_dev_info *bdi,
 	 * 初始化delayed work为wb_workfn
 	 * - 定时器触发后，定时器回调函数delayed_work_timer_fn()中会
 	 *   queue_work(wb_workfn)
+	 *
+	 * delayed_work中的workqueue_struct部分是在哪里指定的呢？
+	 * - delayed_work使用__queue_delayed_work()触发，其中会给wq字段赋值；
+	 * - 此处，是在wb_wakeup()中指定了bdi_wq工作队列；
 	 */
 	INIT_DELAYED_WORK(&wb->dwork, wb_workfn);
 	wb->dirty_sleep = jiffies;
@@ -707,6 +711,9 @@ static int cgwb_bdi_init(struct backing_dev_info *bdi)
 	mutex_init(&bdi->cgwb_release_mutex);
 	init_rwsem(&bdi->wb_switch_rwsem);
 
+	/*
+	 * bdi->wb是backing_dev_info中的bdi_writeback结构体
+	 */
 	ret = wb_init(&bdi->wb, bdi, 1, GFP_KERNEL);
 	if (!ret) {
 		bdi->wb.memcg_css = &root_mem_cgroup->css;

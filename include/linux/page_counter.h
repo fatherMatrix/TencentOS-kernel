@@ -7,10 +7,17 @@
 #include <asm/page.h>
 
 struct page_counter {
+	/*
+	 * 计数值
+	 */
 	atomic_long_t usage;
 	unsigned long min;
 	unsigned long low;
 	unsigned long max;
+	/*
+	 * 如果启用了分层记账，parent指向父内存控制组的页计数器；
+	 * 如果禁用了分层记账，parent是空指针；
+	 */
 	struct page_counter *parent;
 
 	/* effective memory.min and memory.min usage tracking */

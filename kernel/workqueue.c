@@ -1756,6 +1756,11 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 	dwork->cpu = cpu;
 	timer->expires = jiffies + delay;
 
+	/*
+	 * 这个定时器是用来延迟delayed_work的工作的，只会被触发一次，触发后则
+	 * queue_work()将delayed_work中的work_struct送到对应的workqueue_struct；
+	 * 后面不再触发，worker干完活后自己恢复idle状态；
+	 */
 	if (unlikely(cpu != WORK_CPU_UNBOUND))
 		add_timer_on(timer, cpu);
 	else

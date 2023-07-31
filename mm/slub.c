@@ -3022,6 +3022,9 @@ redo:
 	barrier();
 
 	if (likely(page == c->page)) {
+	/*
+	 * 释放对象所属slab缓存是不是cpu缓存
+	 */
 		void **freelist = READ_ONCE(c->freelist);
 
 		set_freepointer(s, tail_obj, freelist);
@@ -3036,6 +3039,9 @@ redo:
 		}
 		stat(s, FREE_FASTPATH);
 	} else
+	/*
+	 * 不是cpu缓存
+	 */
 		__slab_free(s, page, head, tail_obj, cnt, addr);
 
 }

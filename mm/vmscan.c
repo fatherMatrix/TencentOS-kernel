@@ -64,6 +64,9 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/vmscan.h>
 
+/*
+ * 页回收的参数传递
+ */
 struct scan_control {
 	/* How many pages shrink_list() should reclaim */
 	unsigned long nr_to_reclaim;
@@ -2862,9 +2865,15 @@ static bool shrink_node(pg_data_t *pgdat, struct scan_control *sc)
 
 			reclaimed = sc->nr_reclaimed;
 			scanned = sc->nr_scanned;
+			/*
+			 * 收缩memcg
+			 */
 			shrink_node_memcg(pgdat, memcg, sc, &lru_pages);
 			node_lru_pages += lru_pages;
 
+			/*
+			 * 收缩slab
+			 */
 			shrink_slab(sc->gfp_mask, pgdat->node_id, memcg,
 					sc->priority);
 
@@ -3137,6 +3146,9 @@ retry:
 		vmpressure_prio(sc->gfp_mask, sc->target_mem_cgroup,
 				sc->priority);
 		sc->nr_scanned = 0;
+		/*
+		 * 回收
+		 */
 		shrink_zones(zonelist, sc);
 
 		if (sc->nr_reclaimed >= sc->nr_to_reclaim)
@@ -4617,7 +4629,9 @@ static unsigned long node_pagecache_reclaimable(struct pglist_data *pgdat)
 
 	/*
 	 * If RECLAIM_UNMAP is set, then all file pages are considered
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * potentially reclaimable. Otherwise, we have to worry about
+	 * ^^^^^^^^^^^^^^^^^^^^^^^
 	 * pages like swapcache and node_unmapped_file_pages() provides
 	 * a better estimate
 	 */
@@ -4661,11 +4675,16 @@ static int __node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask, unsigned in
 					   sc.gfp_mask);
 
 	cond_resched();
+	/*
+	 * 如果没有CONFIG_LOCKDEP，这是个空操作；
+	 */
 	fs_reclaim_acquire(sc.gfp_mask);
 	/*
 	 * We need to be able to allocate from the reserves for RECLAIM_UNMAP
 	 * and we also need to be able to write out pages for RECLAIM_WRITE
 	 * and RECLAIM_UNMAP.
+	 *
+	 * 备份当前的current->flags然后加上SWAPWRITE以允许写swap分区；
 	 */
 	noreclaim_flag = memalloc_noreclaim_save();
 	p->flags |= PF_SWAPWRITE;
@@ -4677,11 +4696,17 @@ static int __node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask, unsigned in
 		 * priorities until we have enough memory freed.
 		 */
 		do {
+			/*
+			 * 回收内存
+			 */
 			shrink_node(pgdat, &sc);
 		} while (sc.nr_reclaimed < nr_pages && --sc.priority >= 0);
 	}
 
 	set_task_reclaim_state(p, NULL);
+	/*
+	 * 恢复current->flags
+	 */
 	current->flags &= ~PF_SWAPWRITE;
 	memalloc_noreclaim_restore(noreclaim_flag);
 	fs_reclaim_release(sc.gfp_mask);
@@ -4717,7 +4742,9 @@ int node_reclaim(struct pglist_data *pgdat, gfp_t gfp_mask, unsigned int order)
 
 	/*
 	 * Only run node reclaim on the local node or on nodes that do not
+	 *                              ^^^^^^^^^^       ^^^^^^^^^^^^^^^^^
 	 * have associated processors. This will favor the local processor
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * over remote processors and spread off node memory allocations
 	 * as wide as possible.
 	 */

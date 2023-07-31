@@ -32,12 +32,15 @@ struct blk_mq_tags {
 
 	/*
 	 * tag和保留tag的位图
+	 * - 如果bio->bi_flags中包含BLK_MQ_REQ_RESERVED，则使用breserved_tags;
 	 */
 	struct sbitmap_queue bitmap_tags;
 	struct sbitmap_queue breserved_tags;
 
 	/*
 	 * 提前分配的request
+	 * - rqs指针数组本身的内存在blk_mq_alloc_rq_map()中分配；
+	 * - 元素request结构体的内存在blk_mq_alloc_rqs()中分配；
 	 */
 	struct request **rqs;
 	struct request **static_rqs;

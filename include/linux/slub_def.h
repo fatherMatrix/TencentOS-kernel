@@ -73,6 +73,10 @@ struct kmem_cache_cpu {
  * given order would contain.
  */
 struct kmem_cache_order_objects {
+	/*
+	 * 低16位是对象数；
+	 * 高16位是order
+	 */
 	unsigned int x;
 };
 
@@ -80,21 +84,42 @@ struct kmem_cache_order_objects {
  * Slab cache management.
  */
 struct kmem_cache {
+	/*
+	 * SLUB的per-cpu缓存是以一个slab(page set)为单位的；
+	 */
 	struct kmem_cache_cpu __percpu *cpu_slab;
 	/* Used for retrieving partial slabs, etc. */
 	slab_flags_t flags;
 	unsigned long min_partial;
+	/*
+	 * 包含元数据的对象长度
+	 */
 	unsigned int size;	/* The size of an object including metadata */
+	/*
+	 * 对象原始长度
+	 */
 	unsigned int object_size;/* The size of an object without metadata */
 	unsigned int offset;	/* Free pointer offset */
 #ifdef CONFIG_SLUB_CPU_PARTIAL
 	/* Number of per cpu partial objects to keep around */
 	unsigned int cpu_partial;
 #endif
+	/*
+	 * 存放最优slab的阶数和对象数
+	 * - 每个slab由一个或多个连续的物理页组成，页的阶数是最优slab或最小slab
+	 *   的阶数；
+	 * - 如果阶数大于0，则组成一个复合页；
+	 */
 	struct kmem_cache_order_objects oo;
 
 	/* Allocation and freeing of slabs */
+	/*
+	 * 最大slab的阶数和对象数
+	 */
 	struct kmem_cache_order_objects max;
+	/*
+	 * 最小slab的阶数和对象数
+	 */
 	struct kmem_cache_order_objects min;
 	gfp_t allocflags;	/* gfp flags to use on each alloc */
 	int refcount;		/* Refcount for slab cache destroy */
@@ -103,6 +128,9 @@ struct kmem_cache {
 	unsigned int align;		/* Alignment */
 	unsigned int red_left_pad;	/* Left redzone padding size */
 	const char *name;	/* Name (only for display!) */
+	/*
+	 * 链表头是？
+	 */
 	struct list_head list;	/* List of slab caches */
 #ifdef CONFIG_SYSFS
 	struct kobject kobj;	/* For sysfs */
@@ -139,6 +167,9 @@ struct kmem_cache {
 	unsigned int useroffset;	/* Usercopy region offset */
 	unsigned int usersize;		/* Usercopy region size */
 
+	/*
+	 * 每个内存节点一个kmem_cache_node结构
+	 */
 	struct kmem_cache_node *node[MAX_NUMNODES];
 };
 

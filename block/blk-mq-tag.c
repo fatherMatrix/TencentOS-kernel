@@ -128,13 +128,23 @@ unsigned int blk_mq_get_tag(struct blk_mq_alloc_data *data)
 		tag_offset = tags->nr_reserved_tags;
 	}
 
+	/*
+	 * 在位图里找一个空闲的
+	 */
 	tag = __blk_mq_get_tag(data, bt);
 	if (tag != -1)
 		goto found_tag;
 
+	/*
+	 * 走到这里，说明位图里没有空闲的tag
+	 */
 	if (data->flags & BLK_MQ_REQ_NOWAIT)
 		return BLK_MQ_TAG_FAIL;
 
+	/*
+	 * 走到这里，说明没有空闲tag，且上层愿意等；那么就在这里冲刷一下硬件队列
+	 * 上的任务
+	 */
 	ws = bt_wait_ptr(bt, data->hctx);
 	do {
 		struct sbitmap_queue *bt_prev;
@@ -143,6 +153,8 @@ unsigned int blk_mq_get_tag(struct blk_mq_alloc_data *data)
 		 * We're out of tags on this hardware queue, kick any
 		 * pending IO submits before going to sleep waiting for
 		 * some to complete.
+		 *
+		 * 启动硬件队列，同步派发到设备驱动，期待腾出tag
 		 */
 		blk_mq_run_hw_queue(data->hctx, false);
 

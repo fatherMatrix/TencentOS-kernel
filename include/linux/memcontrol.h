@@ -208,12 +208,18 @@ struct memcg_cgwb_frn {
  * to help the administrator determine what knobs to tune.
  */
 struct mem_cgroup {
+	/*
+	 * 所有资源控制器的基类
+	 */
 	struct cgroup_subsys_state css;
 
 	/* Private memcg ID. Used to ID objects that outlive the cgroup */
 	struct mem_cgroup_id id;
 
 	/* Accounted resources */
+	/*
+	 * page_counter记录限制和当前使用量
+	 */
 	struct page_counter memory;
 	struct page_counter swap;
 	struct page_counter pagecache;
@@ -340,6 +346,9 @@ struct mem_cgroup {
 	struct deferred_split deferred_split_queue;
 #endif
 
+	/*
+	 * 每个内存节点一个
+	 */
 	struct mem_cgroup_per_node *nodeinfo[0];
 	/* WARNING: nodeinfo must be the last member here */
 };

@@ -546,7 +546,7 @@ struct request_queue *blk_alloc_queue_node(gfp_t gfp_mask, int node_id)
 		goto fail_id;
 
 	/*
-	 * 分配backing_dev_info
+	 * 初始化backing_dev_info及其附属结构体；
 	 */ 
 	q->backing_dev_info = bdi_alloc_node(gfp_mask, node_id);
 	if (!q->backing_dev_info)
@@ -562,6 +562,10 @@ struct request_queue *blk_alloc_queue_node(gfp_t gfp_mask, int node_id)
 	q->backing_dev_info->name = "block";
 	q->node = node_id;
 
+	/*
+	 * 设置定时器，用于触发bdi回写
+	 * - 这里定时器应该还没有开始
+	 */
 	timer_setup(&q->backing_dev_info->laptop_mode_wb_timer,
 		    laptop_mode_timer_fn, 0);
 	timer_setup(&q->timeout, blk_rq_timed_out_timer, 0);

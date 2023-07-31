@@ -614,7 +614,13 @@ struct kmem_cache_node {
 #endif
 
 #ifdef CONFIG_SLUB
+	/*
+	 * 部分空闲slab的数量
+	 */
 	unsigned long nr_partial;
+	/*
+	 * 把部分空闲的slab链接起来，元素是page->lru
+	 */
 	struct list_head partial;
 #ifdef CONFIG_SLUB_DEBUG
 	atomic_long_t nr_slabs;

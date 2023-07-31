@@ -58,6 +58,9 @@ struct anon_vma {
 	 */
 
 	/* Interval tree of private "related" vmas */
+	/*
+	 * 树根，元素是anon_vma_chain->rb；
+	 */
 	struct rb_root_cached rb_root;
 };
 
@@ -84,15 +87,14 @@ struct anon_vma_chain {
 	 */
 	struct list_head same_vma;   /* locked by mmap_sem & page_table_lock */
 	/*
-	 * 挂入
+	 * 挂入anon_vma->rb_root；
 	 */
 	struct rb_node rb;			/* locked by anon_vma->rwsem */
 	unsigned long rb_subtree_last;
 #ifdef CONFIG_DEBUG_VM_RB
 	unsigned long cached_vma_start, cached_vma_last;
 #endif
-};
-
+}; 
 enum ttu_flags {
 	TTU_MIGRATION		= 0x1,	/* migration mode */
 	TTU_MUNLOCK		= 0x2,	/* munlock mode */

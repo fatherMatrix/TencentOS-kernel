@@ -18,10 +18,17 @@ struct blk_flush_queue;
 struct blk_mq_hw_ctx {
 	struct {
 		spinlock_t		lock;
+		/*
+		 * 这个也是用来连接request的吗？是的；
+		 */
 		struct list_head	dispatch;
 		unsigned long		state;		/* BLK_MQ_S_* flags */
 	} ____cacheline_aligned_in_smp;
 
+	/*
+	 * 硬件队列的读写操作可能是同步的，也可能是异步的；对于异步的io操作，使
+	 * 用这个delayed_work发送到工作队列kblockd_workqueue中；
+	 */
 	struct delayed_work	run_work;
 	cpumask_var_t		cpumask;
 	int			next_cpu;
@@ -37,18 +44,15 @@ struct blk_mq_hw_ctx {
 
 	struct sbitmap		ctx_map;
 
-	/*
-	 * 对应的软件队列
-	 *
-	 * 对应的软件队列不应该是多个吗？这里只能指向一个吧？
-	 */
 	struct blk_mq_ctx	*dispatch_from;
 	unsigned int		dispatch_busy;
 
 	unsigned short		type;
 	unsigned short		nr_ctx;
 	/*
-	 * 难道这里是此硬件队列对应的多个软件队列吗？
+	 * 此硬件队列对应的软件队列；
+	 * - 指针数组内存的分配在blk_mq_alloc_hctx()
+	 * - 元素赋值（即获取映射到的软件队列）是在blk_mq_map_swqueue()
 	 */
 	struct blk_mq_ctx	**ctxs;
 
@@ -108,6 +112,7 @@ struct blk_mq_queue_map {
 	 * 数组下标为cpu编号（软件队列），数组元素为cpu编号对应的硬件队列
 	 *
 	 * 如何处理cpu热插拔？
+	 * - 内存是在blk_mq_alloc_tag_set()中分配的；
 	 */
 	unsigned int *mq_map;
 	unsigned int nr_queues;
@@ -122,6 +127,13 @@ enum hctx_type {
 	HCTX_MAX_TYPES,
 };
 
+/*
+ * 描述一个块设备的硬件配置信息
+ * - 要注意，这里虽然包含了很多软件队列和硬件队列的映射关系，但是两个队列的内存
+ *   分配并不在这个结构体里管理；参见:
+ *     blk_mq_init_queue()
+ *       blk_mq_init_allocated_queue()
+ */
 struct blk_mq_tag_set {
 	/*
 	 * map[] holds ctx -> hctx mappings, one map exists for each type
@@ -138,15 +150,18 @@ struct blk_mq_tag_set {
 	struct blk_mq_queue_map	map[HCTX_MAX_TYPES];
 	/*
 	 * 映射表的数量，值域为[1, HCTX_MAX_TYPES]
+	 * - 该字段的值由调用blk_mq_alloc_tag_set()的用户指定；
 	 */
 	unsigned int		nr_maps;	/* nr entries in map[] */
 	/*
 	 * 块设备驱动的mq操作集合，用于抽象块设备驱动的行为。例如scsi-mq中的实
-	 * 现是scsi_mq_ops和scsi_mq_ops_no_commit
+	 * 现是scsi_mq_ops和scsi_mq_ops_no_commit；
+	 * - 该字段的值由调用blk_mq_alloc_tag_set()的用户指定；
 	 */
 	const struct blk_mq_ops	*ops;
 	/*
 	 * 块设备硬件队列的数量，目前多数块设备是1，nvme可能超过1
+	 * - 该字段的值由调用blk_mq_alloc_tag_set()的用户指定；
 	 */
 	unsigned int		nr_hw_queues;	/* nr hw queues across maps */
 	/*
@@ -179,10 +194,11 @@ struct blk_mq_tag_set {
 	/*
 	 * 用于硬件队列的空间管理
 	 *
-	 * 每个硬队列一个blk_mq_tags结构体,保存在tags[hctx_idx]中。每个
-	 * ^^^^^^^^^^
+	 * 每个硬件队列一个blk_mq_tags结构体,保存在tags[hctx_idx]中。每个
+	 * ^^^^^^^^^^^^
 	 * blk_mq_tags是通过sbitmap_queue来描述，每个bit代表一个tag, 对应一个
 	 * request
+	 * - 内存由blk_mq_alloc_tag_set() -> blk_mq_alloc_rq_maps()分配
 	 */
 	struct blk_mq_tags	**tags;
 

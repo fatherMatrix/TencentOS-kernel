@@ -371,9 +371,15 @@ static struct request *blk_mq_get_request(struct request_queue *q,
 
 	data->q = q;
 	if (likely(!data->ctx)) {
+		/*
+		 * 获取对应的软件队列
+		 */
 		data->ctx = blk_mq_get_ctx(q);
 		clear_ctx_on_error = true;
 	}
+	/*
+	 * 获取软件队列对应的某种type的硬件队列
+	 */
 	if (likely(!data->hctx))
 		data->hctx = blk_mq_map_queue(q, data->cmd_flags,
 						data->ctx);
@@ -396,6 +402,9 @@ static struct request *blk_mq_get_request(struct request_queue *q,
 		blk_mq_tag_busy(data->hctx);
 	}
 
+	/*
+	 * 获取一个合适的tag，返回下标
+	 */
 	tag = blk_mq_get_tag(data);
 	if (tag == BLK_MQ_TAG_FAIL) {
 		if (clear_ctx_on_error)
@@ -404,6 +413,9 @@ static struct request *blk_mq_get_request(struct request_queue *q,
 		return NULL;
 	}
 
+	/*
+	 * 对新分配的request进行初始化
+	 */
 	rq = blk_mq_rq_ctx_init(data, tag, data->cmd_flags, alloc_time_ns);
 	if (!op_is_flush(data->cmd_flags)) {
 		rq->elv.icq = NULL;
@@ -1018,6 +1030,9 @@ static bool dispatch_rq_from_ctx(struct sbitmap *sb, unsigned int bitnr,
 	struct blk_mq_ctx *ctx = hctx->ctxs[bitnr];
 	enum hctx_type type = hctx->type;
 
+	/*
+	 * 这里还是对软件队列加了锁的
+	 */
 	spin_lock(&ctx->lock);
 	if (!list_empty(&ctx->rq_lists[type])) {
 		dispatch_data->rq = list_entry_rq(ctx->rq_lists[type].next);
@@ -1291,6 +1306,9 @@ bool blk_mq_dispatch_rq_list(struct request_queue *q, struct list_head *list,
 			bd.last = !blk_mq_get_driver_tag(nxt);
 		}
 
+		/*
+		 * 设备驱动的函数
+		 */
 		ret = q->mq_ops->queue_rq(hctx, &bd);
 		if (ret == BLK_STS_RESOURCE || ret == BLK_STS_DEV_RESOURCE) {
 			blk_mq_handle_dev_resource(rq, list);
@@ -1324,6 +1342,13 @@ bool blk_mq_dispatch_rq_list(struct request_queue *q, struct list_head *list,
 			q->mq_ops->commit_rqs(hctx);
 
 		spin_lock(&hctx->lock);
+		/*
+		 * 将没有派发完的request放到硬件队列上
+		 * - 似乎没有看到软件队列或调度器主动向硬件队列派发request的代码；
+		 *   request到硬件队列就是这里做的，没有必要非得等request完全走
+		 *   到硬件队列再向设备驱动派发，只要拿到request，就可以向设备驱
+		 *   动派发。派发不成功的，就放到硬件队列里；
+		 */
 		list_splice_tail_init(list, &hctx->dispatch);
 		spin_unlock(&hctx->lock);
 
@@ -1422,6 +1447,9 @@ static void __blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx)
 	might_sleep_if(hctx->flags & BLK_MQ_F_BLOCKING);
 
 	hctx_lock(hctx, &srcu_idx);
+	/*
+	 * 硬件队列的传输
+	 */
 	blk_mq_sched_dispatch_requests(hctx);
 	hctx_unlock(hctx, srcu_idx);
 }
@@ -1487,9 +1515,15 @@ static void __blk_mq_delay_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async,
 	if (unlikely(blk_mq_hctx_stopped(hctx)))
 		return;
 
+	/*
+	 * 同步传输
+	 */
 	if (!async && !(hctx->flags & BLK_MQ_F_BLOCKING)) {
 		int cpu = get_cpu();
 		if (cpumask_test_cpu(cpu, hctx->cpumask)) {
+			/*
+			 * 异步传输时在worker工作线程中还是调用这个函数；
+			 */
 			__blk_mq_run_hw_queue(hctx);
 			put_cpu();
 			return;
@@ -1498,6 +1532,11 @@ static void __blk_mq_delay_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async,
 		put_cpu();
 	}
 
+	/*
+	 * 异步传输，通过delayed_work将工作发送到工作队列；
+	 * - 工作队列的初始化见blk_mq_alloc_hctx()，设置的工作函数是
+	 *   blk_mq_run_work_fn()
+	 */
 	kblockd_mod_delayed_work_on(blk_mq_hctx_next_cpu(hctx), &hctx->run_work,
 				    msecs_to_jiffies(msecs));
 }
@@ -1682,6 +1721,9 @@ void __blk_mq_insert_request(struct blk_mq_hw_ctx *hctx, struct request *rq,
 
 	lockdep_assert_held(&ctx->lock);
 
+	/*
+	 * 将request添加到软件队列
+	 */
 	__blk_mq_insert_req_list(hctx, rq, at_head);
 	blk_mq_hctx_mark_pending(hctx, ctx);
 }
@@ -1831,6 +1873,8 @@ static blk_status_t __blk_mq_issue_directly(struct blk_mq_hw_ctx *hctx,
 	 * For OK queue, we are done. For error, caller may kill it.
 	 * Any other error (busy), just add it to our list as we
 	 * previously would have done.
+	 *
+	 * 调用设备驱动填充的queue_rq()接口，将request放到设备驱动管理范畴里；
 	 */
 	ret = q->mq_ops->queue_rq(hctx, &bd);
 	switch (ret) {
@@ -1982,22 +2026,37 @@ static blk_qc_t blk_mq_make_request(struct request_queue *q, struct bio *bio)
 	unsigned int nr_segs;
 	blk_qc_t cookie;
 
+	/*
+	 * DMA的回弹缓冲区
+	 * - 有空要好好看一下，比如iommu的dma remapping用了吗？怎么用的？
+	 */
 	blk_queue_bounce(q, &bio);
 	__blk_queue_split(q, &bio, &nr_segs);
 
 	if (!bio_integrity_prep(bio))
 		return BLK_QC_T_NONE;
 
+	/*
+	 * 遍历当前进程current->plug->mq_list链表上的所有request，检查该bio是否
+	 * 可以与某个request合并
+	 */
 	if (!is_flush_fua && !blk_queue_nomerges(q) &&
 	    blk_attempt_plug_merge(q, bio, nr_segs, &same_queue_rq))
 		return BLK_QC_T_NONE;
 
+	/*
+	 * 检查是否可以和blk_mq_ctx里的req合并
+	 */
 	if (blk_mq_sched_bio_merge(q, bio, nr_segs))
 		return BLK_QC_T_NONE;
 
 	rq_qos_throttle(q, bio);
 
 	data.cmd_flags = bio->bi_opf;
+	/*
+	 * 从blk_mq_hw_ctx->tags->bitmap_tags或者tags->nr_reserved_tags分配一个
+	 * 空闲的tag，其实就是分配了一个request；
+	 */
 	rq = blk_mq_get_request(q, bio, &data);
 	if (unlikely(!rq)) {
 		rq_qos_cleanup(q, bio);
@@ -2012,15 +2071,24 @@ static blk_qc_t blk_mq_make_request(struct request_queue *q, struct bio *bio)
 
 	cookie = request_to_qc_t(data.hctx, rq);
 
+	/*
+	 * 将bio中的位置信息设置到request中
+	 */
 	blk_mq_bio_to_request(rq, bio, nr_segs);
 
 	plug = blk_mq_plug(q, bio);
 	if (unlikely(is_flush_fua)) {
+	/*
+	 * 如果是flush fua请求，则直接插入flush队列
+	 */
 		/* bypass scheduler for flush rq */
 		blk_insert_flush(rq);
 		blk_mq_run_hw_queue(data.hctx, true);
 	} else if (plug && (q->nr_hw_queues == 1 || q->mq_ops->commit_rqs ||
 				!blk_queue_nonrot(q))) {
+	/*
+	 * 如果进程使用plug链表，且硬件队列数是1或是机械磁盘
+	 */
 		/*
 		 * Use plugging if we have a ->commit_rqs() hook as well, as
 		 * we know the driver uses bd->last in a smart fashion.
@@ -2038,12 +2106,22 @@ static blk_qc_t blk_mq_make_request(struct request_queue *q, struct bio *bio)
 
 		if (request_count >= BLK_MAX_REQUEST_COUNT || (last &&
 		    blk_rq_bytes(last) >= BLK_PLUG_FLUSH_SIZE)) {
+			/*
+			 * 如果plug链表里的内容过多，则启动刷写过程，将plug链表
+			 * 里的所有内容一次性刷入io调度器层；
+			 */
 			blk_flush_plug_list(plug, false);
 			trace_block_plug(q);
 		}
 
+		/*
+		 * 将request加入current->plug->mq_list链表，蓄存
+		 */
 		blk_add_rq_to_plug(plug, rq);
 	} else if (q->elevator) {
+	/*
+	 * 如果配置了io调度器，则将request插入调度器
+	 */
 		blk_mq_sched_insert_request(rq, false, true, true);
 	} else if (plug && !blk_queue_nomerges(q)) {
 		/*
@@ -2065,6 +2143,10 @@ static blk_qc_t blk_mq_make_request(struct request_queue *q, struct bio *bio)
 		if (same_queue_rq) {
 			data.hctx = same_queue_rq->mq_hctx;
 			trace_block_unplug(q, 1, true);
+			/*
+			 * 将req直接派发到设备驱动，如果块设备驱动层繁忙也会执
+			 * 行blk_mq_run_hw_queue将req异步派发给驱动
+			 */
 			blk_mq_try_issue_directly(data.hctx, same_queue_rq,
 					&cookie);
 		}
@@ -2142,6 +2224,8 @@ struct blk_mq_tags *blk_mq_alloc_rq_map(struct blk_mq_tag_set *set,
 	 * 分配blk_mq_tags->rqs和blk_mq_tags->static_rqs
 	 *
 	 * 它们两个只是指针数组，数组中的元素为request指针
+	 * - request本身的内存在哪里分配呢？
+	 *   + blk_mq_alloc_rqs()中；
 	 */ 
 	tags->rqs = kcalloc_node(nr_tags, sizeof(struct request *),
 				 GFP_NOIO | __GFP_NOWARN | __GFP_NORETRY,
@@ -2398,6 +2482,9 @@ blk_mq_alloc_hctx(struct request_queue *q, struct blk_mq_tag_set *set,
 		node = set->numa_node;
 	hctx->numa_node = node;
 
+	/*
+	 * 设置硬件队列异步工作时的工作函数
+	 */
 	INIT_DELAYED_WORK(&hctx->run_work, blk_mq_run_work_fn);
 	spin_lock_init(&hctx->lock);
 	INIT_LIST_HEAD(&hctx->dispatch);
@@ -2409,6 +2496,10 @@ blk_mq_alloc_hctx(struct request_queue *q, struct blk_mq_tag_set *set,
 	/*
 	 * Allocate space for all possible cpus to avoid allocation at
 	 * runtime
+	 *
+	 * 一个硬件队列可能对应多个软件队列，blk_mq_hw_ctx->ctxs字段保存了此硬
+	 * 件队列对应的所有软件队列；这里分配的是指针数组的内存，内存大小是所有
+	 * numa node的个数，这样保证内存足够大；
 	 */
 	hctx->ctxs = kmalloc_array_node(nr_cpu_ids, sizeof(void *),
 			gfp, node);
@@ -2483,7 +2574,8 @@ static bool __blk_mq_alloc_rq_map(struct blk_mq_tag_set *set, int hctx_idx)
 
 	/*
 	 * 分配blk_mq_tag_set->tag指向的blk_mq_tag指针数组中的元素，前边只分配
-	 * 了指针数组，没有分配数组中指向的元素
+	 * 了指针数组，没有分配数组中指向的元素；
+	 * - 对于每个blk_mq_tags，分配的request数量是queue_depth
 	 */ 
 	set->tags[hctx_idx] = blk_mq_alloc_rq_map(set, hctx_idx,
 					set->queue_depth, set->reserved_tags);
@@ -2534,10 +2626,10 @@ static void blk_mq_map_swqueue(struct request_queue *q)
 	 *
 	 * If the cpu isn't present, the cpu is mapped to first hctx.
 	 */
-	for_each_possible_cpu(i) {
+	for_each_possible_cpu(i) {	/* 遍历cpu，即遍历软件队列 */
 
 		ctx = per_cpu_ptr(q->queue_ctx, i);
-		for (j = 0; j < set->nr_maps; j++) {
+		for (j = 0; j < set->nr_maps; j++) {	/* 遍历硬件队列类型 */
 			if (!set->map[j].nr_queues) {
 				ctx->hctxs[j] = blk_mq_map_queue_type(q,
 						HCTX_TYPE_DEFAULT, i);
@@ -2556,6 +2648,9 @@ static void blk_mq_map_swqueue(struct request_queue *q)
 				set->map[j].mq_map[i] = 0;
 			}
 
+			/*
+			 * 取出对应的硬件队列
+			 */
 			hctx = blk_mq_map_queue_type(q, j, i);
 			ctx->hctxs[j] = hctx;
 			/*
@@ -2710,6 +2805,9 @@ static int blk_mq_alloc_ctxs(struct request_queue *q)
 	}
 
 	q->mq_kobj = &ctxs->kobj;
+	/*
+	 * 这是一个per-cpu变量
+	 */
 	q->queue_ctx = ctxs->queue_ctx;
 
 	return 0;
@@ -2848,6 +2946,9 @@ static void blk_mq_realloc_hw_ctxs(struct blk_mq_tag_set *set,
 						struct request_queue *q)
 {
 	int i, j, end;
+	/*
+	 * 这个指针数组是提前分配好的；
+	 */
 	struct blk_mq_hw_ctx **hctxs = q->queue_hw_ctx;
 
 	/* protect against switching io scheduler  */
@@ -2856,10 +2957,16 @@ static void blk_mq_realloc_hw_ctxs(struct blk_mq_tag_set *set,
 		int node;
 		struct blk_mq_hw_ctx *hctx;
 
+		/*
+		 * 根据blk_mq_queue_map->mq_map字段找出硬件队列i对应的node id；
+		 * - node id和cpu id还不同，猜测多个cpu属于一个node？
+		 */
 		node = blk_mq_hw_queue_to_node(&set->map[HCTX_TYPE_DEFAULT], i);
 		/*
 		 * If the hw queue has been mapped to another numa node,
+		 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		 * we need to realloc the hctx. If allocation fails, fallback
+		 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		 * to use the previous one.
 		 */
 		if (hctxs[i] && (hctxs[i]->numa_node == node))
@@ -2944,9 +3051,14 @@ struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 	blk_mq_sysfs_init(q);
 
 	/* 
-	 * 分配硬件队列
+	 * 分配硬件队列的指针数组
+	 * - 这里仅仅是分配了指针数组，硬件队列在哪里分配？
 	 */
 	q->nr_queues = nr_hw_queues(set);
+	/*
+	 * 这里分配完之后，指针数组里的内容都是NULL；保证了下面调用的
+	 * blk_mq_realloc_hw_ctxs()不会出bug；
+	 */
 	q->queue_hw_ctx = kcalloc_node(q->nr_queues, sizeof(*(q->queue_hw_ctx)),
 						GFP_KERNEL, set->numa_node);
 	if (!q->queue_hw_ctx)
@@ -2955,6 +3067,9 @@ struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 	INIT_LIST_HEAD(&q->unused_hctx_list);
 	spin_lock_init(&q->unused_hctx_lock);
 
+	/*
+	 * 分配硬件队列，并填充到上面分配的硬件队列指针数组里；
+	 */
 	blk_mq_realloc_hw_ctxs(set, q);
 	if (!q->nr_hw_queues)
 		goto err_hctxs;
@@ -2965,6 +3080,9 @@ struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 	INIT_WORK(&q->timeout_work, blk_mq_timeout_work);
 	blk_queue_rq_timeout(q, set->timeout ? set->timeout : 30 * HZ);
 
+	/*
+	 * 设置request_queue的tag_set；
+	 */
 	q->tag_set = set;
 
 	q->queue_flags |= QUEUE_FLAG_MQ_DEFAULT;
@@ -3000,7 +3118,13 @@ struct request_queue *blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 	 * 进一步初始化软硬件队列
 	 */
 	blk_mq_init_cpu_queues(q, set->nr_hw_queues);
+	/*
+	 * tag共享设置
+	 */
 	blk_mq_add_queue_tag_set(set, q);
+	/*
+	 * 完成软件队列和硬件队列的映射关系；
+	 */
 	blk_mq_map_swqueue(q);
 
 	/*
@@ -3064,6 +3188,8 @@ static int blk_mq_alloc_rq_maps(struct blk_mq_tag_set *set)
 	depth = set->queue_depth;
 	do {
 		/*
+		 * 为blk_mq_tag_set->tags(blk_mq_tags)指针数组分配元素内存（指
+		 * 针数组本身的内存在前面已分配）：
 		 * - 如果分配成功了，就在下面的if语句中退出。
 		 * - 如果没有分配成功，就降低queue_depth，重新分配。本质上是减
 		 *   少内存诉求量
@@ -3123,6 +3249,9 @@ static int blk_mq_update_queue_map(struct blk_mq_tag_set *set)
 
 		return set->ops->map_queues(set);
 	} else {
+		/*
+		 * nr_maps大于1时必须提供自己的map_queues()函数；
+		 */
 		BUG_ON(set->nr_maps > 1);
 		return blk_mq_map_queues(&set->map[HCTX_TYPE_DEFAULT]);
 	}
@@ -3133,6 +3262,13 @@ static int blk_mq_update_queue_map(struct blk_mq_tag_set *set)
  * May fail with EINVAL for various error conditions. May adjust the
  * requested depth down, if it's too large. In that case, the set
  * value will be stored in set->queue_depth.
+ *
+ * 分配：
+ * - blk_mq_tag_set
+ *   - blk_mq_tag_set.map[i].mq_map
+ * - blk_mq_tags
+ *   - blk_mq_tags->rqs
+ *     - blk_mq_tags->rqs->request
  */
 int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 {
@@ -3185,8 +3321,12 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 
 	/*
  	 * 分配用于硬件队列空间管理的blk_mq_tags指针数组，但是仅仅只分配了指针
- 	 *                 ^^^^^^^^
- 	 * 数组，并没有分配其中指向的元素
+ 	 *                 ^^^^^^^^                                       ^^^^
+ 	 * 数组，并没有分配其中指向的元素;
+ 	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ 	 *
+ 	 * 那么其中的元素在哪里分配呢？
+ 	 * - blk_mq_alloc_rq_maps()
  	 */ 
 	set->tags = kcalloc_node(nr_hw_queues(set), sizeof(struct blk_mq_tags *),
 				 GFP_KERNEL, set->numa_node);

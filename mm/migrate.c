@@ -403,6 +403,9 @@ int migrate_page_move_mapping(struct address_space *mapping,
 	int expected_count = expected_page_refs(mapping, page) + extra_count;
 
 	if (!mapping) {
+	/*
+	 * 对匿名页
+	 */
 		/* Anonymous page without mapping */
 		if (page_count(page) != expected_count)
 			return -EAGAIN;
@@ -415,6 +418,10 @@ int migrate_page_move_mapping(struct address_space *mapping,
 
 		return MIGRATEPAGE_SUCCESS;
 	}
+
+	/*
+	 * 对文件页
+	 */
 
 	oldzone = page_zone(page);
 	newzone = page_zone(newpage);
@@ -938,8 +945,14 @@ static int move_to_new_page(struct page *newpage, struct page *page,
 
 	if (likely(is_lru)) {
 		if (!mapping)
+		/*
+		 * 匿名页
+		 */
 			rc = migrate_page(mapping, newpage, page, mode);
 		else if (mapping->a_ops->migratepage)
+		/*
+		 * 文件页
+		 */
 			/*
 			 * Most pages have a mapping and most filesystems
 			 * provide a migratepage callback. Anonymous pages
@@ -950,6 +963,9 @@ static int move_to_new_page(struct page *newpage, struct page *page,
 			rc = mapping->a_ops->migratepage(mapping, newpage,
 							page, mode);
 		else
+		/*
+		 * 文件页且没有自定义migrate_page()方法
+		 */
 			rc = fallback_migrate_page(mapping, newpage,
 							page, mode);
 	} else {
@@ -1007,6 +1023,11 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 	int rc = -EAGAIN;
 	int page_was_mapped = 0;
 	struct anon_vma *anon_vma = NULL;
+	/*
+	 * 这里只有两种可能：
+	 * - 是LRU页
+	 * - 不是LRU页，但是__PageMovable()：KSM
+	 */
 	bool is_lru = !__PageMovable(page);
 
 	if (!trylock_page(page)) {
@@ -1032,6 +1053,9 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 		lock_page(page);
 	}
 
+	/*
+	 * 如果页正在回写
+	 */
 	if (PageWriteback(page)) {
 		/*
 		 * Only in the case of a full synchronous migration is it
@@ -1080,10 +1104,17 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 	if (unlikely(!trylock_page(newpage)))
 		goto out_unlock;
 
+	/*
+	 * 非LRU页
+	 */
 	if (unlikely(!is_lru)) {
 		rc = move_to_new_page(newpage, page, mode);
 		goto out_unlock_both;
 	}
+
+	/*
+	 * 后面都是LRU页了
+	 */
 
 	/*
 	 * Corner case handling:
@@ -1104,6 +1135,9 @@ static int __unmap_and_move(struct page *page, struct page *newpage,
 			goto out_unlock_both;
 		}
 	} else if (page_mapped(page)) {
+	/*
+	 * 如果有页表映射
+	 */
 		/* Establish migration ptes */
 		VM_BUG_ON_PAGE(PageAnon(page) && !PageKsm(page) && !anon_vma,
 				page);
@@ -1170,6 +1204,9 @@ static ICE_noinline int unmap_and_move(new_page_t get_new_page,
 	int rc = MIGRATEPAGE_SUCCESS;
 	struct page *newpage;
 
+	/*
+	 * 如果不支持THP页迁移，且这个页就是个巨型页，那么返回失败；
+	 */
 	if (!thp_migration_supported() && PageTransHuge(page))
 		return -ENOMEM;
 
@@ -1326,6 +1363,9 @@ static int unmap_and_move_huge_page(new_page_t get_new_page,
 		goto out_unlock;
 	}
 
+	/*
+	 * 对于匿名页，获取其anno_vma
+	 */
 	if (PageAnon(hpage))
 		anon_vma = page_get_anon_vma(hpage);
 
@@ -1385,6 +1425,7 @@ out:
  * @put_new_page:	The function used to free target pages if migration
  *			fails, or NULL if no special handling is necessary.
  * @private:		Private data to be passed on to get_new_page()
+ * 			put_new_page()的data参数也是private
  * @mode:		The migration mode that specifies the constraints for
  *			page migration, if any.
  * @reason:		The reason for page migration.
@@ -1400,6 +1441,10 @@ int migrate_pages(struct list_head *from, new_page_t get_new_page,
 		free_page_t put_new_page, unsigned long private,
 		enum migrate_mode mode, int reason)
 {
+	/*
+	 * get_new_page == compaction_alloc: 在cc->freepages中取page
+	 * put_new_page == compaction_free: 把page放回cc->freepages中
+	 */
 	int retry = 1;
 	int nr_failed = 0;
 	int nr_succeeded = 0;
@@ -1419,6 +1464,10 @@ int migrate_pages(struct list_head *from, new_page_t get_new_page,
 retry:
 			cond_resched();
 
+			/*
+			 * PageHuge()只检查page是不是hugetlbfs中的页
+			 * - 参见PageHuge()和PageTransHuge()的注释；
+			 */
 			if (PageHuge(page))
 				rc = unmap_and_move_huge_page(get_new_page,
 						put_new_page, private, page,

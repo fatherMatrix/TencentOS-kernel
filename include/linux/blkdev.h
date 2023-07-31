@@ -145,9 +145,15 @@ struct request {
 	unsigned int __data_len;	/* total data len */
 	sector_t __sector;		/* sector cursor */
 
+	/*
+	 * 包含的bio链表（原生的+合并的）
+	 */
 	struct bio *bio;
 	struct bio *biotail;
 
+	/*
+	 * 作为链表元素，将本request挂到软件队列上的blk_mq_ctx->rq_lists[type]
+	 */
 	struct list_head queuelist;
 
 	/*
@@ -416,13 +422,15 @@ struct request_queue {
 	/*
 	 * 这个字段是从blk_mq_tag_set中复制过来的，
 	 * 复制动作在blk_mq_init_allocated_queue中，所以这里是const
+	 *
+	 * 这个应该是驱动程序设置的；
 	 */
 	const struct blk_mq_ops	*mq_ops;
 
 	/* 
  	 * sw queues
 	 *
-	 * per-cpu的软件队列
+	 * per-cpu的软件队列，参见blk_mq_alloc_ctxs()
 	 */
 	struct blk_mq_ctx __percpu	*queue_ctx;
 	unsigned int		nr_queues;
@@ -432,6 +440,8 @@ struct request_queue {
 	/* hw dispatch queues
 	 *
 	 * 硬件队列数组，现代硬件都有多个硬件队列
+	 * - 下标是什么？
+	 *   + 每个硬件队列的编号
 	 */
 	struct blk_mq_hw_ctx	**queue_hw_ctx;
 	unsigned int		nr_hw_queues;
@@ -494,6 +504,8 @@ struct request_queue {
 
 	/*
 	 * queue settings
+	 *
+	 * 来源于blk_mq_tag_set->queue_depth
 	 */
 	unsigned long		nr_requests;	/* Max # of requests */
 
@@ -561,6 +573,8 @@ struct request_queue {
 #endif
 	/*
 	 * for flush operations
+	 *
+	 * 用于flush和fua操作
 	 */
 	struct blk_flush_queue	*fq;
 
@@ -599,6 +613,9 @@ struct request_queue {
 
 	/*
 	 * blk_mq_tag_set是多队列的总领数据结构，包含了所有相关的信息
+	 * - 这里的tag_set本身是由blk_mq_alloc_tag_set()提前分配设置好，然后在
+	 *   blk_mq_init_queue() -> blk_mq_init_allocated_queue()中将分配好的
+	 *   blk_mq_tag_set赋值给request_queue->tag_set；
 	 */ 
 	struct blk_mq_tag_set	*tag_set;
 	/*

@@ -2131,6 +2131,9 @@ static void __wakeup_flusher_threads_bdi(struct backing_dev_info *bdi,
 	if (!bdi_has_dirty_io(bdi))
 		return;
 
+	/*
+	 * backing_dev_info->wb是做什么的？
+	 */
 	list_for_each_entry_rcu(wb, &bdi->wb_list, bdi_node)
 		wb_start_writeback(wb, reason);
 }

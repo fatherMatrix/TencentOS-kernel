@@ -231,7 +231,7 @@ struct backing_dev_info {
 	atomic_long_t tot_write_bandwidth;
 
 	/*
-	 * 封装了内核线程和要回写的inode链表
+	 * 封装了工作队列和要回写的inode链表
 	 */
 	struct bdi_writeback wb;  /* the root writeback info for this bdi */
 	/*
@@ -252,6 +252,10 @@ struct backing_dev_info {
 	char dev_name[64];
 	struct device *owner;
 
+	/*
+	 * 定时器，到期后唤醒backing_dev_info->wb_list链表上的bdi_writeback中的
+	 * 工作队列；
+	 */
 	struct timer_list laptop_mode_wb_timer;
 
 #ifdef CONFIG_DEBUG_FS

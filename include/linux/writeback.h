@@ -272,7 +272,13 @@ static inline void wbc_attach_fdatawrite_inode(struct writeback_control *wbc,
 					       struct inode *inode)
 {
 	spin_lock(&inode->i_lock);
+	/*
+	 * 往inode->i_wb原子地设置一个bdi_writeback；
+	 */
 	inode_attach_wb(inode, NULL);
+	/*
+	 * 将inode关联到wbc
+	 */
 	wbc_attach_and_unlock_inode(wbc, inode);
 }
 

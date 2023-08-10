@@ -213,11 +213,17 @@ static inline bool xa_is_err(const void *entry)
  *
  * Context: Any context.
  * Return: A negative errno or 0.
+ *
+ * 如果有错误，返回提取出的errno；
+ * 如果没有错误，返回0；
  */
 static inline int xa_err(void *entry)
 {
 	/* xa_to_internal() would not do sign extension. */
 	if (xa_is_err(entry))
+		/*
+		 * 这里指定了long（有符号数），所以移位时最左端补的是1；
+		 */
 		return (long)entry >> 2;
 	return 0;
 }
@@ -290,9 +296,20 @@ enum xa_lock_type {
  * to an @xa_node.
  */
 struct xarray {
+	/*
+	 * 用于互斥写者
+	 */
 	spinlock_t	xa_lock;
 /* private: The rest of the data structure is not to be used directly. */
+	/*
+	 * 内存分配标志
+	 */
 	gfp_t		xa_flags;
+	/*
+	 * xa_node
+	 * - 该指针本身的低2位永远为0，所以可以用低两位做一些标志位，用于在本字
+	 *   段中encode一些错误信息；
+	 */
 	void __rcu *	xa_head;
 };
 
@@ -1070,6 +1087,9 @@ static inline void xa_release(struct xarray *xa, unsigned long index)
  * doubled the number of slots per node, we'd get only 3 nodes per 4kB page.
  */
 #ifndef XA_CHUNK_SHIFT
+/*
+ * 腾讯公有云环境中，这里是6
+ */
 #define XA_CHUNK_SHIFT		(CONFIG_BASE_SMALL ? 4 : 6)
 #endif
 #define XA_CHUNK_SIZE		(1UL << XA_CHUNK_SHIFT)
@@ -1085,17 +1105,46 @@ static inline void xa_release(struct xarray *xa, unsigned long index)
  * either a value entry or a sibling of a value entry.
  */
 struct xa_node {
+	/*
+	 * 用于表示每个槽中剩余的位数？
+	 * - 它确定了index的位置，即用于计算在当前节点的槽位中的偏移量
+	 *
+	 * 具体地：
+	 * - 当shift为0时，说明当前xa_node的slots数组中成员为叶子节点
+	 * - 当shift为6时，说明当前xa_node的slots数组中成员指向的xa_node可以最
+	 *   多包含2^6(即64）个节点
+	 */
 	unsigned char	shift;		/* Bits remaining in each slot */
+	/*
+	 * 用于表示当前节点在父节点中的槽位偏移；
+	 * - 通过偏移量，可以在父节点的槽位中定位到当前节点；
+	 */
 	unsigned char	offset;		/* Slot offset in parent */
+	/*
+	 * slot数组中非NULL元素的数量
+	 * - 包含了所有类型，即多少个slot已经被使用；
+	 */
 	unsigned char	count;		/* Total entry count */
+	/*
+	 * 记录了当前节点中存储的值类型(value entry)的条目的数量
+	 */
 	unsigned char	nr_values;	/* Value entry count */
+	/*
+	 * 父节点
+	 */
 	struct xa_node __rcu *parent;	/* NULL at top of tree */
+	/*
+	 * 所属xarray
+	 */
 	struct xarray	*array;		/* The array we belong to */
 	union {
 		struct list_head private_list;	/* For tree user */
 		struct rcu_head	rcu_head;	/* Used when freeing node */
 	};
 	void __rcu	*slots[XA_CHUNK_SIZE];
+	/*
+	 * 辅助tag，用于做一些快速的过滤
+	 */
 	union {
 		unsigned long	tags[XA_MAX_MARKS][XA_MARK_LONGS];
 		unsigned long	marks[XA_MAX_MARKS][XA_MARK_LONGS];

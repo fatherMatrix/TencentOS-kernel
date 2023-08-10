@@ -832,7 +832,15 @@ static bool invalid_page_referenced_vma(struct vm_area_struct *vma, void *arg)
  * @vm_flags: collect encountered vma->vm_flags who actually referenced the page
  *
  * Quick test_and_clear_referenced for all mappings to a page,
+ *       ^^^^^^^^^^^^^^^^^^^^^^^^^
  * returns the number of ptes which referenced the page.
+ *
+ * 通过rmap遍历所有相关的进程，确定page是否被referenced；
+ *                                           ^^^^^^^^^^
+ *                                硬件ACCESSED标志位？x86上是的！
+ *
+ * 检查后会清除pte中的ACCESSED硬件标志位，其实是将pte中的ACCESSED标志位转移到
+ * page结构体里了；
  */
 int page_referenced(struct page *page,
 		    int is_locked,
@@ -1831,6 +1839,9 @@ static void rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
 
 	pgoff_start = page_to_pgoff(page);
 	pgoff_end = pgoff_start + hpage_nr_pages(page) - 1;
+	/*
+	 * 遍历anon_vma上挂的所有anon_vma_chain
+	 */
 	anon_vma_interval_tree_foreach(avc, &anon_vma->rb_root,
 			pgoff_start, pgoff_end) {
 		struct vm_area_struct *vma = avc->vma;
@@ -1842,7 +1853,8 @@ static void rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
 			continue;
 
 		/*
-		 * try_to_unmap_one()
+		 * 对于unmap操作：try_to_unmap_one()
+		 * 对于page_referenced操作：page_referenced_one()
 		 */
 		if (!rwc->rmap_one(page, vma, address, rwc->arg))
 			break;

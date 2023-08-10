@@ -2187,6 +2187,10 @@ int write_cache_pages(struct address_space *mapping,
 	else
 		tag = PAGECACHE_TAG_DIRTY;
 	if (wbc->sync_mode == WB_SYNC_ALL || wbc->tagged_writepages)
+		/*
+		 * 设置所有带DIRTY标志的page为TOWRITE标志
+		 * - 这个标志不是给page结构体设置，而是给xa_node设置；
+		 */
 		tag_pages_for_writeback(mapping, index, end);
 	done_index = index;
 	while (!done && (index <= end)) {
@@ -2340,6 +2344,12 @@ int do_writepages(struct address_space *mapping, struct writeback_control *wbc)
 	if (wbc->nr_to_write <= 0)
 		return 0;
 	while (1) {
+		/*
+		 * 对xfs，mapping->a_ops == xfs_address_space_operations；
+		 * 对nvm上的xfs，mapping->a_ops == xfs_dax_aops;
+		 *
+		 * 对xfs，writepages == xfs_vm_writepages()
+		 */
 		if (mapping->a_ops->writepages)
 			ret = mapping->a_ops->writepages(mapping, wbc);
 		else

@@ -112,6 +112,9 @@ enum {
  *		+-------+-------+-------+-------+-------+-------+------+-------+
  * Inner:	| key 1 | key 2 | key 3 | key N | ptr 1 | ptr 2 | ptr3 | ptr N |
  *		+-------+-------+-------+-------+-------+-------+------+-------+
+ *              key1是ptr1中最小的一个key；
+ *
+ * xfs_iext_node是b+树的中间节点；
  */
 struct xfs_iext_node {
 	uint64_t		keys[KEYS_PER_NODE];
@@ -119,6 +122,10 @@ struct xfs_iext_node {
 	void			*ptrs[KEYS_PER_NODE];
 };
 
+/*
+ * xfs_iext_leaf是b+树的叶子结点；
+ * - 既然有指针，那肯定是内存数据结构
+ */
 struct xfs_iext_leaf {
 	struct xfs_iext_rec	recs[RECS_PER_LEAF];
 	struct xfs_iext_leaf	*prev;
@@ -309,9 +316,15 @@ xfs_iext_find_level(
 	struct xfs_iext_node	*node = ifp->if_u1.if_root;
 	int			height, i;
 
+	/*
+	 * 没有数据
+	 */
 	if (!ifp->if_height)
 		return NULL;
 
+	/*
+	 * 遍历b+树，找到包含offset的叶子结点
+	 */
 	for (height = ifp->if_height; height > level; height--) {
 		for (i = 1; i < KEYS_PER_NODE; i++)
 			if (xfs_iext_key_cmp(node, i, offset) > 0)
@@ -911,7 +924,7 @@ xfs_iext_remove(
  * expanded extent structure in *gotp, and the extent cursor in *cur.
  * If there is no extent covering bno, but there is an extent after it (e.g.
  * it lies in a hole) return that extent in *gotp and its cursor in *cur
- * instead.
+ * instead. 这种情况也返回true；
  * If bno is beyond the last extent return false, and return an invalid
  * cursor value.
  */
@@ -925,6 +938,10 @@ xfs_iext_lookup_extent(
 {
 	XFS_STATS_INC(ip->i_mount, xs_look_exlist);
 
+	/*
+	 * 从b+树里找到包含offset的叶子结点；
+	 * - ifp是xfs_inode->i_df，标识b+树根
+	 */
 	cur->leaf = xfs_iext_find_level(ifp, offset, 1);
 	if (!cur->leaf) {
 		cur->pos = 0;
@@ -932,10 +949,17 @@ xfs_iext_lookup_extent(
 	}
 
 	for (cur->pos = 0; cur->pos < xfs_iext_max_recs(ifp); cur->pos++) {
+		/*
+		 * 取出cur->leaf指向的叶子结点中的下标为cur->pos的记录
+		 */
 		struct xfs_iext_rec *rec = cur_rec(cur);
 
 		if (xfs_iext_rec_is_empty(rec))
 			break;
+		/*
+		 * 这里找到的可能是the extent after it，参见
+		 * xfs_iext_lookup_extent()关于hole的注释；
+		 */
 		if (xfs_iext_rec_cmp(rec, offset) >= 0)
 			goto found;
 	}
@@ -948,6 +972,9 @@ xfs_iext_lookup_extent(
 	if (!xfs_iext_valid(ifp, cur))
 		return false;
 found:
+	/*
+	 * 将xfs_iext_rec中的内容翻译到xfs_bmbt_irec中；
+	 */
 	xfs_iext_get(gotp, cur_rec(cur));
 	return true;
 }

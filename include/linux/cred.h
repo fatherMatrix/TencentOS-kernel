@@ -170,6 +170,16 @@ struct cred {
 	 * 文件的capability存储于文件的拓展属性中，参见:
 	 * cap_bprm_set_creds
 	 *   get_file_caps
+	 *
+	 * 文件的capability有3类：
+	 * - permitted:   当文件执行时，这个集合的内容会被添加到进程的permitted
+	 *                集合中；对应公式中的"fP"
+	 * - inheritable: 当文件执行后，这个集合会与进程的Inheritable集合做位与
+	 *                操作(&)，以确定进程在执行execve函数后哪些capabilites
+	 *                可以被继承；对应公式中的"fI"
+	 * - effective:   这不是一个集合，而是一个位(bit)，如果此bit设为1，则
+	 *                permitted集合中新增的capabilites会在执行execve函数后添
+	 *                加到进程的effective集合中；对应公式中的"fE"
 	 */
 	kernel_cap_t	cap_inheritable; /* caps our children can inherit */
 	kernel_cap_t	cap_permitted;	/* caps we're permitted */

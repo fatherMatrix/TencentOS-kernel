@@ -18,11 +18,17 @@ wait_queue_head_t *bit_waitqueue(void *word, int bit)
 }
 EXPORT_SYMBOL(bit_waitqueue);
 
+/*
+ * __wake_up_common()中会使用一个key作为参数arg来调用wait_queue_entry_t->func();
+ */
 int wake_bit_function(struct wait_queue_entry *wq_entry, unsigned mode, int sync, void *arg)
 {
 	struct wait_bit_key *key = arg;
 	struct wait_bit_queue_entry *wait_bit = container_of(wq_entry, struct wait_bit_queue_entry, wq_entry);
 
+	/*
+	 * key不匹配的话就返回，不执行唤醒；
+	 */
 	if (wait_bit->key.flags != key->flags ||
 			wait_bit->key.bit_nr != key->bit_nr ||
 			test_bit(key->bit_nr, key->flags))

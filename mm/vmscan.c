@@ -1291,6 +1291,9 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 			}
 		}
 
+		/*
+		 * 检查page是否应该设置到活跃列表上
+		 */
 		if (!ignore_references)
 			references = page_check_references(page, sc);
 

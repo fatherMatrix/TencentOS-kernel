@@ -21,11 +21,21 @@ struct bio_vec {
 	unsigned int	bv_offset;
 };
 
+/*
+ * 这个结构用来追踪一个bio_vec数组到磁盘的映射关系；
+ * - bio_vec数组在磁盘上应该是连续的？
+ */
 struct bvec_iter {
+	/*
+	 * 下标为bi_idx的bio_vec结构体应该写到哪个扇区
+	 */
 	sector_t		bi_sector;	/* device address in 512 byte
 						   sectors */
 	unsigned int		bi_size;	/* residual I/O count */
 
+	/*
+	 * 当前的bio_vec下标
+	 */
 	unsigned int		bi_idx;		/* current index into bvl_vec */
 
 	unsigned int            bi_bvec_done;	/* number of bytes completed in

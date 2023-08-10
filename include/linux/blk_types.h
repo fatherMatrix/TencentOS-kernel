@@ -155,6 +155,10 @@ struct bio {
 	blk_status_t		bi_status;
 	u8			bi_partno;
 
+	/*
+	 * 在bio_vec数组上做迭代(bi_iter->bi_idx)，并将对应的磁盘位置保存在
+	 * bi_iter->bi_sector中；
+	 */
 	struct bvec_iter	bi_iter;
 
 	atomic_t		__bi_remaining;

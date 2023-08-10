@@ -27,6 +27,9 @@ struct iomap_dio {
 	const struct iomap_dio_ops *dops;
 	loff_t			i_size;
 	loff_t			size;
+	/*
+	 * 引用计数，干嘛用的？
+	 */
 	atomic_t		ref;
 	unsigned		flags;
 	int			error;
@@ -397,6 +400,8 @@ iomap_dio_actor(struct inode *inode, loff_t pos, loff_t length,
  * iomap_dio_rw() always completes O_[D]SYNC writes regardless of whether the IO
  * is being issued as AIO or not.  This allows us to optimise pure data writes
  * to use REQ_FUA rather than requiring generic_write_sync() to issue a
+ *        ^^^^^^^
+ *   forced unit access
  * REQ_FLUSH post write. This is slightly tricky because a single request here
  * can be mapped into multiple disjoint IOs and only a subset of the IOs issued
  * may be pure data writes. In that case, we still need to do a full data sync
@@ -412,6 +417,9 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	loff_t pos = iocb->ki_pos, start = pos;
 	loff_t end = iocb->ki_pos + count - 1, ret = 0;
 	unsigned int flags = IOMAP_DIRECT;
+	/*
+	 * 同步还是异步？
+	 */
 	bool wait_for_completion = is_sync_kiocb(iocb);
 	struct blk_plug plug;
 	struct iomap_dio *dio;
@@ -428,7 +436,13 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	dio->iocb = iocb;
 	atomic_set(&dio->ref, 1);
 	dio->size = 0;
+	/*
+	 * i_size_read()中使用顺序锁保护inode->i_size，但又有啥用呢？
+	 */
 	dio->i_size = i_size_read(inode);
+	/*
+	 * 对xfs，dops是xfs_dio_write_ops；
+	 */
 	dio->dops = dops;
 	dio->error = 0;
 	dio->flags = 0;
@@ -442,6 +456,9 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		if (pos >= dio->i_size)
 			goto out_free_dio;
 
+		/*
+		 * iovec/kvec/bio_vec有什么不同呢？
+		 */
 		if (iter_is_iovec(iter) && iov_iter_rw(iter) == READ)
 			dio->flags |= IOMAP_DIO_DIRTY;
 	} else {
@@ -457,12 +474,18 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		 * this IO.  Any non-FUA write that occurs will clear this flag,
 		 * hence we know before completion whether a cache flush is
 		 * necessary.
+		 *
+		 * 对于data sync（对比sync）的操作，使用FUA标志；
 		 */
 		if ((iocb->ki_flags & (IOCB_DSYNC | IOCB_SYNC)) == IOCB_DSYNC)
 			dio->flags |= IOMAP_DIO_WRITE_FUA;
 	}
 
 	if (iocb->ki_flags & IOCB_NOWAIT) {
+		/*
+		 * 查找我们要做dio的范围内有没有page cache；如果有page cache，
+		 * 则退出（因为这里要求NOWAIT）
+		 */
 		if (filemap_range_has_page(mapping, start, end)) {
 			ret = -EAGAIN;
 			goto out_free_dio;
@@ -470,6 +493,11 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		flags |= IOMAP_NOWAIT;
 	}
 
+	/*
+	 * 将dio范围内的page cache先全部写到磁盘上去；
+	 * - 这是dio的逻辑要求；
+	 * - "写后写"应该会在通用块层被优化掉；
+	 */
 	ret = filemap_write_and_wait_range(mapping, start, end);
 	if (ret)
 		goto out_free_dio;

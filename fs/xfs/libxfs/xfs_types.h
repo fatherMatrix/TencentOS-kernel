@@ -161,10 +161,22 @@ typedef enum {
 	XFS_EXT_NORM, XFS_EXT_UNWRITTEN,
 } xfs_exntst_t;
 
+/*
+ * 对应磁盘数据结构xfs_bmbt_rec，表示一个data extent
+ */
 typedef struct xfs_bmbt_irec
 {
+	/*
+	 * 文件内偏移
+	 */
 	xfs_fileoff_t	br_startoff;	/* starting file offset */
+	/*
+	 * 块偏移，是文件内还是文件系统内？
+	 */
 	xfs_fsblock_t	br_startblock;	/* starting block number */
+	/*
+	 * 长度，以块为单位
+	 */
 	xfs_filblks_t	br_blockcount;	/* number of blocks */
 	xfs_exntst_t	br_state;	/* extent state */
 } xfs_bmbt_irec_t;

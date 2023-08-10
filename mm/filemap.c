@@ -416,6 +416,10 @@ int __filemap_fdatawrite_range(struct address_space *mapping, loff_t start,
 	    !mapping_tagged(mapping, PAGECACHE_TAG_DIRTY))
 		return 0;
 
+	/*
+	 * 1. inode与wb关联
+	 * 2. inode与wbc关联
+	 */
 	wbc_attach_fdatawrite_inode(&wbc, mapping->host);
 	ret = do_writepages(mapping, &wbc);
 	wbc_detach_inode(&wbc);

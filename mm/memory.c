@@ -1036,12 +1036,18 @@ again:
 	arch_enter_lazy_mmu_mode();
 	do {
 		pte_t ptent = *pte;
+		/*
+		 * 如果页表项为空，则退出
+		 */
 		if (pte_none(ptent))
 			continue;
 
 		if (need_resched())
 			break;
 
+		/*
+		 * 物理页在内存里
+		 */
 		if (pte_present(ptent)) {
 			struct page *page;
 
@@ -1056,6 +1062,9 @@ again:
 				    details->check_mapping != page_rmapping(page))
 					continue;
 			}
+			/*
+			 * 将pte清零
+			 */
 			ptent = ptep_get_and_clear_full(mm, addr, pte,
 							tlb->fullmm);
 			tlb_remove_tlb_entry(tlb, pte, addr);
@@ -1072,9 +1081,16 @@ again:
 					mark_page_accessed(page);
 			}
 			rss[mm_counter(page)]--;
+			/*
+			 * 取消该页的反向映射
+			 */
 			page_remove_rmap(page, false);
 			if (unlikely(page_mapcount(page) < 0))
 				print_bad_pte(vma, addr, ptent, page);
+			/*
+			 * 将该页记录到mmu_gather结构中，当达到一定数量后批量释
+			 * 放；
+			 */
 			if (unlikely(__tlb_remove_page(tlb, page))) {
 				force_flush = 1;
 				addr += PAGE_SIZE;
@@ -1083,7 +1099,15 @@ again:
 			continue;
 		}
 
+		/*
+		 * 走到这里，说明页表项不为空，且物理页不在内存里，那么该物理页
+		 * 必定为处于交换区的匿名页；因为文件页释放后会写入文件所在的设
+		 * 备，页表项置空；
+		 */
 		entry = pte_to_swp_entry(ptent);
+		/*
+		 * 这部分是device memory相关，不是典型路径
+		 */
 		if (non_swap_entry(entry) && is_device_private_entry(entry)) {
 			struct page *page = device_private_entry_to_page(entry);
 

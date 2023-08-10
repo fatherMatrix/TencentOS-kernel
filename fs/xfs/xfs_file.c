@@ -456,7 +456,9 @@ static const struct iomap_dio_ops xfs_dio_write_ops = {
  *
  * If there are cached pages or we're extending the file, we need IOLOCK_EXCL
  * until we're sure the bytes at the new EOF have been zeroed and/or the cached
+ *                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^        ^^^^^^^^^^
  * pages are flushed out.
+ * ^^^^^^^^^^^^^^^^^^^^^
  *
  * In most cases the direct IO writes will be done holding IOLOCK_SHARED
  * allowing them to be done in parallel with reads and other direct IO writes.
@@ -486,10 +488,17 @@ xfs_file_dio_aio_write(
 	int			unaligned_io = 0;
 	int			iolock;
 	size_t			count = iov_iter_count(from);
+	/*
+	 * 保存磁盘的一些信息
+	 */
 	struct xfs_buftarg      *target = XFS_IS_REALTIME_INODE(ip) ?
 					mp->m_rtdev_targp : mp->m_ddev_targp;
 
 	/* DIO must be aligned to device logical sector size */
+	/*
+	 * directio是要求与硬件上的sector对齐
+	 *                 ^^^^
+	 */
 	if ((iocb->ki_pos | count) & target->bt_logical_sectormask)
 		return -EINVAL;
 
@@ -499,6 +508,10 @@ xfs_file_dio_aio_write(
 	 * extension case here because xfs_file_aio_write_checks() will relock
 	 * the inode as necessary for EOF zeroing cases and fill out the new
 	 * inode size as appropriate.
+	 *
+	 * 根据write的类型决定加锁的类型
+	 * - 这里的不对齐并不是指硬件上的不对齐；
+	 *   + 参见xfs_buftarg->bt_logical_sectormask
 	 */
 	if ((iocb->ki_pos & mp->m_blockmask) ||
 	    ((iocb->ki_pos + count) & mp->m_blockmask)) {
@@ -517,6 +530,9 @@ xfs_file_dio_aio_write(
 		iolock = XFS_IOLOCK_SHARED;
 	}
 
+	/*
+	 * 根据上面决定的加锁类型，做加锁动作
+	 */
 	if (iocb->ki_flags & IOCB_NOWAIT) {
 		/* unaligned dio always waits, bail */
 		if (unaligned_io)
@@ -527,9 +543,15 @@ xfs_file_dio_aio_write(
 		xfs_ilock(ip, iolock);
 	}
 
+	/*
+	 * 写入前的检查
+	 */
 	ret = xfs_file_aio_write_checks(iocb, from, &iolock);
 	if (ret)
 		goto out;
+	/*
+	 * 获取要写的字节数
+	 */
 	count = iov_iter_count(from);
 
 	/*
@@ -538,8 +560,15 @@ xfs_file_dio_aio_write(
 	 * other IO to drain before we submit. If the IO is aligned, demote the
 	 * iolock if we had to take the exclusive lock in
 	 * xfs_file_aio_write_checks() for other reasons.
+	 *
+	 * 所以对于已经对齐的directio，xfs可以用shared lock的方式加锁；
 	 */
 	if (unaligned_io) {
+		/*
+		 * 等待其他directio退出；
+		 * - 这一刻没有能说明什么呢？
+		 *   + 上面执行了xfs_ilock()，所以这里是有互斥的；
+		 */
 		inode_dio_wait(inode);
 	} else if (iolock == XFS_IOLOCK_EXCL) {
 		xfs_ilock_demote(ip, XFS_IOLOCK_EXCL);
@@ -631,6 +660,9 @@ xfs_file_buffered_aio_write(
 
 write_retry:
 	iolock = XFS_IOLOCK_EXCL;
+	/*
+	 * 锁的是vfs inode中的i_rwsem
+	 */
 	xfs_ilock(ip, iolock);
 
 	ret = xfs_file_aio_write_checks(iocb, from, &iolock);
@@ -638,6 +670,9 @@ write_retry:
 		goto out;
 
 	/* We can write back this queue in page reclaim */
+	/*
+	 * 在本函数结束之前，会将current->backing_dev_info重新置空
+	 */
 	current->backing_dev_info = inode_to_bdi(inode);
 
 	trace_xfs_file_buffered_write(ip, iov_iter_count(from), iocb->ki_pos);
@@ -699,6 +734,9 @@ xfs_file_write_iter(
 	struct inode		*inode = mapping->host;
 	struct xfs_inode	*ip = XFS_I(inode);
 	ssize_t			ret;
+	/*
+	 * iov_iter中包含的字节总数
+	 */
 	size_t			ocount = iov_iter_count(from);
 
 	XFS_STATS_INC(ip->i_mount, xs_write_calls);
@@ -706,12 +744,21 @@ xfs_file_write_iter(
 	if (ocount == 0)
 		return 0;
 
+	/*
+	 * 参见XFS_MOUNT_FS_SHUTDOWN
+	 */
 	if (XFS_FORCED_SHUTDOWN(ip->i_mount))
 		return -EIO;
 
+	/*
+	 * 对应持久内存中的DAX Enabled Filesystem那条数据通路
+	 */
 	if (IS_DAX(inode))
 		return xfs_file_dax_write(iocb, from);
 
+	/*
+	 * 对应direct io
+	 */
 	if (iocb->ki_flags & IOCB_DIRECT) {
 		/*
 		 * Allow a directio write to fall back to a buffered
@@ -724,6 +771,9 @@ xfs_file_write_iter(
 			return ret;
 	}
 
+	/*
+	 * 对应普通page cache路径
+	 */
 	return xfs_file_buffered_aio_write(iocb, from);
 }
 

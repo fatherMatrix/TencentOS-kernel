@@ -3224,7 +3224,13 @@ void exit_mmap(struct mm_struct *mm)
 	tlb_gather_mmu(&tlb, mm, 0, -1);
 	/* update_hiwater_rss(mm) here? but nobody should be looking */
 	/* Use -1 here to ensure all VMAs in the mm are unmapped */
+	/*
+	 * 处理mm_struct中包含的所有vma
+	 */
 	unmap_vmas(&tlb, vma, 0, -1);
+	/*
+	 * 释放页表(除pgd，pgd在后面随mm_struct一起释放）
+	 */
 	free_pgtables(&tlb, vma, FIRST_USER_ADDRESS, USER_PGTABLES_CEILING);
 	tlb_finish_mmu(&tlb, 0, -1);
 

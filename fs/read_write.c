@@ -472,11 +472,17 @@ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 static ssize_t new_sync_write(struct file *filp, const char __user *buf, size_t len, loff_t *ppos)
 {
 	struct iovec iov = { .iov_base = (void __user *)buf, .iov_len = len };
+	/*
+	 * 栈上参数
+	 */
 	struct kiocb kiocb;
 	struct iov_iter iter;
 	ssize_t ret;
 
-	/* struct kiocb保存了设备侧的位置信息，struct iov_iter保存了内存侧的位置信息 */
+	/* 
+	 * struct kiocb保存了设备侧的位置信息
+	 * struct iov_iter保存了内存侧的位置信息
+	 */
 	init_sync_kiocb(&kiocb, filp);
 	/* 保存要写入的数据在文件中的偏移 */
 	kiocb.ki_pos = (ppos ? *ppos : 0);
@@ -495,15 +501,18 @@ static ssize_t __vfs_write(struct file *file, const char __user *p,
 {
 	if (file->f_op->write)
 		/* 
- 		 * 如果是ext4文件系统，则f_op = &ext4_file_operations，且
+ 		 * 如果是ext4文件系统，则f_op = &ext4_file_operations，且：
  		 * 	.write = NULL; .write_iter = ext4_file_write_iter
-		 * 即ext4文件系统没有走这个分支，而是走了下面的new_sync_write
+		 * 如果是xfs文件系统，则f_op = &xfs_file_operations，且：
+		 * 	.write = NULL; .wirte_iter = xfs_file_write_iter
+		 *
+		 * 即ext4/xfs文件系统没有走这个分支，而是走了下面的new_sync_write
 		 * 分支。
- 		 */ 
+		 */
 		return file->f_op->write(file, p, count, pos);
 	else if (file->f_op->write_iter)
 		/*
-		 * ext4文件系统走了这个分支
+		 * ext4/xfs文件系统走了这个分支
 		 */
 		return new_sync_write(file, p, count, pos);
 	else

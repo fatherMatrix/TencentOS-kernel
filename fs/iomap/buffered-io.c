@@ -816,10 +816,16 @@ again:
 	return written ? written : status;
 }
 
+/*
+ * 对xfs，参数ops是xfs_iomap_ops
+ */
 ssize_t
 iomap_file_buffered_write(struct kiocb *iocb, struct iov_iter *iter,
 		const struct iomap_ops *ops)
 {
+	/*
+	 * 获取宿主host
+	 */
 	struct inode *inode = iocb->ki_filp->f_mapping->host;
 	loff_t pos = iocb->ki_pos, ret = 0, written = 0;
 

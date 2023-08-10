@@ -5040,6 +5040,9 @@ static inline void free_the_page(struct page *page, unsigned int order)
 		__free_pages_ok(page, order);
 }
 
+/*
+ * memblock中的页是通过buddy system的内存释放接口将内存过渡给buddy system的
+ */
 void __free_pages(struct page *page, unsigned int order)
 {
 	if (put_page_testzero(page))

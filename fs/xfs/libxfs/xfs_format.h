@@ -1627,7 +1627,13 @@ struct xfs_btree_block {
 	__be16		bb_level;	/* 0 is a leaf */
 	__be16		bb_numrecs;	/* current # of data records */
 	union {
+		/*
+		 * 短b+树节点header
+		 */
 		struct xfs_btree_block_shdr s;
+		/*
+		 * 长b+树节点header
+		 */
 		struct xfs_btree_block_lhdr l;
 	} bb_u;				/* rest */
 };

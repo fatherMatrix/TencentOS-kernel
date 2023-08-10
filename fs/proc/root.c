@@ -230,6 +230,9 @@ void __init proc_root_init(void)
 #endif
 	proc_tty_init();
 	proc_mkdir("bus", NULL);
+	/*
+	 * 创建/proc/sys/文件夹
+	 */
 	proc_sys_init();
 
 	register_filesystem(&proc_fs_type);

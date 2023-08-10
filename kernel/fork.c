@@ -1106,6 +1106,9 @@ static inline void __mmput(struct mm_struct *mm)
 	exit_aio(mm);
 	ksm_exit(mm);
 	khugepaged_exit(mm); /* must run before exit_mmap */
+	/*
+	 *
+	 */
 	exit_mmap(mm);
 	mm_put_huge_zero_page(mm);
 	set_mm_exe_file(mm, NULL);
@@ -1116,6 +1119,9 @@ static inline void __mmput(struct mm_struct *mm)
 	}
 	if (mm->binfmt)
 		module_put(mm->binfmt->module);
+	/*
+	 * 释放mm_struct和pgd内存映射表
+	 */
 	mmdrop(mm);
 }
 

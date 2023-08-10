@@ -485,6 +485,9 @@ static void exit_mm(void)
 	enter_lazy_tlb(mm, current);
 	task_unlock(current);
 	mm_update_next_owner(mm);
+	/*
+	 * 内部会触发内存释放操作；
+	 */
 	mmput(mm);
 	if (test_thread_flag(TIF_MEMDIE))
 		exit_oom_victim();
@@ -801,6 +804,10 @@ void __noreturn do_exit(long code)
 	tsk->exit_code = code;
 	taskstats_exit(tsk, group_dead);
 
+	/*
+	 * 释放内存，mm_struct中主要是用户态内存，这里已经是内核态了，所以可以
+	 * 放心释放；
+	 */
 	exit_mm();
 
 	if (group_dead)
@@ -866,6 +873,13 @@ void __noreturn do_exit(long code)
 	exit_tasks_rcu_finish();
 
 	lockdep_free_task(tsk);
+	/*
+	 * 设置进程状态为TASK_DEAD，然后schedule出去；
+	 * - 但要注意，进程退出时是没办法把自己完全清洗干净的（task_struct，内
+	 *   核栈等）；进程退出后首先会变为僵尸进程，等待父进程调用wait()来收尸
+	 *
+	 * 僵尸进程在哪里设置的？
+	 */
 	do_task_dead();
 }
 EXPORT_SYMBOL_GPL(do_exit);

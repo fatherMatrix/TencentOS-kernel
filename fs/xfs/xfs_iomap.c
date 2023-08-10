@@ -532,7 +532,13 @@ xfs_file_iomap_begin_delay(
 {
 	struct xfs_inode	*ip = XFS_I(inode);
 	struct xfs_mount	*mp = ip->i_mount;
+	/*
+	 * 将offset转换为以block为单位的索引
+	 */
 	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
+	/*
+	 * 文件写到最大时，最后一个block的索引
+	 */
 	xfs_fileoff_t		maxbytes_fsb =
 		XFS_B_TO_FSB(mp, mp->m_super->s_maxbytes);
 	xfs_fileoff_t		end_fsb;
@@ -546,6 +552,9 @@ xfs_file_iomap_begin_delay(
 	ASSERT(!XFS_IS_REALTIME_INODE(ip));
 	ASSERT(!xfs_get_extsz_hint(ip));
 
+	/*
+	 * 对inode上锁
+	 */
 	xfs_ilock(ip, XFS_ILOCK_EXCL);
 
 	if (unlikely(XFS_TEST_ERROR(
@@ -572,6 +581,8 @@ xfs_file_iomap_begin_delay(
 	 * always need the data fork map, as we have to return it to the
 	 * iomap code so that the higher level write code can read data in to
 	 * perform read-modify-write cycles for unaligned writes.
+	 *
+	 * xfs_inode->i_df表示data fork的b+树
 	 */
 	eof = !xfs_iext_lookup_extent(ip, &ip->i_df, offset_fsb, &icur, &imap);
 	if (eof)
@@ -935,6 +946,9 @@ xfs_file_iomap_begin(
 	if (XFS_FORCED_SHUTDOWN(mp))
 		return -EIO;
 
+	/*
+	 * 写操作，但非directio和dax
+	 */
 	if ((flags & (IOMAP_WRITE | IOMAP_ZERO)) && !(flags & IOMAP_DIRECT) &&
 			!IS_DAX(inode) && !xfs_get_extsz_hint(ip)) {
 		/* Reserve delalloc blocks for regular writeback. */

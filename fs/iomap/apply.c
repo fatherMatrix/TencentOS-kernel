@@ -37,6 +37,8 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	 * the data into the page cache pages, then we cannot fail otherwise we
 	 * expose transient stale data. If the reserve fails, we can safely
 	 * back out at this point as there is nothing to undo.
+	 *
+	 * 对xfs，对应函数xfs_file_iomap_begin()
 	 */
 	ret = ops->iomap_begin(inode, pos, length, flags, &iomap);
 	if (ret)
@@ -57,6 +59,8 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	 * Now that we have guaranteed that the space allocation will succeed.
 	 * we can do the copy-in page by page without having to worry about
 	 * failures exposing transient data.
+	 *
+	 * xfs中对应iomap_write_actor()
 	 */
 	written = actor(inode, pos, length, data, &iomap);
 

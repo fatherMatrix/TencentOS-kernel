@@ -1646,6 +1646,9 @@ int prepare_binprm(struct linux_binprm *bprm)
 	bprm_fill_uid(bprm);
 
 	/* fill in binprm security blob */
+	/*
+	 * 里面会对file本身附加的capability做处理；
+	 */
 	retval = security_bprm_set_creds(bprm);
 	if (retval)
 		return retval;
@@ -1773,6 +1776,7 @@ static int exec_binprm(struct linux_binprm *bprm)
 
 	/*
 	 * 这里不仅仅是search，还包括了执行；
+	 * - 如果执行了，是不是就不返回了？
 	 */
 	ret = search_binary_handler(bprm);
 	if (ret >= 0) {
@@ -1827,9 +1831,10 @@ static int __do_execve_file(int fd, struct filename *filename,
 		goto out_files;
 
 	/*
-	 * 根据当前进程（execve调用者）的cred，准备一个新的cred给bprm；bprm->cred
-	 * 最终会通过commit_creds()给子进程使用；
-	 * - 参见load_elf_binary() -> install_exec_creds()
+	 * 根据当前进程（execve调用者）的cred，准备一个新的cred给bprm；
+	 * - bprm->cred最终会通过commit_creds()给子进程使用；
+	 *   - 参见load_elf_binary() -> install_exec_creds()
+	 * - bprm->cred中新的权限会在prepare_binprm()中更新；
 	 */
 	retval = prepare_bprm_creds(bprm);
 	if (retval)

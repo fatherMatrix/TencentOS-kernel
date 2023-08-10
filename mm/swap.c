@@ -287,6 +287,9 @@ void activate_page(struct page *page)
 {
 	page = compound_head(page);
 	if (PageLRU(page) && !PageActive(page) && !PageUnevictable(page)) {
+		/*
+		 * 放到per-cpu的active链表上
+		 */
 		struct pagevec *pvec = &get_cpu_var(activate_page_pvecs);
 
 		get_page(page);
@@ -812,6 +815,9 @@ void release_pages(struct page **pages, int nr)
 	if (lruvec)
 		unlock_page_lruvec_irqrestore(lruvec, flags);
 	mem_cgroup_uncharge_list(&pages_to_free);
+	/*
+	 * 前面是把要释放的页累计到page_to_free链表中，在这里进行统一的释放
+	 */
 	free_unref_page_list(&pages_to_free);
 }
 EXPORT_SYMBOL(release_pages);
@@ -911,6 +917,10 @@ static void __pagevec_lru_add_fn(struct page *page, struct lruvec *lruvec)
 	/*
 	 * 如果page可回收
 	 */
+		/*
+		 * 在活动文件页、不活动文件页、活动匿名页、不活动匿名页4个类别
+		 * 中选择page对应的lru类型;
+		 */
 		lru = page_lru(page);
 		update_page_reclaim_stat(lruvec, page_is_file_cache(page),
 					 PageActive(page));

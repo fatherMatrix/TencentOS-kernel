@@ -35,6 +35,10 @@ extern void __init wait_bit_init(void);
 
 int wake_bit_function(struct wait_queue_entry *wq_entry, unsigned mode, int sync, void *key);
 
+/*
+ * __wake_up_common()中会组建一个相同的key字段，作为参数传递给wake_bit_function，
+ * 在其中进行比对用于确定是否要唤醒当前的wait entry
+ */
 #define DEFINE_WAIT_BIT(name, word, bit)					\
 	struct wait_bit_queue_entry name = {					\
 		.key = __WAIT_BIT_KEY_INITIALIZER(word, bit),			\

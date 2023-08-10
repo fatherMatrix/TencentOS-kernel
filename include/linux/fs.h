@@ -327,7 +327,10 @@ struct kiocb {
 	randomized_struct_fields_start
 
 	loff_t			ki_pos;
-	/* kio完成后的回调函数 */
+	/*
+	 * kio完成后的回调函数
+	 * - 如果是同步的kiocb，该字段会置空；
+	 */
 	void (*ki_complete)(struct kiocb *iocb, long ret, long ret2);
 	void			*private;
 	int			ki_flags;
@@ -340,6 +343,9 @@ struct kiocb {
 
 static inline bool is_sync_kiocb(struct kiocb *kiocb)
 {
+	/*
+	 * 如果是同步的，该字段会置空
+	 */
 	return kiocb->ki_complete == NULL;
 }
 
@@ -700,6 +706,9 @@ struct inode {
 
 	umode_t			i_mode;
 	unsigned short		i_opflags;
+	/*
+	 * 这里是全局命名空间，还是某个命名空间?
+	 */
 	kuid_t			i_uid;
 	kgid_t			i_gid;
 	unsigned int		i_flags;
@@ -737,6 +746,10 @@ struct inode {
 	};
 	/* 设备标识符 */
 	dev_t			i_rdev;
+	/*
+	 * inode对应文件的大小，以字节为单位
+	 * - 使用i_size_seqcount顺序锁保护
+	 */
 	loff_t			i_size;
 	struct timespec64	i_atime;
 	struct timespec64	i_mtime;
@@ -748,6 +761,9 @@ struct inode {
 	blkcnt_t		i_blocks;
 
 #ifdef __NEED_I_SIZE_ORDERED
+	/*
+	 * 保护i_size字段的顺序锁
+	 */
 	seqcount_t		i_size_seqcount;
 #endif
 
@@ -805,6 +821,12 @@ struct inode {
 	atomic64_t		i_version;
 	atomic64_t		i_sequence; /* see futex */
 	atomic_t		i_count;
+	/*
+	 * directio开始时，会调用inode_dio_begin()，增加此引用计数；
+	 * inode_dio_wait()会睡眠等待；
+	 * directio结束时，会调用inode_dio_end()，减少此引用计数，如果此引用计数
+	 * 降为0，则唤醒在inode_dio_wait()中睡眠的进程；
+	 */
 	atomic_t		i_dio_count;
 	atomic_t		i_writecount;
 #if defined(CONFIG_IMA) || defined(CONFIG_FILE_LOCKING)
@@ -2066,6 +2088,9 @@ static inline ssize_t call_read_iter(struct file *file, struct kiocb *kio,
 static inline ssize_t call_write_iter(struct file *file, struct kiocb *kio,
 				      struct iov_iter *iter)
 {
+	/*
+	 * xfs: xfs_file_write_iter()
+	 */
 	return file->f_op->write_iter(kio, iter);
 }
 
@@ -2244,6 +2269,9 @@ static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)
 {
 	*kiocb = (struct kiocb) {
 		.ki_filp = filp,
+		/*
+		 * 标志转换
+		 */
 		.ki_flags = iocb_flags(filp),
 		.ki_hint = ki_hint_validate(file_write_hint(filp)),
 		.ki_ioprio = get_current_ioprio(),

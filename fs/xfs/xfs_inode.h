@@ -35,6 +35,9 @@ typedef struct xfs_inode {
 	/* Extent information. */
 	struct xfs_ifork	*i_afp;		/* attribute fork pointer */
 	struct xfs_ifork	*i_cowfp;	/* copy on write extents */
+	/*
+	 * 文件数据的b+树
+	 */
 	struct xfs_ifork	i_df;		/* data fork */
 
 	/* operations vectors */

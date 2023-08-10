@@ -1974,6 +1974,9 @@ static void init_cgroup_housekeeping(struct cgroup *cgrp)
 void init_cgroup_root(struct cgroup_fs_context *ctx)
 {
 	struct cgroup_root *root = ctx->root;
+	/*
+	 * 取出cgroup_root内嵌的cgroup结构体
+	 */
 	struct cgroup *cgrp = &root->cgrp;
 
 	INIT_LIST_HEAD(&root->root_list);

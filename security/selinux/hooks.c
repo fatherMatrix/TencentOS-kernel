@@ -7151,11 +7151,14 @@ void selinux_complete_init(void)
    all processes and objects when they are created. */
 DEFINE_LSM(selinux) = {
 	.name = "selinux",
+	/*
+	 * LSM_FLAG_EXCLUSIVE的作用参见lsm_allowed()
+	 */
 	.flags = LSM_FLAG_LEGACY_MAJOR | LSM_FLAG_EXCLUSIVE,
 	/*
 	 * 这里需要注意，lsm模块初始化的时候有可能会改变这个selinux_enabled。所
-	 * 以在编译内核的时候，要在lsm list中加上selinux或者才能保证这个值不会
-	 * 变成0
+	 * 以在编译内核的时候，要在lsm list(CONFIG_LSM)中加上selinux或者才能保
+	 * 证这个值不会变成0
 	 */
 	.enabled = &selinux_enabled,
 	.blobs = &selinux_blob_sizes,

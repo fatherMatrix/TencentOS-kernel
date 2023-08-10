@@ -580,6 +580,10 @@ static inline int bprm_caps_from_vfs_caps(struct cpu_vfs_cap_data *caps,
 			(new->cap_bset.cap[i] & permitted) |
 			(new->cap_inheritable.cap[i] & inheritable);
 
+		/*
+		 * 这里结合上面看，是要求file cap附加给进程的cap处于进程原本的
+		 * bset之内；
+		 */
 		if (permitted & ~new->cap_permitted.cap[i])
 			/* insufficient to execute correctly */
 			ret = -EPERM;
@@ -680,6 +684,9 @@ static int get_file_caps(struct linux_binprm *bprm, bool *effective, bool *has_f
 	int rc = 0;
 	struct cpu_vfs_cap_data vcaps;
 
+	/*
+	 * 将permitted集合清空？
+	 */
 	cap_clear(bprm->cred->cap_permitted);
 
 	if (!file_caps_enabled)
@@ -711,6 +718,9 @@ static int get_file_caps(struct linux_binprm *bprm, bool *effective, bool *has_f
 		goto out;
 	}
 
+	/*
+	 * 结合fP到pP'
+	 */
 	rc = bprm_caps_from_vfs_caps(&vcaps, bprm, effective, has_fcap);
 
 out:
@@ -860,6 +870,7 @@ int cap_bprm_set_creds(struct linux_binprm *bprm)
 
 	/*
 	 * 文件的能力机制本身也是写在文件的拓展属性中的；
+	 * - 这里面会处理fP ！
 	 */
 	ret = get_file_caps(bprm, &effective, &has_fcap);
 	if (ret < 0)

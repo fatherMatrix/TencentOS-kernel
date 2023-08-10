@@ -654,19 +654,36 @@ static void *xas_create(struct xa_state *xas, bool allow_root)
 		entry = xa_head_locked(xa);
 		slot = &xa->xa_head;
 	} else if (xas_error(xas)) {
+		/*
+		 * 走到这里，说明有错误，返回NULL；
+		 */
 		return NULL;
 	} else if (node) {
+		/*
+		 * 走到这里，说明xarray->xa_node不为NULL，说明已经有第1个节点了
+		 */
 		unsigned int offset = xas->xa_offset;
 
 		shift = node->shift;
 		entry = xa_entry_locked(xa, node, offset);
 		slot = &node->slots[offset];
 	} else {
+		/*
+		 * 走到这里，说明xarray->xa_node为NULL，说明没有第1个节点；
+		 */
 		shift = 0;
 		entry = xa_head_locked(xa);
 		slot = &xa->xa_head;
 	}
 
+	/*
+	 * 叶子节点上，xas->xa_shift都会设置为0；
+	 * 倒数第2层节点的node->shift是XA_CHUNK_SHIFT；
+	 * 倒数第3层节点的node->shift是XA_CHUNK_SHIFT * 2;
+	 *
+	 * 局部变量entry指向的是当前站在的xa_node节点；
+	 * 局部变量slot指向的是要插入元素的地址应该写入的位置的地址；
+	 */
 	while (shift > order) {
 		shift -= XA_CHUNK_SHIFT;
 		if (!entry) {
@@ -1384,6 +1401,10 @@ void *__xa_store(struct xarray *xa, unsigned long index, void *entry, gfp_t gfp)
 	XA_STATE(xas, xa, index);
 	void *curr;
 
+	/*
+	 * xa_store()是个normal interface，不能用来存储advanced数据；
+	 * - advanced数据有多种用途；
+	 */
 	if (WARN_ON_ONCE(xa_is_advanced(entry)))
 		return XA_ERROR(-EINVAL);
 	if (xa_track_free(xa) && !entry)
@@ -1420,6 +1441,9 @@ void *xa_store(struct xarray *xa, unsigned long index, void *entry, gfp_t gfp)
 {
 	void *curr;
 
+	/*
+	 * 写者要用自旋锁互斥
+	 */
 	xa_lock(xa);
 	curr = __xa_store(xa, index, entry, gfp);
 	xa_unlock(xa);

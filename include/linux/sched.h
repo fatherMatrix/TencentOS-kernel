@@ -1092,6 +1092,11 @@ struct task_struct {
 	/* VM state: */
 	struct reclaim_state		*reclaim_state;
 
+	/*
+	 * 在文件系统的write实现中(例如xfs_file_buffered_aio_write)，会在开始写
+	 * 操作之前将current->backing_dev_info字段设置为inode_to_bdi(inode)；在
+	 * write操作返回之前，重新将backing_dev_info置空；
+	 */
 	struct backing_dev_info		*backing_dev_info;
 
 	struct io_context		*io_context;

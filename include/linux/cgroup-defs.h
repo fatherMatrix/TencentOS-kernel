@@ -436,6 +436,10 @@ struct cgroup {
 	/* Private pointers for each registered subsystem */
 	struct cgroup_subsys_state __rcu *subsys[CGROUP_SUBSYS_COUNT];
 
+	/*
+	 * 难道还会有多个cgroup_root吗？
+	 * - 看cgroup_root注释的意思似乎是一个cgroup hierarchy一个cgroup_root；
+	 */
 	struct cgroup_root *root;
 
 	/*

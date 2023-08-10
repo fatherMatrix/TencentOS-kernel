@@ -187,6 +187,9 @@ struct bdi_writeback {
 
 	unsigned long dirty_sleep;	/* last wait */
 
+	/*
+	 * 插入bdi->wb_list，参见该字段注释
+	 */
 	struct list_head bdi_node;	/* anchored at bdi->wb_list */
 
 #ifdef CONFIG_CGROUP_WRITEBACK
@@ -194,7 +197,13 @@ struct bdi_writeback {
 	struct fprop_local_percpu memcg_completions;
 	struct cgroup_subsys_state *memcg_css; /* the associated memcg */
 	struct cgroup_subsys_state *blkcg_css; /* and blkcg */
+	/*
+	 * 接入memcg->cgwb_list
+	 */
 	struct list_head memcg_node;	/* anchored at memcg->cgwb_list */
+	/*
+	 * 接入blkcg->cgwb_list
+	 */
 	struct list_head blkcg_node;	/* anchored at blkcg->cgwb_list */
 
 	union {
@@ -236,6 +245,8 @@ struct backing_dev_info {
 	struct bdi_writeback wb;  /* the root writeback info for this bdi */
 	/*
 	 * 该backing_dev_info对应的bdi_writeback链表，链表元素是bdi_writeback->bdi_node
+	 * - 上面内嵌的wb是bdi的默认wb，这个链表上的wb是blkcg关联的wb；
+	 *   + 参见：wb_get_create() -> cgwb_create()
 	 */
 	struct list_head wb_list; /* list of all wbs */
 #ifdef CONFIG_CGROUP_WRITEBACK

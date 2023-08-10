@@ -1265,6 +1265,13 @@ int vfs_get_super(struct fs_context *fc,
 		BUG();
 	}
 
+	/*
+	 * set_anon_super_fc()的作用是给新建立的super_block设置s_bdev字段，其原
+	 * 理是在一个idr中分配一个即可；
+	 * vfs_get_super()本身就是给内存文件系统使用的接口，如果是真正的磁盘文
+	 * 件系统，则不应使用vfs_get_super()，而是使用get_tree_bdev()，其内部会
+	 * 获取真正的设备号；
+	 */
 	sb = sget_fc(fc, test, set_anon_super_fc);
 	if (IS_ERR(sb))
 		return PTR_ERR(sb);

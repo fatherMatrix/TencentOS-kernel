@@ -267,10 +267,16 @@ void __inode_attach_wb(struct inode *inode, struct page *page)
 	struct backing_dev_info *bdi = inode_to_bdi(inode);
 	struct bdi_writeback *wb = NULL;
 
+	/*
+	 * 如果支持writeback cgroup
+	 */
 	if (inode_cgwb_enabled(inode)) {
 		struct cgroup_subsys_state *memcg_css;
 
 		if (page) {
+			/*
+			 * 获取page对应的memcg_css
+			 */
 			memcg_css = mem_cgroup_css_from_page(page);
 			wb = wb_get_create(bdi, memcg_css, GFP_ATOMIC);
 		} else {
@@ -287,6 +293,8 @@ void __inode_attach_wb(struct inode *inode, struct page *page)
 	/*
 	 * There may be multiple instances of this function racing to
 	 * update the same inode.  Use cmpxchg() to tell the winner.
+	 *
+	 * 只有一个会获胜；
 	 */
 	if (unlikely(cmpxchg(&inode->i_wb, NULL, wb)))
 		wb_put(wb);

@@ -601,6 +601,10 @@ static int cgwb_create(struct backing_dev_info *bdi,
 			list_add_tail_rcu(&wb->bdi_node, &bdi->wb_list);
 			list_add(&wb->memcg_node, memcg_cgwb_list);
 			list_add(&wb->blkcg_node, blkcg_cgwb_list);
+			/*
+			 * 这里可以分析一下下面这三行是不是该提前到list_add()
+			 * 的上面；
+			 */
 			blkcg_cgwb_get(blkcg);
 			css_get(memcg_css);
 			css_get(blkcg_css);

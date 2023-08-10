@@ -1293,6 +1293,10 @@ int security_inode_setxattr(struct dentry *dentry, const char *name,
 	ret = call_int_hook(inode_setxattr, 1, dentry, name, value, size,
 				flags);
 
+	/*
+	 * 返回1说明inode_setxattr链表上没有元素，所以返回了call_int_hook()中指
+	 * 定的返回值1；此时调用cap_inode_setxattr()做通用检查；
+	 */
 	if (ret == 1)
 		ret = cap_inode_setxattr(dentry, name, value, size, flags);
 	if (ret)

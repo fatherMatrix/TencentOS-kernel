@@ -72,6 +72,11 @@ struct buffer_head {
 	struct block_device *b_bdev;
 	bh_end_io_t *b_end_io;		/* I/O completion */
  	void *b_private;		/* reserved for b_end_io */
+	/*
+	 * 头节点是b_page->private->b_assoc_buffers；
+	 * 即buffer_head不与page相连，属于同一个page的所有buffer_head自己链接起
+	 * 来，最前面的buffer_head被page->private指向；
+	 */
 	struct list_head b_assoc_buffers; /* associated with another mapping */
 	struct address_space *b_assoc_map;	/* mapping this buffer is
 						   associated with */

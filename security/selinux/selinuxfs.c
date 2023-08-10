@@ -2073,6 +2073,7 @@ static int __init init_sel_fs(void)
 	 *
 	 * 后面挂载时可能不再需要重新创建mount结构体，直接使用这个全局变量
 	 * selinuxfs_mount即可？怎么做到的？
+	 * - get_tree_single()
 	 */
 	selinux_null.dentry = d_hash_and_lookup(selinux_null.mnt->mnt_root,
 						&null_name);

@@ -39,6 +39,7 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	 * back out at this point as there is nothing to undo.
 	 *
 	 * 对xfs，对应函数xfs_file_iomap_begin()
+	 * - 
 	 */
 	ret = ops->iomap_begin(inode, pos, length, flags, &iomap);
 	if (ret)
@@ -60,7 +61,8 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	 * we can do the copy-in page by page without having to worry about
 	 * failures exposing transient data.
 	 *
-	 * xfs中对应iomap_write_actor()
+	 * xfs中buffer io对应iomap_write_actor()
+	 * xfs中direct io对应iomap_dio_actor()
 	 */
 	written = actor(inode, pos, length, data, &iomap);
 

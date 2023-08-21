@@ -609,7 +609,7 @@ struct socket *sock_alloc(void)
 	struct socket *sock;
 
 	/**
- 	 * 在socket fs中创建inode
+ 	 * 在socket fs中创建socket_alloc，并返回其内嵌的inode字段地址；
  	 */ 
 	inode = new_inode_pseudo(sock_mnt->mnt_sb);
 	if (!inode)
@@ -1530,6 +1530,9 @@ EXPORT_SYMBOL(__sock_create);
 
 int sock_create(int family, int type, int protocol, struct socket **res)
 {
+	/*
+	 * 在进程当前的net_namespace中创建信的socket
+	 */
 	return __sock_create(current->nsproxy->net_ns, family, type, protocol, res, 0);
 }
 EXPORT_SYMBOL(sock_create);
@@ -3118,6 +3121,9 @@ static int __init sock_init(void)
 	err = register_filesystem(&sock_fs_type);
 	if (err)
 		goto out_fs;
+	/*
+	 * 只生成mount结构体，并返回&mount->vfsmount，但不链接到mount tree上；
+	 */
 	sock_mnt = kern_mount(&sock_fs_type);
 	if (IS_ERR(sock_mnt)) {
 		err = PTR_ERR(sock_mnt);

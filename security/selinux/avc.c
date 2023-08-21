@@ -66,6 +66,9 @@ struct avc_xperms_node {
 };
 
 struct avc_cache {
+	/*
+	 * 链表元素是avc_node->list
+	 */
 	struct hlist_head	slots[AVC_CACHE_SLOTS]; /* head for avc_node->list */
 	spinlock_t		slots_lock[AVC_CACHE_SLOTS]; /* lock for writes */
 	atomic_t		lru_hint;	/* LRU hint for reclaim scan */
@@ -1142,13 +1145,31 @@ inline int avc_has_perm_noaudit(struct selinux_state *state,
 
 	rcu_read_lock();
 
+	/*
+	 * 查access vector cache
+	 */
 	node = avc_lookup(state->avc, ssid, tsid, tclass);
 	if (unlikely(!node))
+	/*
+	 * access vector cache miss，重新计算并填充
+	 */
 		node = avc_compute_av(state, ssid, tsid, tclass, avd, &xp_node);
 	else
+	/*
+	 * access vector cache命中
+	 */
 		memcpy(avd, &node->ae.avd, sizeof(*avd));
 
+	/*
+	 * 计算requests中被拒绝的向量
+	 */
 	denied = requested & ~(avd->allowed);
+	/*
+	 * 如果有拒绝的请求，分情况处理：
+	 * - eforcing
+	 * - permissive
+	 * - ...
+	 */
 	if (unlikely(denied))
 		rc = avc_denied(state, ssid, tsid, tclass, requested, 0, 0,
 				flags, avd);

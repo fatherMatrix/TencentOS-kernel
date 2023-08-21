@@ -540,6 +540,10 @@ static ssize_t sel_write_load(struct file *file, const char __user *buf,
 
 	mutex_lock(&fsi->mutex);
 
+	/*
+	 * *_SECURITY宏变量是在flask.h中定义的，该文件是编译时自动生成的；
+	 * SECURITY__*宏变量是在哪里声明的？
+	 */
 	length = avc_has_perm(&selinux_state,
 			      current_sid(), SECINITSID_SECURITY,
 			      SECCLASS_SECURITY, SECURITY__LOAD_POLICY, NULL);

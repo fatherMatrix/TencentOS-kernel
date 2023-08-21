@@ -474,8 +474,12 @@ static ssize_t new_sync_write(struct file *filp, const char __user *buf, size_t 
 	struct iovec iov = { .iov_base = (void __user *)buf, .iov_len = len };
 	/*
 	 * 栈上参数
+	 * 保存磁盘端的位置；
 	 */
 	struct kiocb kiocb;
+	/*
+	 * 保存内存端的位置；
+	 */
 	struct iov_iter iter;
 	ssize_t ret;
 

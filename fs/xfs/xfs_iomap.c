@@ -957,6 +957,10 @@ xfs_file_iomap_begin(
 	}
 
 	/*
+	 * direct io和dax走这里
+	 */
+
+	/*
 	 * Lock the inode in the manner required for the specified operation and
 	 * check for as many conditions that would result in blocking as
 	 * possible. This removes most of the non-blocking checks from the
@@ -969,6 +973,9 @@ xfs_file_iomap_begin(
 	ASSERT(offset <= mp->m_super->s_maxbytes);
 	if (offset > mp->m_super->s_maxbytes - length)
 		length = mp->m_super->s_maxbytes - offset;
+	/*
+	 * 将字节为单位的offset转换成以block为单位
+	 */
 	offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	end_fsb = XFS_B_TO_FSB(mp, offset + length);
 

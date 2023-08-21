@@ -13,6 +13,9 @@
 
 #define HASHTAB_MAX_NODES	0xffffffff
 
+/*
+ * 哈希表中的元素
+ */
 struct hashtab_node {
 	void *key;
 	void *datum;

@@ -1591,6 +1591,9 @@ static void bprm_fill_uid(struct linux_binprm *bprm)
 	if (!mnt_may_suid(bprm->file->f_path.mnt))
 		return;
 
+	/*
+	 * 可以给task_struct设置标志位以强制其不可获取更多权限；
+	 */
 	if (task_no_new_privs(current))
 		return;
 
@@ -1613,6 +1616,11 @@ static void bprm_fill_uid(struct linux_binprm *bprm)
 		 !kgid_has_mapping(bprm->cred->user_ns, gid))
 		return;
 
+	/*
+	 * 处理set-user-id标志：
+	 * - 如果可执行文件有set-user-id标志，那么将inode->uid设置给bprm对应的
+	 *   cred->euid；该cred最后会通过commit_creds()提交给子进程使用；
+	 */
 	if (mode & S_ISUID) {
 		bprm->per_clear |= PER_CLEAR_ON_SETID;
 		bprm->cred->euid = uid;
@@ -1639,6 +1647,9 @@ int prepare_binprm(struct linux_binprm *bprm)
 	 * 这里面会处理set-user-id；
 	 * - 如果有set-user-id标志位，那么从下面出来后bprm->cred->euid就成了对
 	 *   应的user id了；
+	 * - 如果没有set-user-id标志位，那么bprm->cred->euid保持不变；原值来源
+	 *   于prepare_brpm_creds() -> prepare_exec_creds() -> prepare_creds()
+	 *   中的memcpy()，即保持父进程uid；
 	 * 
 	 * bprm->cred最终在那里赋值给task_struct->cred的？
 	 * - load_elf_binary() -> install_exec_creds()
@@ -1648,6 +1659,7 @@ int prepare_binprm(struct linux_binprm *bprm)
 	/* fill in binprm security blob */
 	/*
 	 * 里面会对file本身附加的capability做处理；
+	 * - 核心函数是cap_bprm_set_creds()
 	 */
 	retval = security_bprm_set_creds(bprm);
 	if (retval)

@@ -575,6 +575,8 @@ static inline int bprm_caps_from_vfs_caps(struct cpu_vfs_cap_data *caps,
 		/*
 		 * pP' = (X & fP) | (pI & fI)
 		 * The addition of pA' is handled later.
+		 *
+		 * 注意：这里只是公式(2)的前半部分；
 		 */
 		new->cap_permitted.cap[i] =
 			(new->cap_bset.cap[i] & permitted) |
@@ -686,6 +688,9 @@ static int get_file_caps(struct linux_binprm *bprm, bool *effective, bool *has_f
 
 	/*
 	 * 将permitted集合清空？
+	 * - 是的，pP'和pP没有关系，参见公式(2)；
+	 *   + 那么root的permitted set是如何保留的？
+	 *     x ../handle_privileged_root()
 	 */
 	cap_clear(bprm->cred->cap_permitted);
 
@@ -871,6 +876,7 @@ int cap_bprm_set_creds(struct linux_binprm *bprm)
 	/*
 	 * 文件的能力机制本身也是写在文件的拓展属性中的；
 	 * - 这里面会处理fP ！
+	 * - 这里面会清空permitted set ！
 	 */
 	ret = get_file_caps(bprm, &effective, &has_fcap);
 	if (ret < 0)
@@ -880,6 +886,8 @@ int cap_bprm_set_creds(struct linux_binprm *bprm)
 
 	/*
 	 * root特权是否需要下传，set-user-id就是在这里面处理的；
+	 * - permitted set本来在上面的get_file_caps()中是清空了的；对于root用
+	 *   户，在这里重新加上，使其继续保留permitted特权；
 	 */
 	handle_privileged_root(bprm, has_fcap, &effective, root_uid);
 
@@ -907,6 +915,12 @@ int cap_bprm_set_creds(struct linux_binprm *bprm)
 						   old->cap_permitted);
 	}
 
+	/*
+	 * new->ruid除非调用setuid()函数族，其他情况是保持不变的；
+	 * new->euid是在../bprm_fill_uid()中设置的：
+	 * - 如果没有set-user-id，那么保持不变（current_euid());
+	 * - 如果设置了set-user-id，那么new->euid = inode->i_uid;
+	 */
 	new->suid = new->fsuid = new->euid;
 	new->sgid = new->fsgid = new->egid;
 

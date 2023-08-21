@@ -128,8 +128,6 @@ struct cred {
 	kuid_t		uid;		/* real UID of the task */
 	kgid_t		gid;		/* real GID of the task */
 	/*
-	 * 在exec启动进程之后，它会从effective user id位拷贝信息到自己;
-	 * 
 	 * 对于非root用户，可以在未来使用setuid()来将euid设置成为real uid和suid
 	 * 中的任何一个。但是非root用户是不允许用setuid()把euid设置成为其他值；
 	 * - 这个特性支持了文件的set uid位，比如passwd；当用户态进程执行passwd程
@@ -156,13 +154,22 @@ struct cred {
 	 * 详细关系及解读参见：
 	 * - https://lwn.net/Articles/636533/
 	 * 
-	 * pA' = (file caps or setuid or setgid ? 0 : pA)
-	 * pP' = (X & fP) | (pI & fI) | pA'
-	 * pI' = pI
-	 * pE' = (fE ? pP' : pA')
-	 * X is unchanged (X means bounding set)
+	 * pA' = (file caps or setuid or setgid ? 0 : pA)	(1)
+	 * pP' = (X & fP) | (pI & fI) | pA'			(2)
+	 * pI' = pI						(3)
+	 * pE' = (fE ? pP' : pA')				(4)
+	 * X is unchanged (X means bounding set)		(5)
 	 *
-	 * 关系较为复杂，来龙去脉还是得去看lwn；
+	 * 位置：
+	 * cap_bprm_set_creds
+	 *   get_file_caps
+	 *     清空cred->cap_permitted
+	 *     bprm_caps_from_vfs_caps			(2)-A
+	 *   handle_privileged_root
+	 *     特权用户cred->cap_permitted提权
+	 *   ...					(1)
+	 *   ...					(2)-B
+	 *   ...					(4)
 	 *
 	 * ----------------------------------------------
 	 *

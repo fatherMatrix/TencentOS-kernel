@@ -118,6 +118,10 @@ struct socket {
 
 	unsigned long		flags;
 
+	/*
+	 * socket对应的file结构体
+	 * - socket是通过这个来关联inode的？
+	 */
 	struct file		*file;
 	struct sock		*sk;
 	/* 操作方法, 包括bind，connect，recv_msg, send_msg等 */

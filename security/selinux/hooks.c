@@ -7101,6 +7101,9 @@ static __init int selinux_init(void)
 
 	default_noexec = !(VM_DATA_DEFAULT_FLAGS & VM_EXEC);
 
+	/*
+	 * 高频结构体的slab缓存
+	 */
 	avc_init();
 
 	avtab_cache_init();

@@ -214,10 +214,20 @@ static struct file_system_type proc_fs_type = {
 
 void __init proc_root_init(void)
 {
+	/*
+	 * 创建kmemcache
+	 */
 	proc_init_kmemcache();
 	set_proc_pid_nlink();
+	/*
+	 * 初始化起始ino
+	 */
 	proc_self_init();
 	proc_thread_self_init();
+	/*
+	 * 创建/proc/mounts文件
+	 * - symlink表示是创建了一个软连接
+	 */
 	proc_symlink("mounts", NULL, "self/mounts");
 
 	proc_net_init();

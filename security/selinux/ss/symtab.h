@@ -13,6 +13,13 @@
 #include "hashtab.h"
 
 struct symtab {
+	/*
+	 * 该哈希表中的元素是：
+	 * - common_datum
+	 * - class_datum
+	 * - role_datum
+	 * - ...
+	 */
 	struct hashtab *table;	/* hash table (keyed on a string) */
 	u32 nprim;		/* number of primary names in table */
 };

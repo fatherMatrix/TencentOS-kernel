@@ -92,6 +92,8 @@ struct xfs_ifork;
 /*
  * Superblock - in core version.  Must match the ondisk version below.
  * Must be padded to 64 bit alignment.
+ *
+ * 盘上超级块
  */
 typedef struct xfs_sb {
 	uint32_t	sb_magicnum;	/* magic number == XFS_SB_MAGIC */

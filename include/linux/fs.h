@@ -479,6 +479,10 @@ struct address_space {
 	 */
 	struct rb_root_cached	i_mmap;
 	struct rw_semaphore	i_mmap_rwsem;
+	/*
+	 * address_space中当前存在的页数
+	 * - 对应的保护锁是i_pages lock
+	 */
 	unsigned long		nrpages;
 	unsigned long		nrexceptional;
 	pgoff_t			writeback_index;
@@ -1612,6 +1616,9 @@ struct super_block {
 	struct list_head	s_mounts;	/* list of mounts; _not_ for fs use */
 	/* 指向块设备描述符 */
 	struct block_device	*s_bdev;
+	/*
+	 * 默认的backing_dev_info
+	 */
 	struct backing_dev_info *s_bdi;
 	struct mtd_info		*s_mtd;
 	struct hlist_node	s_instances;
@@ -1622,7 +1629,9 @@ struct super_block {
 	struct sb_writers	s_writers;
 
 	/*
- 	 * 指向属于具体文件系统的超级块信息 
+ 	 * 指向属于具体文件系统的超级块信息：
+ 	 * xfs: xfs_mount
+ 	 *
 	 * Keep s_fs_info, s_time_gran, s_fsnotify_mask, and
 	 * s_fsnotify_marks together for cache efficiency. They are frequently
 	 * accessed and rarely modified.
@@ -2082,6 +2091,9 @@ struct inode_operations {
 static inline ssize_t call_read_iter(struct file *file, struct kiocb *kio,
 				     struct iov_iter *iter)
 {
+	/*
+	 * xfs: xfs_file_read_iter()
+	 */
 	return file->f_op->read_iter(kio, iter);
 }
 

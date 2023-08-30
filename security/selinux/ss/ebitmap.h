@@ -37,7 +37,14 @@ struct ebitmap_node {
 	u32 startbit;
 };
 
+/*
+ * 位图，可以用来表示类别
+ */
 struct ebitmap {
+	/*
+	 * 位图不是一下就分配完所有的位，可能是考虑到有些实体只拥有很少的类别，
+	 * 一下就分配所有的位太浪费内存；比如selinux的类别有1024位；
+	 */
 	struct ebitmap_node *node;	/* first node in the bitmap */
 	u32 highbit;	/* highest position in the total bitmap */
 };

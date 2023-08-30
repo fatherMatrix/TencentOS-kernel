@@ -1017,6 +1017,10 @@ static struct block_device *bd_acquire(struct inode *inode)
 			 */
 			bdgrab(bdev);
 			inode->i_bdev = bdev;
+			/*
+			 * 将devtmpfs中inode的address_space字段设置为bdev fs中
+			 * inode的address_space；
+			 */
 			inode->i_mapping = bdev->bd_inode->i_mapping;
 		}
 		spin_unlock(&bdev_lock);
@@ -1881,6 +1885,10 @@ static int blkdev_open(struct inode * inode, struct file * filp)
 	if (bdev == NULL)
 		return -ENOMEM;
 
+	/*
+	 * 其实在前面bd_acquire()中，inode->i_mapping也被设置成了bdev关联的
+	 * address_space了；
+	 */
 	filp->f_mapping = bdev->bd_inode->i_mapping;
 	filp->f_wb_err = filemap_sample_wb_err(filp->f_mapping);
 

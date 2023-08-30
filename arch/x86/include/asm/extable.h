@@ -14,6 +14,14 @@
  * on our cache or tlb entries.
  */
 
+/*
+ * 这里的insn之所以是int，而不是64位的long，是因为这里保存的是相对偏移。
+ * - 参见ex_to_insn()
+ *
+ * 核心原理是：当发生page fault后，会一路进行到fixup_exception()中，以insn为key
+ * 查找exception_table_entry，查到后调用对应的handler，其中要将regs->ip设置为
+ * fixup指向的地址。这样中断返回后就会从fixup地址开始执行。
+ */
 struct exception_table_entry {
 	int insn, fixup, handler;
 };

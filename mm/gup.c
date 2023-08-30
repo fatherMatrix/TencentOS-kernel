@@ -688,6 +688,9 @@ static int check_vma_flags(struct vm_area_struct *vma, unsigned long gup_flags)
 	int write = (gup_flags & FOLL_WRITE);
 	int foreign = (gup_flags & FOLL_REMOTE);
 
+	/*
+	 * 对于VM_IO或者VM_PFNMAP，无法使用get_user_pages()
+	 */
 	if (vm_flags & (VM_IO | VM_PFNMAP))
 		return -EFAULT;
 

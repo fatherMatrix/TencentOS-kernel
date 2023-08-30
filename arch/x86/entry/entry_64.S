@@ -140,8 +140,9 @@ END(native_usergs_sysret64)
  * When user can change pt_regs->foo always force IRET. That is because
  * it deals with uncanonical addresses better. SYSRET has trouble
  * with them due to bugs in both AMD and Intel CPUs.
+ *
+ * 参见syscall_init()
  */
-
 ENTRY(entry_SYSCALL_64)
 	UNWIND_HINT_EMPTY
 	/*

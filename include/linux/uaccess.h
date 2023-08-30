@@ -150,6 +150,10 @@ _copy_to_user(void __user *, const void *, unsigned long);
  *
  * 待求证问题：
  * 1. copy_from_user是否可以跨PAGE？
+ *
+ * 注意：
+ * copy_from/to_user()中会使用stac/clac清除AC标志位以绕过smap标志位使内核态可以
+ * 访问用户态地址；
  */
 static __always_inline unsigned long __must_check
 copy_from_user(void *to, const void __user *from, unsigned long n)

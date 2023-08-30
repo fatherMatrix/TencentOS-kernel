@@ -62,7 +62,9 @@ struct irq_desc {
 	 *
 	 * 对于级联的中断控制器，父中断控制器上对应irq的handle_irq会使用函数
 	 * irq_set_chained_handler来配置，用于递归调用子中断控制器上对应的电流
-	 * 处理函数
+	 * 处理函数。典型地中断处理函数是：
+	 * - handle_level_irq()
+	 * - handle_edge_irq()
 	 */
 	irq_flow_handler_t	handle_irq;
 #ifdef CONFIG_IRQ_PREFLOW_FASTEOI

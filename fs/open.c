@@ -770,6 +770,12 @@ static int do_dentry_open(struct file *f,
 	 * 这意思是inode肯定不为NULL了？
 	 */
 	f->f_inode = inode;
+	/*
+	 * 这里直接复制inode中的address_space指针；
+	 * - inode->i_mapping有可能指向块设备伪文件系统中的隐藏inode；
+	 * - 好像不是诶，file->f_mapping指向block_device对应的inode的address_space
+	 *   好像是在def_blk_fops -> blkdev_open()中完成的；
+	 */
 	f->f_mapping = inode->i_mapping;
 
 	/* Ensure that we skip any errors that predate opening of the file */

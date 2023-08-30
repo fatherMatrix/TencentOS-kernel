@@ -86,6 +86,9 @@ struct avc_callback_node {
 DEFINE_PER_CPU(struct avc_cache_stats, avc_cache_stats) = { 0 };
 #endif
 
+/*
+ * 本质上是一个哈希表
+ */
 struct selinux_avc {
 	unsigned int avc_cache_threshold;
 	struct avc_cache avc_cache;

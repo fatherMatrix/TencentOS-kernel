@@ -48,14 +48,30 @@ struct proc_dir_entry {
 	proc_write_t write;
 	void *data;
 	unsigned int state_size;
+	/*
+	 * ino，这个low是想表达什么呢？
+	 */
 	unsigned int low_ino;
 	nlink_t nlink;
 	kuid_t uid;
 	kgid_t gid;
+	/*
+	 * 表示文件长度，单位为字节；
+	 * - 但因为procfs中的文件内容都是动态生成的，所以该值通常为0；
+	 */
 	loff_t size;
+	/*
+	 * 构建文件树
+	 * - parent指向父节点
+	 * - subdir作为树根包含所有的孩子
+	 * - subdir_node作为树节点加入parent的subdir
+	 */
 	struct proc_dir_entry *parent;
 	struct rb_root subdir;
 	struct rb_node subdir_node;
+	/*
+	 * 目录的名字
+	 */
 	char *name;
 	umode_t mode;
 	u8 namelen;
@@ -81,15 +97,24 @@ union proc_op {
 	const char *lsm;
 };
 
+/*
+ * 将proc_dir_entry与vfs inode联系起来；
+ */
 struct proc_inode {
 	struct pid *pid;
 	unsigned int fd;
 	union proc_op op;
+	/*
+	 * 指向对应的proc_dir_entry
+	 */
 	struct proc_dir_entry *pde;
 	struct ctl_table_header *sysctl;
 	struct ctl_table *sysctl_entry;
 	struct hlist_node sysctl_inodes;
 	const struct proc_ns_operations *ns_ops;
+	/*
+	 * vfs inode
+	 */
 	struct inode vfs_inode;
 } __randomize_layout;
 

@@ -1426,6 +1426,9 @@ void do_user_addr_fault(struct pt_regs *regs,
 	 * 2. The access did not originate in userspace.
 	 */
 	if (unlikely(!down_read_trylock(&mm->mmap_sem))) {
+		/*
+		 * 查找ex_table
+		 */
 		if (!user_mode(regs) && !search_exception_tables(regs->ip)) {
 			/*
 			 * Fault from code in kernel from

@@ -84,6 +84,9 @@ typedef struct xfs_buftarg {
 	unsigned int		bt_meta_sectorsize;
 	size_t			bt_meta_sectormask;
 	size_t			bt_logical_sectorsize;
+	/*
+	 * 硬件上的扇区mask，典型值是511，即硬件扇区典型值是512；
+	 */
 	size_t			bt_logical_sectormask;
 
 	/* LRU control structures */

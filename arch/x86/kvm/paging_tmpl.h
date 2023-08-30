@@ -137,6 +137,11 @@ static int FNAME(cmpxchg_gpte)(struct kvm_vcpu *vcpu, struct kvm_mmu *mmu,
 	pt_element_t *table;
 	struct page *page;
 
+	/*
+	 * 对VM_IO或者VM_PFNMAP不可以使用get_user_pages()函数，会返回-EFAULT，
+	 * 从而进入else分支；
+	 * - 参见check_vma_flags()
+	 */
 	npages = get_user_pages_fast((unsigned long)ptep_user, 1, FOLL_WRITE, &page);
 	if (likely(npages == 1)) {
 		table = kmap_atomic(page);
@@ -145,6 +150,9 @@ static int FNAME(cmpxchg_gpte)(struct kvm_vcpu *vcpu, struct kvm_mmu *mmu,
 
 		kvm_release_page_dirty(page);
 	} else {
+		/*
+		 * npages不是1，说明肯定是get_user_pages_fast()出错了
+		 */
 		struct vm_area_struct *vma;
 		unsigned long vaddr = (unsigned long)ptep_user & PAGE_MASK;
 		unsigned long pfn;
@@ -152,6 +160,9 @@ static int FNAME(cmpxchg_gpte)(struct kvm_vcpu *vcpu, struct kvm_mmu *mmu,
 
 		down_read(&current->mm->mmap_sem);
 		vma = find_vma_intersection(current->mm, vaddr, vaddr + PAGE_SIZE);
+		/*
+		 * 这里似乎有问题，参见：2a8859f373b0a86f0ece8ec8312607eacf12485d
+		 */
 		if (!vma || !(vma->vm_flags & VM_PFNMAP)) {
 			up_read(&current->mm->mmap_sem);
 			return -EFAULT;

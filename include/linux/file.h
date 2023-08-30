@@ -31,6 +31,9 @@ static inline void fput_light(struct file *file, int fput_needed)
 		fput(file);
 }
 
+/*
+ * 参见__to_fd()
+ */
 struct fd {
 	struct file *file;
 	unsigned int flags;
@@ -55,7 +58,9 @@ extern void __f_unlock_pos(struct file *);
 static inline struct fd __to_fd(unsigned long v)
 {
 	/* 
-	 * v的低3位代表flag，其余高位代表file结构体
+	 * v的低2位代表flag，其余高位代表file结构体
+	 * - fd_install()中是没有给fdt中的file指针添加flags的，这个flags来源于
+	 *   __fdget()中的一系列检查；
 	 */
 	return (struct fd){(struct file *)(v & ~3),v & 3};
 }

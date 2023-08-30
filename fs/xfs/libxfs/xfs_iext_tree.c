@@ -115,6 +115,7 @@ enum {
  *              key1是ptr1中最小的一个key；
  *
  * xfs_iext_node是b+树的中间节点；
+ * - b+树的内部节点，内存数据结构；
  */
 struct xfs_iext_node {
 	uint64_t		keys[KEYS_PER_NODE];
@@ -124,7 +125,7 @@ struct xfs_iext_node {
 
 /*
  * xfs_iext_leaf是b+树的叶子结点；
- * - 既然有指针，那肯定是内存数据结构
+ * - 既然有指针，那肯定是内存数据结构;
  */
 struct xfs_iext_leaf {
 	struct xfs_iext_rec	recs[RECS_PER_LEAF];

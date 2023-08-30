@@ -581,6 +581,9 @@ out_free:
 void wbc_attach_and_unlock_inode(struct writeback_control *wbc,
 				 struct inode *inode)
 {
+	/*
+	 * 如果blkcg没有开启，则释放inode的自旋锁后退出即可
+	 */
 	if (!inode_cgwb_enabled(inode)) {
 		spin_unlock(&inode->i_lock);
 		return;
@@ -596,6 +599,9 @@ void wbc_attach_and_unlock_inode(struct writeback_control *wbc,
 	wbc->wb_lcand_bytes = 0;
 	wbc->wb_tcand_bytes = 0;
 
+	/*
+	 * 对应的引用计数释放操作在哪里？
+	 */
 	wb_get(wbc->wb);
 	spin_unlock(&inode->i_lock);
 

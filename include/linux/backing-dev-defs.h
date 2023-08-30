@@ -240,7 +240,7 @@ struct backing_dev_info {
 	atomic_long_t tot_write_bandwidth;
 
 	/*
-	 * 封装了工作队列和要回写的inode链表
+	 * 封装了工作队列和要回写的inode链表，即工作和工人
 	 */
 	struct bdi_writeback wb;  /* the root writeback info for this bdi */
 	/*

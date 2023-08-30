@@ -561,6 +561,8 @@ retry:
 	 * If we don't have a valid map, now it's time to get a new one for this
 	 * offset.  This will convert delayed allocations (including COW ones)
 	 * into real extents.
+	 *
+	 * imap中保存了找到的目标磁盘位置；
 	 */
 	if (!xfs_iext_lookup_extent(ip, &ip->i_df, offset_fsb, &icur, &imap))
 		imap.br_startoff = end_fsb;	/* fake a hole past EOF */
@@ -884,6 +886,8 @@ xfs_writepage_map(
 	 * Walk through the page to find areas to write back. If we run off the
 	 * end of the current map or find the current map invalid, grab a new
 	 * one.
+	 *
+	 * 一个page有可能要拆分成多个block;
 	 */
 	for (i = 0, file_offset = page_offset(page);
 	     i < (PAGE_SIZE >> inode->i_blkbits) && file_offset < end_offset;
@@ -891,6 +895,10 @@ xfs_writepage_map(
 		if (iop && !test_bit(i, iop->uptodate))
 			continue;
 
+		/*
+		 * 将要写入磁盘的文件file_offset偏移处的内容映射到磁盘上的位置，
+		 * 磁盘上的位置保存在xfs_writepage_ctx->xfs_bmbt_irec中；
+		 */
 		error = xfs_map_blocks(wpc, inode, file_offset);
 		if (error)
 			break;
@@ -952,6 +960,9 @@ xfs_writepage_map(
 		int error2;
 
 		list_del_init(&ioend->io_list);
+		/*
+		 * submit_bio()
+		 */
 		error2 = xfs_submit_ioend(wbc, ioend, error);
 		if (error2 && !error)
 			error = error2;

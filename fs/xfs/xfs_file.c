@@ -576,6 +576,9 @@ xfs_file_dio_aio_write(
 	}
 
 	trace_xfs_file_direct_write(ip, count, iocb->ki_pos);
+	/*
+	 * 关键的读写动作
+	 */
 	ret = iomap_dio_rw(iocb, from, &xfs_iomap_ops, &xfs_dio_write_ops);
 
 	/*
@@ -586,6 +589,9 @@ xfs_file_dio_aio_write(
 	if (ret == -EIOCBQUEUED && unaligned_io)
 		inode_dio_wait(inode);
 out:
+	/*
+	 * 解锁
+	 */
 	xfs_iunlock(ip, iolock);
 
 	/*
@@ -763,7 +769,9 @@ xfs_file_write_iter(
 		/*
 		 * Allow a directio write to fall back to a buffered
 		 * write *only* in the case that we're doing a reflink
+		 *                                             ^^^^^^^
 		 * CoW.  In all other directio scenarios we do not
+		 * ^^^
 		 * allow an operation to fall back to buffered mode.
 		 */
 		ret = xfs_file_dio_aio_write(iocb, from);

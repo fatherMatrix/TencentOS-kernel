@@ -104,7 +104,8 @@ void __init init_IRQ(void)
 	 * vector_irq数组和irq_to_desc树的区别：
 	 * - vector_irq是vector到irq_desc的转换；irq_to_desc树是irq到irq_desc树
 	 *   的转换
-	 * - vector_irq数组中有exception的位置；
+	 * - vector_irq数组中有exception的位置；exception部分在哪里初始化？
+	 * - vector_irq本身是per-cpu的，那么其他cpu的vector_irq在哪里初始化呢？
 	 */
 	for (i = 0; i < nr_legacy_irqs(); i++)
 		per_cpu(vector_irq, 0)[ISA_IRQ_VECTOR(i)] = irq_to_desc(i);

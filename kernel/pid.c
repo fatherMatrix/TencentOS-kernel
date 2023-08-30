@@ -367,6 +367,10 @@ struct task_struct *find_get_task_by_vpid(pid_t nr)
 	rcu_read_lock();
 	task = find_task_by_vpid(nr);
 	if (task)
+		/*
+		 * 如果此时task_struct被干掉了怎么办？
+		 * - 可能需要看一下进程销毁的时候是否用了rcu进行保护
+		 */
 		get_task_struct(task);
 	rcu_read_unlock();
 

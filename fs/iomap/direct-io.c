@@ -411,6 +411,9 @@ ssize_t
 iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		const struct iomap_ops *ops, const struct iomap_dio_ops *dops)
 {
+	/*
+	 * 对于direct io，dops是xfs_dio_write_ops
+	 */
 	struct address_space *mapping = iocb->ki_filp->f_mapping;
 	struct inode *inode = file_inode(iocb->ki_filp);
 	size_t count = iov_iter_count(iter);
@@ -496,7 +499,8 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	/*
 	 * 将dio范围内的page cache先全部写到磁盘上去；
 	 * - 这是dio的逻辑要求；
-	 * - "写后写"应该会在通用块层被优化掉；
+	 * - "写后写"应该会在通用块层被优化掉?
+	 *   + 这里通用块层不会有"写后写"吧，因为要等写完后才会返回；
 	 */
 	ret = filemap_write_and_wait_range(mapping, start, end);
 	if (ret)

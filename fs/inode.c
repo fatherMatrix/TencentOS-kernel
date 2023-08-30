@@ -259,6 +259,9 @@ static struct inode *alloc_inode(struct super_block *sb)
 		 * 的是ext4_inode_info，并指定了部分初始值，返回的是其中的
 		 * vfs inode部分。
 		 *
+		 * 对于sockfs，这里调用的是sock_alloc_inode()，其中分配的结构体
+		 * 是socket_alloc，返回其中内嵌的inode；
+		 *
 		 * 所以，这里结束时我们有了一个ext4_inode_info
 		 */
 		inode = ops->alloc_inode(sb);

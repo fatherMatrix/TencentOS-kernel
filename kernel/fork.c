@@ -1491,11 +1491,17 @@ static int copy_files(unsigned long clone_flags, struct task_struct *tsk)
 	if (!oldf)
 		goto out;
 
+	/*
+	 * 如果设置了CLONE_FILES选项，父子进程共享同一张fdt表；
+	 */
 	if (clone_flags & CLONE_FILES) {
 		atomic_inc(&oldf->count);
 		goto out;
 	}
 
+	/*
+	 * 如果没有设置CLONE_FILES选项，子进程会拷贝一份新的fdt表；
+	 */
 	newf = dup_fd(oldf, &error);
 	if (!newf)
 		goto out;

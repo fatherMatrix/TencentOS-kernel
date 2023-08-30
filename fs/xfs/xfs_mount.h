@@ -127,6 +127,9 @@ typedef struct xfs_mount {
 	uint8_t			m_blkbit_log;	/* blocklog + NBBY */
 	uint8_t			m_blkbb_log;	/* blocklog - BBSHIFT */
 	uint8_t			m_agno_log;	/* log #ag's */
+	/*
+	 * 典型值是4095
+	 */
 	uint			m_blockmask;	/* sb_blocksize-1 */
 	uint			m_blockwsize;	/* sb_blocksize in words */
 	uint			m_blockwmask;	/* blockwsize-1 */
@@ -152,6 +155,9 @@ typedef struct xfs_mount {
 	uint64_t		m_flags;	/* global mount flags */
 	bool			m_finobt_nores; /* no per-AG finobt resv. */
 	uint			m_qflags;	/* quota status flags */
+	/*
+	 * transaction的预留空间数量？
+	 */
 	struct xfs_trans_resv	m_resv;		/* precomputed res values */
 	uint64_t		m_resblks;	/* total reserved blocks */
 	uint64_t		m_resblks_avail;/* available reserved blocks */

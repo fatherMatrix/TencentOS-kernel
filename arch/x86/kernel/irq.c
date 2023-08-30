@@ -239,12 +239,16 @@ __visible unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
 
 	/*
 	 * 这里面会关闭抢占（通过对preempt_count中的HARDIRQ部分加1）
+	 * - 硬件触发中断后，其实已经关中断了，这里再关闭抢占？
 	 */
 	entering_irq();
 
 	/* entering_irq() tells RCU that we're not quiescent.  Check it. */
 	RCU_LOCKDEP_WARN(!rcu_is_watching(), "IRQ failed to wake up RCU");
 
+	/*
+	 * 根据中断向量找到对应的irq_desc结构体
+	 */
 	desc = __this_cpu_read(vector_irq[vector]);
 	if (likely(!IS_ERR_OR_NULL(desc))) {
 		if (IS_ENABLED(CONFIG_X86_32))

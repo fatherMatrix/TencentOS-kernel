@@ -678,6 +678,8 @@ static void context_struct_compute_av(struct policydb *policydb,
 	/*
 	 * Remove any permissions prohibited by a constraint (this includes
 	 * the MLS policy).
+	 *
+	 * MLS策略在这里检查；
 	 */
 	constraint = tclass_datum->constraints;
 	while (constraint) {
@@ -1110,6 +1112,9 @@ void security_compute_av(struct selinux_state *state,
 	policydb = &state->ss->policydb;
 	sidtab = state->ss->sidtab;
 
+	/*
+	 * 在sidtab哈希表中根据sid查找对应的context结构体
+	 */
 	scontext = sidtab_search(sidtab, ssid);
 	if (!scontext) {
 		pr_err("SELinux: %s:  unrecognized SID %d\n",
@@ -1121,6 +1126,9 @@ void security_compute_av(struct selinux_state *state,
 	if (ebitmap_get_bit(&policydb->permissive_map, scontext->type))
 		avd->flags |= AVD_FLAGS_PERMISSIVE;
 
+	/*
+	 * 查找target的context结构体
+	 */
 	tcontext = sidtab_search(sidtab, tsid);
 	if (!tcontext) {
 		pr_err("SELinux: %s:  unrecognized SID %d\n",

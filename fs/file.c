@@ -781,11 +781,23 @@ static unsigned long __fget_light(unsigned int fd, fmode_t mask)
 	struct file *file;
 
 	if (atomic_read(&files->count) == 1) {
+	/*
+	 * 非共享
+	 * - 如果不共享的话，那么只要保证file不为空，即可保证file的合法性，因为
+	 *   当前进程不可能自己跟自己并发，一边去使用这个file，一边去释放这个
+	 *   file。
+	 */
 		file = __fcheck_files(files, fd);
 		if (!file || unlikely(file->f_mode & mask))
 			return 0;
 		return (unsigned long)file;
 	} else {
+	/*
+	 * 共享(CLONE_FILES)
+	 * - 多出来的操作是：
+	 *   - 要保证fd对应的file引用计数不为0；
+	 *   - 要增加file的引用计数；
+	 */
 		file = __fget(fd, mask, 1);
 		if (!file)
 			return 0;

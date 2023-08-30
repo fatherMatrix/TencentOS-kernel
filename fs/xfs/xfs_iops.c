@@ -1151,6 +1151,9 @@ static const struct inode_operations xfs_inode_operations = {
 };
 
 static const struct inode_operations xfs_dir_inode_operations = {
+	/*
+	 * 目录的inode才需要create()和lookup()方法
+	 */
 	.create			= xfs_vn_create,
 	.lookup			= xfs_vn_lookup,
 	.link			= xfs_vn_link,

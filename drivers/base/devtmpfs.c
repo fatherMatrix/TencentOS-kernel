@@ -70,6 +70,7 @@ static struct dentry *public_dev_mount(struct file_system_type *fs_type, int fla
 static struct file_system_type internal_fs_type = {
 	.name = "devtmpfs",
 #ifdef CONFIG_TMPFS
+	/* 公有云上的系统走这里 */
 	.init_fs_context = shmem_init_fs_context,
 	.parameters	= &shmem_fs_parameters,
 #else
@@ -446,6 +447,9 @@ int __init devtmpfs_init(void)
 	}
 	/*
 	 * dev_fs_type中的mount方法仅仅返回上面全局mnt中的sb即可
+	 *
+	 * 其实就是上面已经挂载了internal_fs_type，后面注册一个假的dev_fs_type，
+	 * 每次挂载dev_fs_type时直接返回internal_fs_type挂载时产生的sb即可；
 	 */
 	err = register_filesystem(&dev_fs_type);
 	if (err) {

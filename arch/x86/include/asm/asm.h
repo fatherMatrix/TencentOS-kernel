@@ -119,6 +119,10 @@
 
 /* Exception table entry */
 #ifdef __ASSEMBLY__
+/*
+ * 这里需要注意：
+ * .long表示的是4字节，所以struct exception_table_entry中的数据类型是int
+ */
 # define _ASM_EXTABLE_HANDLE(from, to, handler)			\
 	.pushsection "__ex_table","a" ;				\
 	.balign 4 ;						\

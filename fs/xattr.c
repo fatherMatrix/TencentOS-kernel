@@ -175,6 +175,8 @@ __vfs_setxattr(struct dentry *dentry, struct inode *inode, const char *name,
 		value = "";  /* empty EA, do not remove */
 	/*
 	 * ext4_xattr_handler_map
+	 * xfs_xattr_handlers
+	 * f2fs_xattr_handler_map
 	 */
 	return handler->set(handler, dentry, inode, name, value, size, flags);
 }

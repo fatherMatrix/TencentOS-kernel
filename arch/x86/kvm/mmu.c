@@ -5038,6 +5038,8 @@ static void init_kvm_tdp_mmu(struct kvm_vcpu *vcpu)
 	context->mmu_role.as_u64 = new_role.as_u64;
 	/*
 	 * 用来处理EPT的页访问错误
+	 * - 和handle_ept_violation()/handle_ept_misconfig()啥关系？
+	 *   + handle_ept_violation()最终会调用tdp_page_fault()。
 	 */
 	context->page_fault = tdp_page_fault;
 	context->sync_page = nonpaging_sync_page;
@@ -5171,6 +5173,9 @@ void kvm_init_shadow_ept_mmu(struct kvm_vcpu *vcpu, bool execonly,
 
 	context->nx = true;
 	context->ept_ad = accessed_dirty;
+	/*
+	 * 参见FNAME(page_fault)
+	 */
 	context->page_fault = ept_page_fault;
 	context->gva_to_gpa = ept_gva_to_gpa;
 	context->sync_page = ept_sync_page;
@@ -5580,8 +5585,14 @@ int kvm_mmu_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa, u64 error_code,
 
 	if (r == RET_PF_INVALID) {
 		/*
-		 * page_fault函数指针指向tdp_page_fault()；
+		 * 常规情况下，page_fault函数指针指向tdp_page_fault()；
 		 * - 该函数指针的设置在kvm_init_mmu()
+		 * 嵌套虚拟化情况下，page_fault函数指针指向ept_page_fault()；
+		 * - 该函数指针的设置在prepare_vmcs02()
+		 *                     -> nested_ept_init_mmu_context()
+		 *                       -> kvm_init_shadow_ept_mmu()
+		 *
+		 * ept_page_fault()的定义参见FNAME(page_fult)；
 		 */
 		r = vcpu->arch.mmu->page_fault(vcpu, cr2_or_gpa,
 					       lower_32_bits(error_code),

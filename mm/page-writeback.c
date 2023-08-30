@@ -2196,6 +2196,10 @@ int write_cache_pages(struct address_space *mapping,
 	while (!done && (index <= end)) {
 		int i;
 
+		/*
+		 * 上面给address_space中所有需要回写的xa_node都加上了tag标签，
+		 * 现在只需要找到这些xa_node对应的页直接回写即可；
+		 */
 		nr_pages = pagevec_lookup_range_tag(&pvec, mapping, &index, end,
 				tag);
 		if (nr_pages == 0)
@@ -2206,6 +2210,9 @@ int write_cache_pages(struct address_space *mapping,
 
 			done_index = page->index;
 
+			/*
+			 * 设置PG_locked
+			 */
 			lock_page(page);
 
 			/*
@@ -2227,6 +2234,9 @@ continue_unlock:
 				goto continue_unlock;
 			}
 
+			/*
+			 * 如果已经在回写了
+			 */
 			if (PageWriteback(page)) {
 				if (wbc->sync_mode != WB_SYNC_NONE)
 					wait_on_page_writeback(page);
@@ -2234,11 +2244,20 @@ continue_unlock:
 					goto continue_unlock;
 			}
 
+			/*
+			 * 因为外面已经对该inode加了锁，所以这个inode对应的每个
+			 * page的读写状态都应该是不变的才对。既然上面判定此page
+			 * 没有PG_writeback标志，那么这里肯定也不能有这个标志。
+			 * 一旦这里有了，说明有地方没有加好锁，是个BUG();
+			 */
 			BUG_ON(PageWriteback(page));
 			if (!clear_page_dirty_for_io(page))
 				goto continue_unlock;
 
 			trace_wbc_writepage(wbc, inode_to_bdi(mapping->host));
+			/*
+			 * xfs: xfs_do_writepage
+			 */
 			error = (*writepage)(page, wbc, data);
 			if (unlikely(error)) {
 				/*

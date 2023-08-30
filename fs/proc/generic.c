@@ -463,7 +463,13 @@ struct proc_dir_entry *proc_symlink(const char *name,
 		ent->data = kmalloc((ent->size=strlen(dest))+1, GFP_KERNEL);
 		if (ent->data) {
 			strcpy((char*)ent->data,dest);
+			/*
+			 * file_operations啥时候赋值呢？
+			 */
 			ent->proc_iops = &proc_link_inode_operations;
+			/*
+			 * 插入到parent的红黑树里
+			 */
 			ent = proc_register(parent, ent);
 		} else {
 			pde_free(ent);

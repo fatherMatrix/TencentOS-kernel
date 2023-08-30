@@ -3701,6 +3701,9 @@ static int shmem_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_blocksize = PAGE_SIZE;
 	sb->s_blocksize_bits = PAGE_SHIFT;
 	sb->s_magic = TMPFS_MAGIC;
+	/*
+	 * 设置超级块ops
+	 */
 	sb->s_op = &shmem_ops;
 	sb->s_time_gran = 1;
 #ifdef CONFIG_TMPFS_XATTR

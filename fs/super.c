@@ -1523,7 +1523,8 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 		snprintf(s->s_id, sizeof(s->s_id), "%pg", bdev);
 		sb_set_blocksize(s, block_size(bdev));
 		/*
-		 * fill_super指的是ext4_fill_super
+		 * ext4: ext4_fill_super
+		 * xfs: xfs_fs_fill_super
 		 */
 		error = fill_super(s, data, flags & SB_SILENT ? 1 : 0);
 		if (error) {

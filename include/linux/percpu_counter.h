@@ -50,6 +50,10 @@ static inline int percpu_counter_compare(struct percpu_counter *fbc, s64 rhs)
 	return __percpu_counter_compare(fbc, rhs, percpu_counter_batch);
 }
 
+/*
+ * 这个是定义了CONFIG_SMP的实现
+ * - 在smp下，要使用per-cpu计数，批量移动到counter中；
+ */
 static inline void percpu_counter_add(struct percpu_counter *fbc, s64 amount)
 {
 	percpu_counter_add_batch(fbc, amount, percpu_counter_batch);
@@ -129,6 +133,10 @@ __percpu_counter_compare(struct percpu_counter *fbc, s64 rhs, s32 batch)
 	return percpu_counter_compare(fbc, rhs);
 }
 
+/*
+ * 这个是未定义CONFIG_SMP的实现
+ * - 既然不是SMP的，那么直接增加count即可；
+ */
 static inline void
 percpu_counter_add(struct percpu_counter *fbc, s64 amount)
 {
@@ -137,6 +145,11 @@ percpu_counter_add(struct percpu_counter *fbc, s64 amount)
 	preempt_enable();
 }
 
+/*
+ * 未定义CONFIG_SMP实现的话，直接调用上面的关抢占方式；
+ * - 因为percpu_counter_add()和percpu_counter_add_batch()两个函数都会被外部调用，
+ *   所以才分别声明出来。
+ */
 static inline void
 percpu_counter_add_batch(struct percpu_counter *fbc, s64 amount, s32 batch)
 {

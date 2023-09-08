@@ -12,8 +12,17 @@ struct xfs_mount;
  * structure for maintaining pre-calculated transaction reservations.
  */
 struct xfs_trans_res {
+	/*
+	 * 字节数量
+	 */
 	uint	tr_logres;	/* log space unit in bytes per log ticket */
+	/*
+	 * log operations数量
+	 */
 	int	tr_logcount;	/* number of log operations per log ticket */
+	/*
+	 * 标志位
+	 */
 	int	tr_logflags;	/* log flags, currently only used for indicating
 				 * a reservation request is permanent or not */
 };

@@ -325,6 +325,7 @@ xfs_iext_find_level(
 
 	/*
 	 * 遍历b+树，找到包含offset的叶子结点
+	 * - b+树一定在内存吗？
 	 */
 	for (height = ifp->if_height; height > level; height--) {
 		for (i = 1; i < KEYS_PER_NODE; i++)
@@ -928,6 +929,8 @@ xfs_iext_remove(
  * instead. 这种情况也返回true；
  * If bno is beyond the last extent return false, and return an invalid
  * cursor value.
+ *
+ * 这里似乎假设b+树都在内存里，怎么保证呢？
  */
 bool
 xfs_iext_lookup_extent(

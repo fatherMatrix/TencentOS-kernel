@@ -85,6 +85,10 @@ void percpu_counter_add_batch(struct percpu_counter *fbc, s64 amount, s32 batch)
 
 	preempt_disable();
 	count = __this_cpu_read(*fbc->counters) + amount;
+	/*
+	 * 如果当前cpu的计数器没有超过batch，则放到per-cpu的计数器中；
+	 * 如果超过了，则加锁，更新全局计数变量；
+	 */
 	if (count >= batch || count <= -batch) {
 		unsigned long flags;
 		raw_spin_lock_irqsave(&fbc->lock, flags);
@@ -198,11 +202,16 @@ static int percpu_counter_cpu_dead(unsigned int cpu)
 /*
  * Compare counter against given value.
  * Return 1 if greater, 0 if equal and -1 if less
+ *
+ * 定义了CONFIG_SMP时的实现；
  */
 int __percpu_counter_compare(struct percpu_counter *fbc, s64 rhs, s32 batch)
 {
 	s64	count;
 
+	/*
+	 * 这里只是读全局的counter字段；
+	 */
 	count = percpu_counter_read(fbc);
 	/* Check to see if rough count will be sufficient for comparison */
 	if (abs(count - rhs) > (batch * num_online_cpus())) {

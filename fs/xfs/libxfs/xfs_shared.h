@@ -174,6 +174,10 @@ struct xfs_ino_geometry {
 	/* stripe unit inode alignment */
 	unsigned int	ialloc_align;
 
+	/*
+	 * ino中的高位表示agno
+	 * - 也就是说每个AG中的inode数量固定？
+	 */
 	unsigned int	agino_log;	/* #bits for agino in inum */
 };
 

@@ -791,6 +791,9 @@ xfs_add_to_ioend(
 	if (iop && !same_page)
 		atomic_inc(&iop->write_count);
 
+	/*
+	 * 不能合并
+	 */
 	if (!merged) {
 		if (bio_full(wpc->ioend->io_bio, len))
 			wpc->ioend->io_bio = xfs_chain_bio(wpc->ioend->io_bio);
@@ -1034,9 +1037,20 @@ xfs_do_writepage(
 	 * |     desired writeback range    |      see else    |
 	 * ---------------------------------^------------------|
 	 */
+	/*
+	 * 以字节为单位的文件长度
+	 */
 	offset = i_size_read(inode);
+	/*
+	 * 以page为单位的文件末尾index
+	 */
 	end_index = offset >> PAGE_SHIFT;
 	if (page->index < end_index)
+	/*
+	 * 如果page处于文件内：
+	 * - end_offset又变回了字节为单位；
+	 * - 表示本page要写入的字节偏移末尾+1；
+	 */
 		end_offset = (xfs_off_t)(page->index + 1) << PAGE_SHIFT;
 	else {
 		/*
@@ -1068,6 +1082,8 @@ xfs_do_writepage(
 		 * will hang.  Instead, we can verify this situation by checking
 		 * if the page to write is totally beyond the i_size or if it's
 		 * offset is just equal to the EOF.
+		 *
+		 * page完全在文件末尾之后
 		 */
 		if (page->index > end_index ||
 		    (page->index == end_index && offset_into_page == 0))
@@ -1117,9 +1133,21 @@ xfs_vm_writepages(
 	struct xfs_writepage_ctx wpc = { };
 	int			ret;
 
+	/*
+	 * 这个标志位是干嘛的？
+	 */
 	xfs_iflags_clear(XFS_I(mapping->host), XFS_ITRUNCATED);
+	/*
+	 * 这里面会调用submit_bio()
+	 */
 	ret = write_cache_pages(mapping, wbc, xfs_do_writepage, &wpc);
 	if (wpc.ioend)
+		/*
+		 * 这里面也会调用submit_bio()，用来提交最后一个wpc.ioend。
+		 * - write_cache_pages()中每生成一个新的ioend，都会将前一个ioend
+		 *   调用submit_bio()，最后会剩下一个最新的ioend，这个ioend在这
+		 *   里处理。
+		 */
 		ret = xfs_submit_ioend(wbc, wpc.ioend, ret);
 	return ret;
 }

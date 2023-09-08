@@ -97,16 +97,34 @@ struct xfs_ifork;
  */
 typedef struct xfs_sb {
 	uint32_t	sb_magicnum;	/* magic number == XFS_SB_MAGIC */
+	/*
+	 * crash验证为4096
+	 */
 	uint32_t	sb_blocksize;	/* logical block size, bytes */
+	/*
+	 * data和metadata可以使用的全部block数量
+	 */
 	xfs_rfsblock_t	sb_dblocks;	/* number of data blocks */
 	xfs_rfsblock_t	sb_rblocks;	/* number of realtime blocks */
 	xfs_rtblock_t	sb_rextents;	/* number of realtime extents */
 	uuid_t		sb_uuid;	/* user-visible file system unique id */
+	/*
+	 * 如果日志在本设备内部，则表示日志的起始块号；
+	 * 如果日志在分离的设备，则为0；
+	 */
 	xfs_fsblock_t	sb_logstart;	/* starting block of log if internal */
+	/*
+	 * root inode位于AG 0中的第一个可能的inode chunk中；
+	 * - 当sb_blocksize为4KB时，sb_rootino为128；
+	 */
 	xfs_ino_t	sb_rootino;	/* root inode number */
 	xfs_ino_t	sb_rbmino;	/* bitmap inode for realtime extents */
 	xfs_ino_t	sb_rsumino;	/* summary inode for rt bitmap */
 	xfs_agblock_t	sb_rextsize;	/* realtime extent size, blocks */
+	/*
+	 * AG的大小，单位是block
+	 * - 前面的AG都是定长的，最后一个AG的长度由agf_length确定；
+	 */
 	xfs_agblock_t	sb_agblocks;	/* size of an allocation group */
 	xfs_agnumber_t	sb_agcount;	/* number of allocation groups */
 	xfs_extlen_t	sb_rbmblocks;	/* number of rt bitmap blocks */

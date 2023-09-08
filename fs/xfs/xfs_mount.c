@@ -1219,10 +1219,16 @@ xfs_mod_fdblocks(
 	long long		res_used;
 	s32			batch;
 
+	/*
+	 * delta大于0，说明是退还block
+	 * - 但是感觉这里只是在计数，没有相关位置的信息？
+	 */
 	if (delta > 0) {
 		/*
 		 * If the reserve pool is depleted, put blocks back into it
 		 * first. Most of the time the pool is full.
+		 *
+		 * 这里对应的情况是reserve pool是满的；
 		 */
 		if (likely(mp->m_resblks == mp->m_resblks_avail)) {
 			percpu_counter_add(&mp->m_fdblocks, delta);
@@ -1233,15 +1239,29 @@ xfs_mod_fdblocks(
 		res_used = (long long)(mp->m_resblks - mp->m_resblks_avail);
 
 		if (res_used > delta) {
+		/*
+		 * used大于delta，说明归还delta个block是放得下的，直接增加计数即可；
+		 */
 			mp->m_resblks_avail += delta;
 		} else {
+		/*
+		 * used小于delta，说明要归还的delta个block是放不下的，只归还可以
+		 * 放进保留区的block数量到保留区。其余的释放到m_fdblocks中；
+		 */
 			delta -= res_used;
+			/*
+			 * 直接把reserve pool给干满
+			 */
 			mp->m_resblks_avail = mp->m_resblks;
 			percpu_counter_add(&mp->m_fdblocks, delta);
 		}
 		spin_unlock(&mp->m_sb_lock);
 		return 0;
 	}
+
+	/*
+	 * delta小于0，说明是请求block
+	 */
 
 	/*
 	 * Taking blocks away, need to be more accurate the closer we
@@ -1265,14 +1285,27 @@ xfs_mod_fdblocks(
 	}
 
 	/*
+	 * 到这里说明m_fdblocks空间不够
+	 * - 后面要研究是不是可以使用保留空间；
+	 */
+
+	/*
 	 * lock up the sb for dipping into reserves before releasing the space
 	 * that took us to ENOSPC.
 	 */
 	spin_lock(&mp->m_sb_lock);
+	/*
+	 * 到这里，delta肯定是负的，且上面已经得到结论，m_fdblocks中空间不够。
+	 * 此时我们考虑使用m_resblks_avail空间，这里以-delta作为参数调用
+	 * percpu_counter_add()目的是归还上面获取的m_fdblocks空间。
+	 */
 	percpu_counter_add(&mp->m_fdblocks, -delta);
 	if (!rsvd)
 		goto fdblocks_enospc;
 
+	/*
+	 * 使用m_resblks_avail空间
+	 */
 	lcounter = (long long)mp->m_resblks_avail + delta;
 	if (lcounter >= 0) {
 		mp->m_resblks_avail = lcounter;

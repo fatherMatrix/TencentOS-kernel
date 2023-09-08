@@ -74,6 +74,9 @@ typedef struct xfs_mount {
 	uint8_t			m_rt_checked;
 	uint8_t			m_rt_sick;
 
+	/*
+	 * 为什么没有m_cil？
+	 */
 	struct xfs_ail		*m_ail;		/* fs active log item list */
 
 	struct xfs_sb		m_sb;		/* copy of fs superblock */
@@ -105,6 +108,9 @@ typedef struct xfs_mount {
 	struct xfs_da_geometry	*m_dir_geo;	/* directory block geometry */
 	struct xfs_da_geometry	*m_attr_geo;	/* attribute block geometry */
 	struct xlog		*m_log;		/* log specific stuff */
+	/*
+	 * inode结构地图
+	 */
 	struct xfs_ino_geometry	m_ino_geo;	/* inode geometry */
 	int			m_logbufs;	/* number of log buffers */
 	int			m_logbsize;	/* size of each log buffer */

@@ -176,6 +176,9 @@ void do_invalidatepage(struct page *page, unsigned int offset,
 static void
 truncate_cleanup_page(struct address_space *mapping, struct page *page)
 {
+	/*
+	 * 如果被映射到用户空间了，则unmap掉
+	 */
 	if (page_mapped(page)) {
 		pgoff_t nr = PageTransHuge(page) ? HPAGE_PMD_NR : 1;
 		unmap_mapping_pages(mapping, page->index, nr, false);
@@ -326,6 +329,10 @@ void truncate_inode_pages_range(struct address_space *mapping,
 
 	pagevec_init(&pvec);
 	index = start;
+	/*
+	 * pagevec_lookup_entries()遍历mapping中的每个page，对其增加引用计数，
+	 * 并将找到的page放到pvec中，将对应的index放到indices中。
+	 */
 	while (index < end && pagevec_lookup_entries(&pvec, mapping, index,
 			min(end - index, (pgoff_t)PAGEVEC_SIZE),
 			indices)) {
@@ -336,6 +343,10 @@ void truncate_inode_pages_range(struct address_space *mapping,
 		 */
 		struct pagevec locked_pvec;
 
+		/*
+		 * 这个循环中将从mapping中遍历到的page指针放到加锁后放到
+		 * locked_pvec中；
+		 */
 		pagevec_init(&locked_pvec);
 		for (i = 0; i < pagevec_count(&pvec); i++) {
 			struct page *page = pvec.pages[i];
@@ -351,18 +362,30 @@ void truncate_inode_pages_range(struct address_space *mapping,
 			if (!trylock_page(page))
 				continue;
 			WARN_ON(page_to_index(page) != index);
+			/*
+			 * 如果该page正在回写中，则放弃
+			 */
 			if (PageWriteback(page)) {
 				unlock_page(page);
 				continue;
 			}
+			/*
+			 * 什么情况会这样呢？
+			 */
 			if (page->mapping != mapping) {
 				unlock_page(page);
 				continue;
 			}
 			pagevec_add(&locked_pvec, page);
 		}
+		/*
+		 * locked_pvec中已经是加了锁的page了，对齐进行操作；
+		 */
 		for (i = 0; i < pagevec_count(&locked_pvec); i++)
 			truncate_cleanup_page(mapping, locked_pvec.pages[i]);
+		/*
+		 * 释放mapping中的page
+		 */
 		delete_from_page_cache_batch(mapping, &locked_pvec);
 		for (i = 0; i < pagevec_count(&locked_pvec); i++)
 			unlock_page(locked_pvec.pages[i]);
@@ -473,6 +496,9 @@ EXPORT_SYMBOL(truncate_inode_pages_range);
  */
 void truncate_inode_pages(struct address_space *mapping, loff_t lstart)
 {
+	/*
+	 * 回写
+	 */
 	truncate_inode_pages_range(mapping, lstart, (loff_t)-1);
 }
 EXPORT_SYMBOL(truncate_inode_pages);

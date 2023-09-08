@@ -268,6 +268,7 @@ static struct inode *alloc_inode(struct super_block *sb)
 	else
 		/*
 		 * kernfs没有定义此方法，所以是直接分配一个内存中的inode
+		 * xfs也没有定义此方法。
 		 */
 		inode = kmem_cache_alloc(inode_cachep, GFP_KERNEL);
 
@@ -617,6 +618,7 @@ static void evict(struct inode *inode)
 	 * the inode.  We just have to wait for running writeback to finish.
 	 *
 	 * 既然决定要删除了？还在这里等他写完，是不是没有什么意义？
+	 * - 这里是释放内存中的inode，不是在磁盘上删除
 	 */
 	inode_wait_for_writeback(inode);
 
@@ -1663,6 +1665,9 @@ static void iput_final(struct inode *inode)
 		return;
 	}
 
+	/*
+	 * 如果不需要drop，则进行回写
+	 */
 	if (!drop) {
 		inode->i_state |= I_WILL_FREE;
 		spin_unlock(&inode->i_lock);
@@ -1675,7 +1680,14 @@ static void iput_final(struct inode *inode)
 		inode->i_state &= ~I_WILL_FREE;
 	}
 
+	/*
+	 * 上面把inode回写完了，这里要释放掉inode了，在持有inode->i_lock的前提
+	 * 下置位I_FREEING。
+	 */
 	inode->i_state |= I_FREEING;
+	/*
+	 * 将inode从lru链表上取下来
+	 */
 	if (!list_empty(&inode->i_lru))
 		inode_lru_list_del(inode);
 	spin_unlock(&inode->i_lock);
@@ -1700,19 +1712,22 @@ void iput(struct inode *inode)
 retry:
 	/*
 	 * 只有当inode->i_count减为0时，才会进入if内部
+	 * - 里面会获取inode->i_lock
 	 */
 	if (atomic_dec_and_lock(&inode->i_count, &inode->i_lock)) {
 		/*
 		 * 只有当inode->i_nlink不为0时，即没有被删除，需要刷回磁盘时进
-		 * 入下面的if
+		 * 入下面的if。
+		 * - 如果文件都要被删除了，也就没有必要将inode回写了
 		 */
 		if (inode->i_nlink && (inode->i_state & I_DIRTY_TIME)) {
 			atomic_inc(&inode->i_count);
 			spin_unlock(&inode->i_lock);
 			trace_writeback_lazytime_iput(inode);
 			/*
-			 * 调用了ext4_dirty_inode()，生成了jbd2日志，唤醒了对应
-			 * 的回写线程
+			 * - ext4: 调用了ext4_dirty_inode()，生成了jbd2日志，唤
+			 *   醒了对应的回写线程
+			 * - xfs: xfs_fs_dirty_inode()
 			 */
 			mark_inode_dirty_sync(inode);
 			goto retry;

@@ -169,6 +169,9 @@ xfs_parseargs(
 	/*
 	 * set up the mount name first so all the errors will refer to the
 	 * correct device.
+	 *
+	 * sb->s_id保存bdev的指针字符串？
+	 * - 参见mount_bdev()
 	 */
 	mp->m_fsname = kstrndup(sb->s_id, MAXNAMELEN, GFP_KERNEL);
 	if (!mp->m_fsname)
@@ -1586,12 +1589,17 @@ xfs_fs_fill_super(
 	/*
 	 * allocate mp and do all low-level struct initializations before we
 	 * attach it to the super
+	 *
+	 * 分配xfs_mount结构体
 	 */
 	mp = xfs_mount_alloc(sb);
 	if (!mp)
 		goto out;
 	sb->s_fs_info = mp;
 
+	/*
+	 * 解析mount参数
+	 */
 	error = xfs_parseargs(mp, (char *)data);
 	if (error)
 		goto out_free_fsname;

@@ -539,6 +539,10 @@ struct block_device {
 	 * 用于分区指向整个磁盘？
 	 */
 	struct block_device *	bd_contains;
+	/*
+	 * 最初来源于i_blocksize(inode)；
+	 * - 详见bdget()
+	 */
 	unsigned		bd_block_size;
 	/*
 	 * 分区号？
@@ -752,7 +756,8 @@ struct inode {
 	dev_t			i_rdev;
 	/*
 	 * inode对应文件的大小，以字节为单位
-	 * - 使用i_size_seqcount顺序锁保护
+	 * - 32位cpu上应使用i_size_seqcount顺序锁保护
+	 * - 64位cpu上本身读写64位数据本身就是原子的
 	 */
 	loff_t			i_size;
 	struct timespec64	i_atime;
@@ -820,6 +825,9 @@ struct inode {
 		 * 这些dentry是硬链接吗？
 		 */
 		struct hlist_head	i_dentry;
+		/*
+		 * 参见destroy_inode()，用于延迟释放本inode
+		 */
 		struct rcu_head		i_rcu;
 	};
 	atomic64_t		i_version;
@@ -979,6 +987,9 @@ void unlock_two_nondirectories(struct inode *, struct inode*);
  * the read or for example on x86 they can be still implemented as a
  * cmpxchg8b without the need of the lock prefix). For SMP compiles
  * and 64bit archs it makes no difference if preempt is enabled or not.
+ *
+ * 之所以要区分32位和64位，是因为这个字段本身是64位的数据，32位cpu上对64位数据
+ * 的读写不是原子的；
  */
 static inline loff_t i_size_read(const struct inode *inode)
 {
@@ -1713,6 +1724,7 @@ struct super_block {
 	struct list_lru		s_dentry_lru;
 	/*
 	 * i_count == 0且干净的inode链表
+	 * - iput_final()后的inode会通过inode_add_lru()添加到这里；
 	 */
 	struct list_lru		s_inode_lru;
 	struct rcu_head		rcu;
@@ -2304,10 +2316,14 @@ static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)
  *
  * I_DIRTY_SYNC		Inode is dirty, but doesn't have to be written on
  *			fdatasync().  i_atime is the usual cause.
+ *			fdatasync()时不回写inode元数据，因为此时inode中改变的都
+ *			是时间等不是很重要的数据。
  * I_DIRTY_DATASYNC	Data-related inode changes pending. We keep track of
  *			these changes separately from I_DIRTY_SYNC so that we
  *			don't have to write inode on fdatasync() when only
  *			mtime has changed in it.
+ *			fdatasync()时要回写inode元数据，因为此时inode中改变的有
+ *			可能包含关键数据比如文件长度等。
  * I_DIRTY_PAGES	Inode has dirty pages.  Inode itself may be clean.
  * I_NEW		Serves as both a mutex and completion notification.
  *			New inodes set I_NEW.  If two processes both create

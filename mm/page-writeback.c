@@ -2190,6 +2190,7 @@ int write_cache_pages(struct address_space *mapping,
 		/*
 		 * 设置所有带DIRTY标志的page为TOWRITE标志
 		 * - 这个标志不是给page结构体设置，而是给xa_node设置；
+		 * - 作用是为了防止活锁，参见注释
 		 */
 		tag_pages_for_writeback(mapping, index, end);
 	done_index = index;
@@ -2245,10 +2246,11 @@ continue_unlock:
 			}
 
 			/*
-			 * 因为外面已经对该inode加了锁，所以这个inode对应的每个
-			 * page的读写状态都应该是不变的才对。既然上面判定此page
-			 * 没有PG_writeback标志，那么这里肯定也不能有这个标志。
-			 * 一旦这里有了，说明有地方没有加好锁，是个BUG();
+			 * 调用者通过I_SYNC标志位保证了只有一个内核路径可以进入
+			 * 这里，所以这个inode对应的每个page的读写状态都应该是不
+			 * 变的才对。既然上面判定此page没有PG_writeback标志，那
+			 * 么这里肯定也不能有这个标志。一旦这里有了，说明有地方
+			 * 没有加好锁，是个BUG();
 			 */
 			BUG_ON(PageWriteback(page));
 			if (!clear_page_dirty_for_io(page))
@@ -2804,6 +2806,9 @@ int __test_set_page_writeback(struct page *page, bool keep_write)
 
 		xas_lock_irqsave(&xas, flags);
 		xas_load(&xas);
+		/*
+		 * 设置PG_writeback标志
+		 */
 		ret = TestSetPageWriteback(page);
 		if (!ret) {
 			bool on_wblist;

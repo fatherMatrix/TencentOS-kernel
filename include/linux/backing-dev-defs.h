@@ -321,6 +321,9 @@ static inline bool wb_tryget(struct bdi_writeback *wb)
  */
 static inline void wb_get(struct bdi_writeback *wb)
 {
+	/*
+	 * 如果是backing_dev_info内嵌的bdi_writeback，就不增加引用计数了
+	 */
 	if (wb != &wb->bdi->wb)
 		percpu_ref_get(&wb->refcnt);
 }
@@ -339,6 +342,9 @@ static inline void wb_put(struct bdi_writeback *wb)
 		return;
 	}
 
+	/*
+	 * 要检查是不是backing_dev_info内嵌的bdi_writeback
+	 */
 	if (wb != &wb->bdi->wb)
 		percpu_ref_put(&wb->refcnt);
 }

@@ -27,8 +27,15 @@ struct xfs_cud_log_item;
 struct xfs_bui_log_item;
 struct xfs_bud_log_item;
 
+/*
+ * log item的内存数据结构
+ * - 磁盘数据结构呢？
+ */
 struct xfs_log_item {
 	struct list_head		li_ail;		/* AIL pointers */
+	/*
+	 * 作为链表元素加入xfs_trans->t_items
+	 */
 	struct list_head		li_trans;	/* transaction list */
 	xfs_lsn_t			li_lsn;		/* last on-disk lsn */
 	struct xfs_mount		*li_mountp;	/* ptr to fs mount */
@@ -140,6 +147,11 @@ typedef struct xfs_trans {
 	struct list_head	t_items;	/* log item descriptors */
 	struct list_head	t_busy;		/* list of busy extents */
 	struct list_head	t_dfops;	/* deferred operations */
+	/*
+	 * 参见xfs_trans_alloc()
+	 *     -> xfs_trans_reserve()
+	 *       -> current_set_flags_nested()
+	 */
 	unsigned long		t_pflags;	/* saved process flags state */
 } xfs_trans_t;
 

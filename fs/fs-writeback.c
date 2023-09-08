@@ -589,6 +589,9 @@ void wbc_attach_and_unlock_inode(struct writeback_control *wbc,
 		return;
 	}
 
+	/*
+	 * 分开启CONFIG_CGROUP_WRITEBACK和不开启两种情况
+	 */
 	wbc->wb = inode_to_wb(inode);
 	wbc->inode = inode;
 
@@ -601,6 +604,7 @@ void wbc_attach_and_unlock_inode(struct writeback_control *wbc,
 
 	/*
 	 * 对应的引用计数释放操作在哪里？
+	 * - 这里就要求inode的i_wb必须不为NULL了；
 	 */
 	wb_get(wbc->wb);
 	spin_unlock(&inode->i_lock);
@@ -736,6 +740,9 @@ void wbc_detach_inode(struct writeback_control *wbc)
 	inode->i_wb_frn_history = history;
 
 	wb_put(wbc->wb);
+	/*
+	 * inode关联的bdi_writeback被置空了
+	 */
 	wbc->wb = NULL;
 }
 EXPORT_SYMBOL_GPL(wbc_detach_inode);
@@ -1474,6 +1481,8 @@ static void requeue_inode(struct inode *inode, struct bdi_writeback *wb,
  * Write out an inode and its dirty pages. Do not update the writeback list
  * linkage. That is left to the caller. The caller is also responsible for
  * setting I_SYNC flag and calling inode_sync_complete() to clear it.
+ *
+ * 只会有一个内核路径进入这里。
  */
 static int
 __writeback_single_inode(struct inode *inode, struct writeback_control *wbc)
@@ -1483,10 +1492,17 @@ __writeback_single_inode(struct inode *inode, struct writeback_control *wbc)
 	unsigned dirty;
 	int ret;
 
+	/*
+	 * 进来后，inode->i_lock应该是解锁状态
+	 */
+
 	WARN_ON(!(inode->i_state & I_SYNC));
 
 	trace_writeback_single_inode_start(inode, wbc, nr_to_write);
 
+	/*
+	 * 这里写的是inode对应文件包含的数据内容，不是inode本身
+	 */
 	ret = do_writepages(mapping, wbc);
 
 	/*
@@ -1542,7 +1558,11 @@ __writeback_single_inode(struct inode *inode, struct writeback_control *wbc)
 
 	spin_unlock(&inode->i_lock);
 
-	/* Don't write the inode if only I_DIRTY_PAGES was set */
+	/*
+	 * Don't write the inode if only I_DIRTY_PAGES was set
+	 *
+	 * 上面do_writepages()写的是数据，这里写inode；
+	 */
 	if (dirty & ~I_DIRTY_PAGES) {
 		int err = write_inode(inode, wbc);
 		if (ret == 0)
@@ -1572,6 +1592,9 @@ static int writeback_single_inode(struct inode *inode,
 	else
 		WARN_ON(inode->i_state & I_WILL_FREE);
 
+	/*
+	 * 已经在回写了
+	 */
 	if (inode->i_state & I_SYNC) {
 		if (wbc->sync_mode != WB_SYNC_ALL)
 			goto out;
@@ -1579,6 +1602,8 @@ static int writeback_single_inode(struct inode *inode,
 		 * It's a data-integrity sync. We must wait. Since callers hold
 		 * inode reference or inode has I_WILL_FREE set, it cannot go
 		 * away under us.
+		 *
+		 * 里面会释放掉上面获取的inode->i_lock自旋锁。
 		 */
 		__inode_wait_for_writeback(inode);
 	}
@@ -1591,14 +1616,29 @@ static int writeback_single_inode(struct inode *inode,
 	 * make sure inode is on some writeback list and leave it there unless
 	 * we have completely cleaned the inode.
 	 */
-	if (!(inode->i_state & I_DIRTY_ALL) &&
+	if (!(inode->i_state & I_DIRTY_ALL) &&		// 如果是干净的
 	    (wbc->sync_mode != WB_SYNC_ALL ||
 	     !mapping_tagged(inode->i_mapping, PAGECACHE_TAG_WRITEBACK)))
 		goto out;
+	/*
+	 * 加上I_SYNC标志标识当前这个inode已经在回写了
+	 */
 	inode->i_state |= I_SYNC;
+	/*
+	 * 利用wbc将inode和bdi_writeback关联起来
+	 * - 内部会解锁inode->i_lock
+	 */
 	wbc_attach_and_unlock_inode(wbc, inode);
 
+	/*
+	 * 如果这里被调度了，会发生什么？
+	 * - 此时inode->i_state中已经包含了I_SYNC标志位，其他回写的内核路径会直
+	 *   接放弃整个inode的回写操作；所以，只会有一个内核路径进入下面的函数。
+	 */
 	ret = __writeback_single_inode(inode, wbc);
+	/*
+	 * 写完之后这里就可能并发了
+	 */
 
 	wbc_detach_inode(wbc);
 

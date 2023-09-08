@@ -30,6 +30,11 @@ xfs_trans_ijoin(
 	xfs_inode_log_item_t	*iip;
 
 	ASSERT(xfs_isilocked(ip, XFS_ILOCK_EXCL));
+	/*
+	 * 获取inode对应的xfs_inode_log_item_t，如果没有就在此处创建一个。
+	 * - 对inode->i_itemp的访问是安全的，因为在进入xfs_trans_ijoin()前已经
+	 *   获取了inode的互斥锁；
+	 */
 	if (ip->i_itemp == NULL)
 		xfs_inode_item_init(ip, ip->i_mount);
 	iip = ip->i_itemp;

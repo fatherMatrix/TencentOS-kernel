@@ -631,6 +631,8 @@ void *page_rmapping(struct page *page)
 
 /*
  * Return true if this page is mapped into pagetables.
+ *                                         ^^^^^^^^^^
+ *                                         看代码，应该指的是用户空间
  * For compound page it returns true if any subpage of compound page is mapped.
  */
 bool page_mapped(struct page *page)

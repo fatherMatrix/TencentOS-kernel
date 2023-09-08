@@ -63,6 +63,7 @@ xattr_resolve_name(struct inode *inode, const char **name)
 	/*
 	 * 如果没有IOP_XATTR标志位，则表示不支持此操作。
 	 * sockfs现在是有此标志位的，sockfs在xattr操作中有可能返回-EAGAIN
+	 * cgroupfs中没有这个标志位
 	 */
 	if (!(inode->i_opflags & IOP_XATTR)) {
 		if (unlikely(is_bad_inode(inode)))

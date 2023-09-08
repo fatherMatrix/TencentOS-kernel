@@ -151,6 +151,9 @@ xfs_trans_reserve(
 	uint			rtextents)
 {
 	int		error = 0;
+	/*
+	 * 是否允许使用保留数据块
+	 */
 	bool		rsvd = (tp->t_flags & XFS_TRANS_RESERVE) != 0;
 
 	/* Mark this thread as being in a transaction */
@@ -246,6 +249,9 @@ undo_blocks:
 	return error;
 }
 
+/*
+ * 分配一个transaction
+ */
 int
 xfs_trans_alloc(
 	struct xfs_mount	*mp,
@@ -262,6 +268,8 @@ xfs_trans_alloc(
 	 * Allocate the handle before we do our freeze accounting and setting up
 	 * GFP_NOFS allocation context so that we avoid lockdep false positives
 	 * by doing GFP_KERNEL allocations inside sb_start_intwrite().
+	 *
+	 * xfs_trans分配出来后全是0；
 	 */
 	tp = kmem_zone_zalloc(xfs_trans_zone, 0);
 	if (!(flags & XFS_TRANS_NO_WRITECOUNT))
@@ -751,6 +759,9 @@ xfs_trans_add_item(
 	ASSERT(list_empty(&lip->li_trans));
 	ASSERT(!test_bit(XFS_LI_DIRTY, &lip->li_flags));
 
+	/*
+	 * 将log item添加到xfs-trans->t_items链表
+	 */
 	list_add_tail(&lip->li_trans, &tp->t_items);
 	trace_xfs_trans_add_item(tp, _RET_IP_);
 }

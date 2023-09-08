@@ -50,6 +50,9 @@ struct list_lru_node {
 } ____cacheline_aligned_in_smp;
 
 struct list_lru {
+	/*
+	 * 应该是每个cpu一个节点
+	 */
 	struct list_lru_node	*node;
 #ifdef CONFIG_MEMCG_KMEM
 	struct list_head	list;

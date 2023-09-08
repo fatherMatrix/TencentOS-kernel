@@ -806,6 +806,13 @@ xfs_ialloc(
 
 	inode->i_mode = mode;
 	set_nlink(inode, nlink);
+	/*
+	 * 在后面的版本中，这里改成了直接修改inode中的对应字段；
+	 * - 问题一：在当前版本中，inode中的相应字段何时设置？
+	 *   - 本函数返回前调用了xfs_setup_inode()；
+	 * - 问题二：档后面版本中，ip->i_d.di_uid字段何时更改？
+	 *   - 在后面的版本中，ip->id里已经不再包含uid/gid；
+	 */
 	ip->i_d.di_uid = xfs_kuid_to_uid(current_fsuid());
 	ip->i_d.di_gid = xfs_kgid_to_gid(current_fsgid());
 	inode->i_rdev = rdev;

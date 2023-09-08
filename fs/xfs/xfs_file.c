@@ -498,6 +498,7 @@ xfs_file_dio_aio_write(
 	/*
 	 * directio是要求与硬件上的sector对齐
 	 *                 ^^^^
+	 * - 位或操作旨在要求起始地址和尺寸都要对齐；
 	 */
 	if ((iocb->ki_pos | count) & target->bt_logical_sectormask)
 		return -EINVAL;

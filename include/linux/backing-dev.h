@@ -342,6 +342,8 @@ static inline bool inode_to_wb_is_valid(struct inode *inode)
  * Returns the wb @inode is currently associated with.  The caller must be
  * holding either @inode->i_lock, the i_pages lock, or the
  * associated wb's list_lock.
+ *
+ * 配置了CONFIG_CGROUP_WRITEBACK时的实现
  */
 static inline struct bdi_writeback *inode_to_wb(const struct inode *inode)
 {
@@ -351,6 +353,10 @@ static inline struct bdi_writeback *inode_to_wb(const struct inode *inode)
 		      !lockdep_is_held(&inode->i_mapping->i_pages.xa_lock) &&
 		      !lockdep_is_held(&inode->i_wb->list_lock)));
 #endif
+	/*
+	 * 在哪里赋值的？
+	 * - mark_page_dirty() -> inode_attach_wb()
+	 */
 	return inode->i_wb;
 }
 
@@ -440,6 +446,10 @@ static inline bool inode_to_wb_is_valid(struct inode *inode)
 	return true;
 }
 
+/*
+ * 没有配置CONFIG_CGROUP_WRITEBACK时的实现
+ * - 直接返回super_block关联的backing_dev_info中内嵌的bdi_writeback;
+ */
 static inline struct bdi_writeback *inode_to_wb(struct inode *inode)
 {
 	return &inode_to_bdi(inode)->wb;

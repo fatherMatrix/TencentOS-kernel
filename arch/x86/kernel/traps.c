@@ -880,7 +880,9 @@ void __init trap_init(void)
 	idt_setup_ist_traps();
 
 	/*
-	 * 对应x86_init_noop，屁都没做
+	 * 默认对应x86_init_noop，屁都没做；
+	 * 如果是kvm guest的话，kvm_guest_init()会修改默认值为kvm_apf_trap_init()；
+	 * - kvm_apf_trap_init()最终将PF中断向量的处理函数设置为async_page_fault()；
 	 */
 	x86_init.irqs.trap_init();
 

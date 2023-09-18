@@ -254,7 +254,9 @@ struct xfs_cil_ctx {
  * Committed Item List structure
  *
  * This structure is used to track log items that have been committed but not
+ *                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * yet written into the log. It is used only when the delayed logging mount
+ * ^^^^^^^^^^^^^^^^^^^^^^^^
  * option is enabled.
  *
  * This structure tracks the list of committing checkpoint contexts so
@@ -265,12 +267,17 @@ struct xfs_cil_ctx {
  * checkpoint is still in the process of committing, we can block waiting for
  * the commit LSN to be determined as well. This should make synchronous
  * operations almost as efficient as the old logging methods.
+ *
+ * CIL用于跟踪已经提交，但还没有写入log的log items；
  */
 struct xfs_cil {
 	struct xlog		*xc_log;
 	struct list_head	xc_cil;
 	spinlock_t		xc_cil_lock;
 
+	/*
+	 * xfs_log_commit_cil()中使用了这个信号量
+	 */
 	struct rw_semaphore	xc_ctx_lock ____cacheline_aligned_in_smp;
 	struct xfs_cil_ctx	*xc_ctx;
 

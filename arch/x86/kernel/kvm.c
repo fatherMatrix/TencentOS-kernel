@@ -241,6 +241,11 @@ u32 kvm_read_and_reset_pf_reason(void)
 EXPORT_SYMBOL_GPL(kvm_read_and_reset_pf_reason);
 NOKPROBE_SYMBOL(kvm_read_and_reset_pf_reason);
 
+/*
+ * async page fault主要是用于vcpu触发PF后，将其当前进程切换出去，换成另一个进程运行。
+ * 母机上处理完之后，通过注入14号中断将触发PF的进程切换进来；
+ * - 主要用于优化母机上vm内存被swap出去的情况；
+ */
 dotraplinkage void
 do_async_page_fault(struct pt_regs *regs, unsigned long error_code, unsigned long address)
 {

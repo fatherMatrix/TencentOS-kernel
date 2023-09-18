@@ -146,6 +146,9 @@ typedef struct xfs_trans {
 	int64_t			t_rextslog_delta;/* superblocks rextslog chg */
 	struct list_head	t_items;	/* log item descriptors */
 	struct list_head	t_busy;		/* list of busy extents */
+	/*
+	 * 链表元素是xfs_defer_pending->dfp_list；
+	 */
 	struct list_head	t_dfops;	/* deferred operations */
 	/*
 	 * 参见xfs_trans_alloc()

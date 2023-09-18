@@ -155,6 +155,19 @@ xlog_grant_add_space(
 		xlog_crack_grant_head_val(head_val, &cycle, &space);
 
 		tmp = log->l_logsize - space;
+		/*
+		 * 此时的示意图：
+		 *
+		 * |<----  l_logsize    ---->|
+		 *               |<-- tmp -->|
+		 * +-------------+-----------+
+		 * |             |           |
+		 * +-------------+-----------+
+		 *               ^
+		 *             space
+		 *
+		 */
+
 		if (tmp > bytes)
 			space += bytes;
 		else {
@@ -165,6 +178,11 @@ xlog_grant_add_space(
 		old = head_val;
 		new = xlog_assign_grant_head_val(cycle, space);
 		head_val = atomic64_cmpxchg(head, old, new);
+	/*
+	 * atomic64_cmpxchg()如果head与old相等，则将head赋值为new。其返回值一直
+	 * 为原来的值；如果返回值不等于old，说明被其他内核路径提前改了，此时要
+	 * 循环重试。
+	 */
 	} while (head_val != old);
 }
 
@@ -263,6 +281,9 @@ xlog_grant_head_wait(
 	int			need_bytes) __releases(&head->lock)
 					    __acquires(&head->lock)
 {
+	/*
+	 * 进来前是获取了锁的，所以这里的链表操作是安全的；
+	 */
 	list_add_tail(&tic->t_queue, &head->waiters);
 
 	do {
@@ -436,8 +457,8 @@ out_error:
 int
 xfs_log_reserve(
 	struct xfs_mount	*mp,
-	int		 	unit_bytes,
-	int		 	cnt,
+	int		 	unit_bytes,	/* 字节数量 */
+	int		 	cnt,		/* log operations数量 */
 	struct xlog_ticket	**ticp,
 	uint8_t		 	client,
 	bool			permanent)
@@ -1195,9 +1216,16 @@ xlog_space_left(
 	int		head_cycle;
 	int		head_bytes;
 
+	/*
+	 * 高32位是cycle，低32位是byte
+	 */
 	xlog_crack_grant_head(head, &head_cycle, &head_bytes);
 	xlog_crack_atomic_lsn(&log->l_tail_lsn, &tail_cycle, &tail_bytes);
 	tail_bytes = BBTOB(tail_bytes);
+
+	/*
+	 * 考虑tail回环到head前面的情况；
+	 */
 	if (tail_cycle == head_cycle && head_bytes >= tail_bytes)
 		free_bytes = log->l_logsize - (head_bytes - tail_bytes);
 	else if (tail_cycle + 1 < head_cycle)
@@ -1558,6 +1586,9 @@ xlog_grant_push_ail(
 
 	ASSERT(BTOBB(need_bytes) < log->l_logBBsize);
 
+	/*
+	 * 计算log buffer的剩余空间
+	 */
 	free_bytes = xlog_space_left(log, &log->l_reserve_head.grant);
 	free_blocks = BTOBBT(free_bytes);
 
@@ -3579,6 +3610,13 @@ xfs_log_calc_unit_res(
 	 * <oph><trans-hdr><start-oph><reg1-oph><reg1><reg2-oph>...<commit-oph>
 	 * and then there are LR hdrs, split-recs and roundoff at end of syncs.
 	 *
+	 * Note: 上面的结构就是多个(xlog_op_header, log item)的序列而已。其中的
+	 * <trans-hdr>只是众多log_item中的一种而已，没什么特殊的。
+	 *
+	 * 但我怎么感觉应该是这样：
+	 * <start-oph><trans-hdr><reg1-oph><reg1><reg2-oph><reg2>...<commit-oph>
+	 * - 好像是不对的
+	 *
 	 * We need to account for all the leadup data and trailer data
 	 * around the transaction data.
 	 * And then we need to account for the worst case in terms of using
@@ -3620,6 +3658,8 @@ xfs_log_calc_unit_res(
 	 * than the iclog, it will be the only thing in that iclog.
 	 * Fundamentally, this means we must pass the entire log vector to
 	 * xlog_write to guarantee this.
+	 *
+	 * 计算有多少个xlog_op_header_t
 	 */
 	iclog_space = log->l_iclog_size - log->l_iclog_hsize;
 	num_headers = howmany(unit_bytes, iclog_space);
@@ -3669,6 +3709,9 @@ xlog_ticket_alloc(
 	if (!tic)
 		return NULL;
 
+	/*
+	 * 计算需要保留的字节数；
+	 */
 	unit_res = xfs_log_calc_unit_res(log->l_mp, unit_bytes);
 
 	atomic_set(&tic->t_ref, 1);

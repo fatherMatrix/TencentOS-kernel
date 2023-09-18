@@ -5243,6 +5243,10 @@ static int handle_ept_violation(struct kvm_vcpu *vcpu)
 	gpa_t gpa;
 	u64 error_code;
 
+	/*
+	 * exit qualification字段的具体含义要结合退出原因做解释；
+	 * - 退出原因由exit reason表示；
+	 */
 	exit_qualification = vmcs_readl(EXIT_QUALIFICATION);
 
 	/*
@@ -5254,6 +5258,10 @@ static int handle_ept_violation(struct kvm_vcpu *vcpu)
 	if (!(to_vmx(vcpu)->idt_vectoring_info & VECTORING_INFO_VALID_MASK) &&
 			enable_vnmi &&
 			(exit_qualification & INTR_INFO_UNBLOCK_NMI))
+		/*
+		 * 阻塞NMI
+		 * - 参见sdm中VMCS.Interruptibility state.Blocking by NMI
+		 */
 		vmcs_set_bits(GUEST_INTERRUPTIBILITY_INFO, GUEST_INTR_STATE_NMI);
 
 	/*
@@ -5280,6 +5288,9 @@ static int handle_ept_violation(struct kvm_vcpu *vcpu)
 	error_code |= (exit_qualification & 0x100) != 0 ?
 	       PFERR_GUEST_FINAL_MASK : PFERR_GUEST_PAGE_MASK;
 
+	/*
+	 * 将退出信息记录到vcpu中；
+	 */
 	vcpu->arch.exit_qualification = exit_qualification;
 	/*
 	 * 内部会调用kvm_mmu的page_fault回调函数tdp_page_fault，tdp_page_fault
@@ -6799,7 +6810,11 @@ static struct kvm_vcpu *vmx_create_vcpu(struct kvm *kvm, unsigned int id)
 		goto free_user_fpu;
 	}
 
-	/* 好想与pcid有关，用于减少tlb的冲刷？*/
+	/* 
+	 * 好像与pcid有关，用于减少tlb的冲刷？
+	 * - 不，pcid是os中用于标识一个进程的，这里是一个物理机上用来标识vcpu的；
+	 * - 全称是vritual processor id；可以与pcid共用用于减少tlb的冲刷；
+	 */
 	vmx->vpid = allocate_vpid();
 
 	/* 初始化的是struct vcpu_vmx中的struct kvm_vcpu */

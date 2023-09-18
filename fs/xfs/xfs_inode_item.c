@@ -647,6 +647,9 @@ void
 xfs_inode_item_init(
 	struct xfs_inode	*ip,
 	struct xfs_mount	*mp)
+/*
+ * 这个mp参数存在的意义是啥？xfs_inode中有相关字段
+ */
 {
 	struct xfs_inode_log_item *iip;
 

@@ -510,8 +510,6 @@ struct request_queue;
 
 /*
  * 代表一个块设备对象，如整个硬盘或特定分区。
- * - 如果该结构代表一个分区，则其成员bd_part指向设备的分区结构
- * - 如果该结构代表设备，则成员bd_disk指向设备的通用硬盘结构gendisk
  */
 struct block_device {
 	/*
@@ -526,6 +524,12 @@ struct block_device {
 	 * 对应的块设备文件inode
 	 */
 	struct inode *		bd_inode;	/* will die */
+	/*
+	 * 指向block_device所包含的文件系统的super_block，而不是blockdev_superblock；
+	 * - 如果block_device是一个包含磁盘分区的大磁盘，那么这个字段是NULL；
+	 * - 如果block_device是一个大磁盘，没有分区，那么这个字段自然是所包含文件
+	 *   系统的超级块；
+	 */
 	struct super_block *	bd_super;
 	struct mutex		bd_mutex;	/* open/close mutex */
 	void *			bd_claiming;
@@ -536,7 +540,8 @@ struct block_device {
 	struct list_head	bd_holder_disks;
 #endif
 	/*
-	 * 用于分区指向整个磁盘？
+	 * 如果block_device表示一个分区，则指向整个磁盘对应的block_device；
+	 * 如果block_device表示整个磁盘，则指向block_device本身；
 	 */
 	struct block_device *	bd_contains;
 	/*
@@ -545,25 +550,35 @@ struct block_device {
 	 */
 	unsigned		bd_block_size;
 	/*
-	 * 分区号？
+	 * 分区号
 	 */
 	u8			bd_partno;
+	/*
+	 * 指向分区表：
+	 * - 如果block_device对应的是一个分区，则指向分区对应的hd_struct；
+	 * - 如果block_device对应的是一个完整的磁盘，则只想gendisk内嵌的part0；
+	 */
 	struct hd_struct *	bd_part;
 	/* number of times partitions within this device have been opened. */
 	unsigned		bd_part_count;
 	int			bd_invalidated;
 	/* 
 	 * 指向对应的磁盘
+	 * - 所有分区指向同一个磁盘；
 	 */
 	struct gendisk *	bd_disk;
 	/*
 	 * 请求队列
+	 * - 和gendisk->queue是一样的;
 	 */
 	struct request_queue *  bd_queue;
 	/*
 	 * bdi系统
 	 */
 	struct backing_dev_info *bd_bdi;
+	/*
+	 * 所有的block_device都链接到all_bdevs链表头上；
+	 */
 	struct list_head	bd_list;
 	/*
 	 * Private data.  You must have bd_claim'ed the block_device

@@ -343,7 +343,10 @@ int kvm_vcpu_init(struct kvm_vcpu *vcpu, struct kvm *kvm, unsigned id)
 		r = -ENOMEM;
 		goto fail;
 	}
-	/* 这里分配了一个page，是用来做什么的呢？*/
+	/*
+	 * 这里分配了一个page，是用来做什么的呢
+	 * - 用于返回给mmap()，在kvm和用户态vmm间共享数据；
+	 */
 	vcpu->run = page_address(page);
 
 	kvm_vcpu_set_in_spin_loop(vcpu, false);

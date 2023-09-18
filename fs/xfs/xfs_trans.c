@@ -165,11 +165,18 @@ xfs_trans_reserve(
 	 * fail if the count would go below zero.
 	 */
 	if (blocks > 0) {
+		/*
+		 * 这里只是检查并更新m_fdblocks或m_resblks_avail字段，并没有看到
+		 * 分配动作（位置信息）；
+		 */
 		error = xfs_mod_fdblocks(tp->t_mountp, -((int64_t)blocks), rsvd);
 		if (error != 0) {
 			current_restore_flags_nested(&tp->t_pflags, PF_MEMALLOC_NOFS);
 			return -ENOSPC;
 		}
+		/*
+		 * 计数转移到xfs_trans中
+		 */
 		tp->t_blk_res += blocks;
 	}
 
@@ -206,7 +213,13 @@ xfs_trans_reserve(
 		if (error)
 			goto undo_blocks;
 
+		/*
+		 * 字节数量
+		 */
 		tp->t_log_res = resp->tr_logres;
+		/*
+		 * log operations数量
+		 */
 		tp->t_log_count = resp->tr_logcount;
 	}
 

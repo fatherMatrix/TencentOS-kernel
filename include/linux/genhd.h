@@ -241,6 +241,7 @@ struct gendisk {
 	const struct block_device_operations *fops;
 	/*
 	 * 磁盘的请求队列，其内部也是有一个kobject
+	 * - block_device中的bd_queue是这里的一个拷贝；
 	 */
 	struct request_queue *queue;
 	void *private_data;

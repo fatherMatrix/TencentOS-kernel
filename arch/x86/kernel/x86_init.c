@@ -57,6 +57,9 @@ struct x86_init_ops x86_init __initdata = {
 	.irqs = {
 		.pre_vector_init	= init_ISA_irqs,
 		.intr_init		= native_init_IRQ,
+		/*
+		 * kvm_guest_init()中有可能会改写这个字段；
+		 */
 		.trap_init		= x86_init_noop,
 		.intr_mode_select	= apic_intr_mode_select,
 		.intr_mode_init		= apic_intr_mode_init

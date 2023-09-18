@@ -39,6 +39,10 @@
 
 struct bdev_inode {
 	struct block_device bdev;
+	/*
+	 * 这个inode是bdev fs中的inode，超级块是blockdev_superblock；
+	 * - 在bdevfs中通过dev_t找到这个inode，就相当于找到了block_device；
+	 */
 	struct inode vfs_inode;
 };
 
@@ -888,6 +892,9 @@ static int bdev_set(struct inode *inode, void *data)
 	return 0;
 }
 
+/*
+ * 所有的block_device都链接到这里；
+ */
 static LIST_HEAD(all_bdevs);
 
 /*
@@ -2228,6 +2235,10 @@ struct block_device *lookup_bdev(const char *pathname)
 	if (error)
 		return ERR_PTR(error);
 
+	/*
+	 * 这个inode还是devtmpfs中的inode
+	 * - 即/dev/vda的inode;
+	 */
 	inode = d_backing_inode(path.dentry);
 	error = -ENOTBLK;
 	if (!S_ISBLK(inode->i_mode))

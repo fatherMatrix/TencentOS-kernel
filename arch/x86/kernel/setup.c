@@ -863,6 +863,10 @@ void __init setup_arch(char **cmdline_p)
 	 */
 
 #ifdef CONFIG_X86_32
+	/*
+	 * 64位cpu的boot_cpu_data从那里来？
+	 * - new_cpu_data的来源参见其注释；
+	 */
 	memcpy(&boot_cpu_data, &new_cpu_data, sizeof(new_cpu_data));
 
 	/*

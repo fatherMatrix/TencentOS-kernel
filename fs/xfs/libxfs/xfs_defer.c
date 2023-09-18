@@ -373,6 +373,9 @@ xfs_defer_finish_noroll(
 	while (!list_empty(&dop_pending) || !list_empty(&(*tp)->t_dfops)) {
 		/* log intents and pull in intake items */
 		xfs_defer_create_intents(*tp);
+		/*
+		 * 将(*tp)->t_dfops移入dop_pending
+		 */
 		list_splice_tail_init(&(*tp)->t_dfops, &dop_pending);
 
 		/*

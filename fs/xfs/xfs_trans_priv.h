@@ -48,6 +48,8 @@ struct xfs_ail_cursor {
  * Private AIL structures.
  *
  * Eventually we need to drive the locking in here as well.
+ *
+ * AIL用于跟踪已经写入log，但还没有写入disk的log item；
  */
 struct xfs_ail {
 	struct xfs_mount	*ail_mount;

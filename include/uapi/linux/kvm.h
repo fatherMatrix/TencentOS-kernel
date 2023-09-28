@@ -99,7 +99,10 @@ struct kvm_memory_region {
  * 表示虚拟机的一段物理内存
  */
 struct kvm_userspace_memory_region {
-	__u32 slot;		/* ID号，包括AddressSpace的ID和本身的ID */
+	__u32 slot;		/* ID号，包括AddressSpace的ID和本身的ID，
+				   - 高16位是address space id；
+				   - 低16位是slot id；
+				 */
 	__u32 flags;		/* 该段内存的属性 */
 	__u64 guest_phys_addr;	/* 表示虚拟机的物理内存地址 */
 	__u64 memory_size; 	/* bytes，表示内存尺寸 */

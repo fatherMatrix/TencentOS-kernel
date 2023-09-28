@@ -98,6 +98,10 @@ static inline unsigned long kvm_get_active_pcid(struct kvm_vcpu *vcpu)
 static inline void kvm_mmu_load_cr3(struct kvm_vcpu *vcpu)
 {
 	if (VALID_PAGE(vcpu->arch.mmu->root_hpa))
+		/*
+		 * 对应vmx_set_cr3()
+		 * - 入参是EPT根的HPA；
+		 */
 		vcpu->arch.mmu->set_cr3(vcpu, vcpu->arch.mmu->root_hpa |
 					      kvm_get_active_pcid(vcpu));
 }

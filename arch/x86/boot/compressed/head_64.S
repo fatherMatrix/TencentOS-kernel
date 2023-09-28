@@ -86,6 +86,7 @@ ENTRY(startup_32)
  * 
  * 之所以可以这么做，是因为内核在编译的时候使用了-fPIE选项，生成的
  * 代码都是位置无关的!
+ * - 所谓位置无关代码就是对符号的引用都使用ip-relative方式；
  */
 	/*
 	 * esi中保存着boot_params的地址，是在protected_mode_jump的

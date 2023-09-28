@@ -112,11 +112,16 @@ enum fixed_addresses {
 	FIX_APEI_GHES_NMI,
 #endif
 
+	/*
+	 * 永久fixed映射的结束点
+	 */
 	__end_of_permanent_fixed_addresses,
 
 	/*
 	 * 512 temporary boot-time mappings, used by early_ioremap(),
 	 * before ioremap() is functional.
+	 *
+	 * early_ioremap()通过临时fixed映射实现；
 	 *
 	 * If necessary we round it up to the next 512 pages boundary so
 	 * that we can have a single pmd entry and a single pte table:

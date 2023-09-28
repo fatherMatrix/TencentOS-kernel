@@ -3459,6 +3459,7 @@ void __init vfs_caches_init(void)
 	mnt_init();
 	/*
 	 * 注册bd_type
+	 * - 用于管理block_device块设备；
 	 */
 	bdev_cache_init();
 	/*

@@ -916,6 +916,7 @@ void __init setup_arch(char **cmdline_p)
 	jump_label_init();
 	/*
 	 * 建立早期ioremap映射
+	 * - 在真正的ioremap()可用之前，需要初始化一个临时可用的early_ioremap()；
 	 */
 	early_ioremap_init();
 

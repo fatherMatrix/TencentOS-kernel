@@ -84,6 +84,9 @@ static inline void smp_prepare_boot_cpu(void)
 
 static inline void smp_prepare_cpus(unsigned int max_cpus)
 {
+	/*
+	 * 默认值：native_smp_prepare_cpus()
+	 */
 	smp_ops.smp_prepare_cpus(max_cpus);
 }
 

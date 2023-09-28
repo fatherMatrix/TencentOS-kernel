@@ -295,7 +295,12 @@ boot_flag:	.word 0xAA55
 	# offset 512, entry point
 
 	# 这里是现代内核的真正入口，bootloader知道这个位置的偏移（0x200），所以
-	# 在将控制权转移给内核时直接跳到了这里
+	# 在将控制权转移给内核时直接跳到了这里。
+	#
+	# 通过实验得知，本文件的编译选项有-fno-pic，这表示本文件编译的二进制必
+	# 须被加载到特定的地址上；这也是为什么kexec-tools中在调用kexec_*_load()
+	# 之前需要先做解压动作：猜测kexec_*_load()载入内核的应该是解压后的小内
+	# 核镜像，见kexec-tools:slurp_decompress_file()；
 	#
 	# 内核被加载到0x10000，这里的地址是0x10200。
 	.globl	_start

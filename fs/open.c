@@ -772,9 +772,13 @@ static int do_dentry_open(struct file *f,
 	f->f_inode = inode;
 	/*
 	 * 这里直接复制inode中的address_space指针；
-	 * - inode->i_mapping有可能指向块设备伪文件系统中的隐藏inode；
-	 * - 好像不是诶，file->f_mapping指向block_device对应的inode的address_space
-	 *   好像是在def_blk_fops -> blkdev_open()中完成的；
+	 * - 理论上，设备文件的devtmpfs inode->i_mapping应该指向bdevfs inode的
+	 *   i_mapping(&bdevfs inode.i_data），但到这里的时候这件事还未发生；
+	 * - devtmpfs inode->i_mapping设置为bdevfs inode->i_mapping字段发生在：
+	 *   blkdev_open() -> bd_acquire()中；
+	 * - file->f_mapping的设置在blkdev_open()中的bd_acquire()之后，直接拷贝
+	 *   devtmpfs inode->i_mapping，此时devtmpfs inode->i_mapping已经是
+	 *   &bdevfs inode->i_data了；
 	 */
 	f->f_mapping = inode->i_mapping;
 
@@ -811,7 +815,11 @@ static int do_dentry_open(struct file *f,
 
 	/*
 	 * 设置file->f_op
-	 * file结构体中的f_op是根据inode结构体中的i_fop中得到的
+	 * - file结构体中的f_op是根据inode结构体中的i_fop中得到的
+	 *   - 对于设备文件，inode->i_fop的设置是在init_special_inode()中设置的；
+	 *     - init_special_inode()的调用在:
+	 *       - devtmpfs(shmem fs): shmem_get_inode()
+	 *       - ext4: ext4_iget()
 	 */
 	f->f_op = fops_get(inode->i_fop);
 	if (WARN_ON(!f->f_op)) {
@@ -829,6 +837,12 @@ static int do_dentry_open(struct file *f,
 
 	/* normally all 3 are set; ->open() can clear them if needed */
 	f->f_mode |= FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE;
+	/*
+	 * 对于块设备，init_special_inode()将i_fop设置为了def_blk_fops；
+	 * - open: blkdev_open()
+	 * 对于字符设备，init_special_inode()将i_fop设置为了def_chr_fops；
+	 * - open: chrdev_open()
+	 */
 	if (!open)
 		open = f->f_op->open;
 	if (open) {

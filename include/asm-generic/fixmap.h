@@ -20,7 +20,8 @@
 
 /*
  * 为什么是减法？
- * - +----------+ <---- FIXADDR_TOP
+ * - 因为：
+ *   +----------+ <---- FIXADDR_TOP
  *   | PAGE 1   |
  *   +----------+
  *   | PAGE 2   |
@@ -29,6 +30,7 @@
  *   +----------+
  *   | PAGE LST |
  *   +----------+ <---- FIXADDR_START
+ * - FIXADDR_TOP上是否还有一个PAGE 0？
  */
 #define __fix_to_virt(x)	(FIXADDR_TOP - ((x) << PAGE_SHIFT))
 #define __virt_to_fix(x)	((FIXADDR_TOP - ((x)&PAGE_MASK)) >> PAGE_SHIFT)

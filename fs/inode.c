@@ -215,6 +215,10 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	mapping->private_data = NULL;
 	mapping->writeback_index = 0;
 	inode->i_private = NULL;
+	/*
+	 * 所有inode的i_mapping字段默认都指向自己内嵌的i_data字段；
+	 * - 但对于设备文件，在blkdev_open()中有可能被修改；
+	 */
 	inode->i_mapping = mapping;
 	INIT_HLIST_HEAD(&inode->i_dentry);	/* buggered by rcu freeing */
 #ifdef CONFIG_FS_POSIX_ACL

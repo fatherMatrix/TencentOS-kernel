@@ -352,7 +352,7 @@ static inline int kvm_vcpu_exiting_guest_mode(struct kvm_vcpu *vcpu)
 
 struct kvm_memory_slot {
 	/*
-	 * HPA
+	 * GPA对应的gfn
 	 */
 	gfn_t base_gfn;
 	/*
@@ -461,16 +461,34 @@ static inline int kvm_arch_vcpu_memslots_id(struct kvm_vcpu *vcpu)
 struct kvm_memslots {
 	u64 generation;
 	struct kvm_memory_slot memslots[KVM_MEM_SLOTS_NUM];
-	/* The mapping table from slot id to the index in memslots[]. */
+	/*
+	 * The mapping table from slot id to the index in memslots[].
+	 *                        ^^^^^^^        ^^^^^^^^^^^^^^^^^^^
+	 */
 	short id_to_index[KVM_MEM_SLOTS_NUM];
+	/*
+	 * 上一次查找的kvm_memory_slot缓存；
+	 */
 	atomic_t lru_slot;
 	int used_slots;
 };
 
 struct kvm {
+	/*
+	 * mmu大锁
+	 */
 	spinlock_t mmu_lock;
+	/*
+	 * slot操作锁
+	 */
 	struct mutex slots_lock;
+	/*
+	 * 虚拟机对应的用户态进程的mm_struct；
+	 */
 	struct mm_struct *mm; /* userspace tied to this vm */
+	/*
+	 * 该虚拟机所有的内存条
+	 */
 	struct kvm_memslots __rcu *memslots[KVM_ADDRESS_SPACE_NUM];
 	struct kvm_vcpu *vcpus[KVM_MAX_VCPUS];
 
@@ -674,6 +692,7 @@ static inline struct kvm_memslots *kvm_vcpu_memslots(struct kvm_vcpu *vcpu)
  * 从kvm_memslots结构体中内嵌的kvm_memory_slot数组中获取相应的kvm_memory_slot的
  * 地址；要注意的是内嵌数组并没有进行某种形式的排序，而是根据id_to_index映射表
  * 进行定位；
+ * - id是slot id；
  */
 static inline struct kvm_memory_slot *
 id_to_memslot(struct kvm_memslots *slots, int id)
@@ -1038,6 +1057,8 @@ bool kvm_arch_irqfd_allowed(struct kvm *kvm, struct kvm_irqfd *args);
  * used in non-modular code in arch/powerpc/kvm/book3s_hv_rm_mmu.c.
  * gfn_to_memslot() itself isn't here as an inline because that would
  * bloat other code too much.
+ *
+ * 二分法查找；
  */
 static inline struct kvm_memory_slot *
 search_memslots(struct kvm_memslots *slots, gfn_t gfn)
@@ -1046,6 +1067,10 @@ search_memslots(struct kvm_memslots *slots, gfn_t gfn)
 	int slot = atomic_read(&slots->lru_slot);
 	struct kvm_memory_slot *memslots = slots->memslots;
 
+	/*
+	 * 根据局部性原理，上次查找的可能也是我们这次需要的；所以这里做了一个
+	 * lru缓存；
+	 */
 	if (gfn >= memslots[slot].base_gfn &&
 	    gfn < memslots[slot].base_gfn + memslots[slot].npages)
 		return &memslots[slot];

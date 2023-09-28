@@ -1364,6 +1364,9 @@ void __init native_smp_prepare_cpus(unsigned int max_cpus)
 	}
 
 	/* Setup local timer */
+	/*
+	 * 默认是：setup_boot_APIC_clock()
+	 */
 	x86_init.timers.setup_percpu_clockev();
 
 	smp_get_logical_apicid();

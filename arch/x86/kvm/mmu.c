@@ -1077,6 +1077,10 @@ static int mmu_topup_memory_cache(struct kvm_mmu_memory_cache *cache,
 		return 0;
 	while (cache->nobjs < ARRAY_SIZE(cache->objects)) {
 		obj = kmem_cache_zalloc(base_cache, GFP_KERNEL_ACCOUNT);
+		/*
+		 * 诶，这里的已分配内存回收怎么搞？
+		 * - kvm_mmu_destroy() -> mmu_free_memory_caches()
+		 */
 		if (!obj)
 			return cache->nobjs >= min ? 0 : -ENOMEM;
 		cache->objects[cache->nobjs++] = obj;
@@ -1121,6 +1125,11 @@ static void mmu_free_memory_cache_page(struct kvm_mmu_memory_cache *mc)
 static int mmu_topup_memory_caches(struct kvm_vcpu *vcpu)
 {
 	int r;
+
+	/*
+	 * 这里没有按照栈式退出的方式做错误处理，是因为所有已分配内存的回收都放
+	 * 在了kvm_mmu_destroy()中；
+	 */
 
 	r = mmu_topup_memory_cache(&vcpu->arch.mmu_pte_list_desc_cache,
 				   pte_list_desc_cache, 8 + PTE_PREFETCH_NUM);
@@ -2191,7 +2200,13 @@ static struct kvm_mmu_page *kvm_mmu_alloc_page(struct kvm_vcpu *vcpu, int direct
 {
 	struct kvm_mmu_page *sp;
 
+	/*
+	 * 从提前分配好的slab中分配kvm_mmu_page
+	 */
 	sp = mmu_memory_cache_alloc(&vcpu->arch.mmu_page_header_cache);
+	/*
+	 * 从提前分配好的page缓存中分配page
+	 */
 	sp->spt = mmu_memory_cache_alloc(&vcpu->arch.mmu_page_cache);
 	if (!direct)
 		sp->gfns = mmu_memory_cache_alloc(&vcpu->arch.mmu_page_cache);
@@ -3797,10 +3812,16 @@ static int mmu_alloc_direct_roots(struct kvm_vcpu *vcpu)
 			spin_unlock(&vcpu->kvm->mmu_lock);
 			return -ENOSPC;
 		}
+		/*
+		 * 分配的kvm_mmu_page中spt字段已经对应了一个page
+		 */
 		sp = kvm_mmu_get_page(vcpu, 0, 0,
 				vcpu->arch.mmu->shadow_root_level, 1, ACC_ALL);
 		++sp->root_count;
 		spin_unlock(&vcpu->kvm->mmu_lock);
+		/*
+		 * EPT的根设置为kvm_mmu_page->spt页的物理地址；
+		 */
 		vcpu->arch.mmu->root_hpa = __pa(sp->spt);
 	} else if (vcpu->arch.mmu->shadow_root_level == PT32E_ROOT_LEVEL) {
 		for (i = 0; i < 4; ++i) {
@@ -4294,6 +4315,9 @@ static int tdp_page_fault(struct kvm_vcpu *vcpu, gpa_t gpa, u32 error_code,
 	int r;
 	int level;
 	bool force_pt_level;
+	/*
+	 * 获取引起缺页异常的虚拟机GPA对应的gfn；
+	 */
 	gfn_t gfn = gpa >> PAGE_SHIFT;
 	unsigned long mmu_seq;
 	int write = error_code & PFERR_WRITE_MASK;
@@ -5045,8 +5069,19 @@ static void init_kvm_tdp_mmu(struct kvm_vcpu *vcpu)
 	context->sync_page = nonpaging_sync_page;
 	context->invlpg = nonpaging_invlpg;
 	context->update_pte = nonpaging_update_pte;
+	/*
+	 * EPT页表的级数
+	 */
 	context->shadow_root_level = kvm_x86_ops->get_tdp_level(vcpu);
+	/*
+	 * 直接映射使能
+	 * - 直接映射是干嘛的？
+	 * - 非直接映射是干嘛的？
+	 */
 	context->direct_map = true;
+	/*
+	 * 对应vmx_set_cr3()
+	 */
 	context->set_cr3 = kvm_x86_ops->set_tdp_cr3;
 	context->get_cr3 = get_cr3;
 	context->get_pdptr = kvm_pdptr_read;
@@ -5577,6 +5612,9 @@ int kvm_mmu_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa, u64 error_code,
 	}
 
 	r = RET_PF_INVALID;
+	/*
+	 * PFERR_RSVD_MASK似乎仅来源于handle_ept_misconfig()
+	 */
 	if (unlikely(error_code & PFERR_RSVD_MASK)) {
 		r = handle_mmio_page_fault(vcpu, cr2_or_gpa, direct);
 		if (r == RET_PF_EMULATE)
@@ -5587,12 +5625,12 @@ int kvm_mmu_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa, u64 error_code,
 		/*
 		 * 常规情况下，page_fault函数指针指向tdp_page_fault()；
 		 * - 该函数指针的设置在kvm_init_mmu()
+		 *
 		 * 嵌套虚拟化情况下，page_fault函数指针指向ept_page_fault()；
+		 * - ept_page_fault()的定义参见FNAME(page_fult)；
 		 * - 该函数指针的设置在prepare_vmcs02()
 		 *                     -> nested_ept_init_mmu_context()
 		 *                       -> kvm_init_shadow_ept_mmu()
-		 *
-		 * ept_page_fault()的定义参见FNAME(page_fult)；
 		 */
 		r = vcpu->arch.mmu->page_fault(vcpu, cr2_or_gpa,
 					       lower_32_bits(error_code),
@@ -5842,7 +5880,13 @@ int kvm_mmu_create(struct kvm_vcpu *vcpu)
 	vcpu->arch.mmu = &vcpu->arch.root_mmu;
 	vcpu->arch.walk_mmu = &vcpu->arch.root_mmu;
 
+	/*
+	 * EPT页表的根
+	 */
 	vcpu->arch.root_mmu.root_hpa = INVALID_PAGE;
+	/*
+	 * guest页表的根
+	 */
 	vcpu->arch.root_mmu.root_cr3 = 0;
 	vcpu->arch.root_mmu.translate_gpa = translate_gpa;
 	for (i = 0; i < KVM_MMU_NUM_PREV_ROOTS; i++)

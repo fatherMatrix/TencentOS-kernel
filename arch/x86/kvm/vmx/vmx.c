@@ -2985,6 +2985,9 @@ u64 construct_eptp(struct kvm_vcpu *vcpu, unsigned long root_hpa)
 
 void vmx_set_cr3(struct kvm_vcpu *vcpu, unsigned long cr3)
 {
+/*
+ * cr3的入参是EPT根的HPA
+ */
 	struct kvm *kvm = vcpu->kvm;
 	bool update_guest_cr3 = true;
 	unsigned long guest_cr3;
@@ -2992,6 +2995,9 @@ void vmx_set_cr3(struct kvm_vcpu *vcpu, unsigned long cr3)
 
 	guest_cr3 = cr3;
 	if (enable_ept) {
+	/*
+	 * EPT部分
+	 */
 		eptp = construct_eptp(vcpu, cr3);
 		vmcs_write64(EPT_POINTER, eptp);
 
@@ -3005,8 +3011,14 @@ void vmx_set_cr3(struct kvm_vcpu *vcpu, unsigned long cr3)
 
 		/* Loading vmcs02.GUEST_CR3 is handled by nested VM-Enter. */
 		if (is_guest_mode(vcpu))
+			/*
+			 * 这部分似乎是嵌套虚拟化相关
+			 */
 			update_guest_cr3 = false;
 		else if (enable_unrestricted_guest || is_paging(vcpu))
+			/*
+			 * 其实，guest的cr3是guest自己设置的，跟kvm无关；
+			 */
 			guest_cr3 = kvm_read_cr3(vcpu);
 		else
 			guest_cr3 = to_kvm_vmx(kvm)->ept_identity_map_addr;
@@ -5299,6 +5311,9 @@ static int handle_ept_violation(struct kvm_vcpu *vcpu)
 	return kvm_mmu_page_fault(vcpu, gpa, error_code, NULL, 0);
 }
 
+/*
+ * EPT_MISCONFIG经常用来做mmio的指令模拟
+ */
 static int handle_ept_misconfig(struct kvm_vcpu *vcpu)
 {
 	gpa_t gpa;
@@ -6663,6 +6678,9 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 	if (vcpu->arch.cr2 != read_cr2())
 		write_cr2(vcpu->arch.cr2);
 
+	/*
+	 * 保存寄存器并调用vmentry指令
+	 */
 	vmx->fail = __vmx_vcpu_run(vmx, (unsigned long *)&vcpu->arch.regs,
 				   vmx->loaded_vmcs->launched);
 

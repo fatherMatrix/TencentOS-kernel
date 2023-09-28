@@ -8289,7 +8289,9 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		goto cancel_injection;
 	}
 
-	/* 禁止抢占 */
+	/*
+	 * 禁止抢占
+	 */
 	preempt_disable();
 
 	/* 对应vmx_prepare_switch_to_guest，用于将pCPU的状态段寄存器状态保存到
@@ -8305,7 +8307,15 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 	 * IPI are then delayed after guest entry, which ensures that they
 	 * result in virtual interrupt delivery.
 	 */
-	/* 关中断？ */
+	/*
+	 * 关中断?
+	 * - 本函数下面（guest返回之后）有对应的开抢占喝开中断；但按理解似乎应
+	 *   该是:
+	 *   - vmentry时pCPU加载了vCPU对应的vmcs中的控制寄存器，导致在进入guest
+	 *     态后实际上处于另外可能的状态？
+	 *   - vmexit时pCPU又恢复了host态的控制寄存器，导致出来后依旧是关中断和
+	 *     关抢占的？
+	 */
 	local_irq_disable();
 	vcpu->mode = IN_GUEST_MODE;
 
@@ -8437,7 +8447,13 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		}
 	}
 
+	/*
+	 * 开中断
+	 */
 	local_irq_enable();
+	/*
+	 * 开抢占
+	 */
 	preempt_enable();
 
 	vcpu->srcu_idx = srcu_read_lock(&vcpu->kvm->srcu);
@@ -8530,9 +8546,15 @@ static int vcpu_run(struct kvm_vcpu *vcpu)
 			/* 进入虚拟机 */
 			r = vcpu_enter_guest(vcpu);
 		} else {
+			/* 阻塞vcpu */
 			r = vcpu_block(kvm, vcpu);
 		}
 
+		/*
+		 * 如果handle_ept_violate() -> tdp_page_fault()返回的是
+		 * RET_PF_RETRY，vcpu_entry_guest()最终返回的是1。这里的循环不会
+		 * 退出。
+		 */
 		if (r <= 0)
 			break;
 
@@ -9326,7 +9348,10 @@ int kvm_arch_vcpu_setup(struct kvm_vcpu *vcpu)
 	vcpu->arch.arch_capabilities = kvm_get_arch_capabilities();
 	vcpu->arch.msr_platform_info = MSR_PLATFORM_INFO_CPUID_FAULT;
 	kvm_vcpu_mtrr_init(vcpu);
-	/* 这里又要load一次VMCS？ */
+	/*
+	 * 这里又要load一次VMCS？
+	 * - 上一次是在哪儿？
+	 */
 	vcpu_load(vcpu);
 	kvm_vcpu_reset(vcpu, false);
 	kvm_init_mmu(vcpu, false);

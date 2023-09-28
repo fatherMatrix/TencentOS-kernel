@@ -599,7 +599,7 @@ asmlinkage __visible void __init start_kernel(void)
 	cgroup_init_early();
 
 	/*
-	 * 这里关闭了中断，这种终端关闭是清空IF标志位，使cpu不响应外部中断源发
+	 * 这里关闭了中断，这种中断关闭是清空IF标志位，使cpu不响应外部中断源发
 	 * 送的中断请求。其实这个时候，kernel还没有建立起对中断控制器的有效驱动
 	 * 程序;
 	 *
@@ -614,6 +614,10 @@ asmlinkage __visible void __init start_kernel(void)
 	 * enable them.
 	 */
 	boot_cpu_init();
+	/*
+	 * 有高端内存（32位cpu）的结构上用于初始化高端内存页链表；
+	 * 没有高端内存（64位cpu）上该函数为空操作；
+	 */
 	page_address_init();
 	pr_notice("%s", linux_banner);
 	/*
@@ -625,9 +629,9 @@ asmlinkage __visible void __init start_kernel(void)
 	/*
 	 * 设置体系结构相关的数据结构，包括：
 	 * - 建立direct mapping
-	 * - 解析MADT表，获取中断控制器和中断源的拓扑信息
+	 * - 解析MADT表，获取中断控制器和中断源的拓扑信息，方便后面初始化中断控制器
 	 * - 初始化虚拟化环境
-	 * - 
+	 * - ... ...
 	 */
 	setup_arch(&command_line);
 	setup_command_line(command_line);

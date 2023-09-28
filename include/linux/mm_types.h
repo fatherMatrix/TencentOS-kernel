@@ -106,12 +106,18 @@ struct page {
 			 * @private: Mapping-private opaque data.
 			 * Usually used for buffer_heads if PagePrivate.
 			 *                  ^^^^^^^^^^^^    ^^^^^^^^^^^
+			 *
 			 * Used for swp_entry_t if PageSwapCache.
 			 *          ^^^^^^^^^^^    ^^^^^^^^^^^^^
+			 *
 			 * Indicates order in the buddy system if PageBuddy.
 			 *           ^^^^^                        ^^^^^^^^^
+			 *
 			 * 或者当page处于compact_control->freepages链表中时
 			 * 也表示order;
+			 *
+			 * 或者在kvm中用于存储kvm_mmu_page指针，参见：
+			 * kvm_mmu_alloc_page() -> set_page_private()
 			 */
 			unsigned long private;
 		};

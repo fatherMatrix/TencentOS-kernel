@@ -78,7 +78,18 @@ startup_64:
 
 	/* Sanitize CPU configuration */
 	call verify_cpu			# 这里编译出来是 E8 rel，是个相对偏移。
+					# xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 					# 即验证了这里是地址无关代码；
+					# xxxxxxxxxxxxxxxxxxxxxxxxxxx
+					#
+					# 上面结论是错误的，事实是本文件在编译
+					# 时使用的是fno-PIE参数。
+					# 之所以这里有E8，可能是因为本文件直接
+					# 将verify_cpu()所在的源文件include进来
+					# 了。
+					#
+					# 有E8不一定是pie/pic编译；但有pie则肯
+					# 定是E8来调用；
 
 	/*
 	 * Perform pagetable fixups. Additionally, if SME is active, encrypt
@@ -519,7 +530,7 @@ NEXT_PAGE(level2_fixmap_pgt)
 
 NEXT_PAGE(level1_fixmap_pgt)
 	.rept (FIXMAP_PMD_NUM)
-	.fill	512,8,0
+	.fill	512,8,0				# 全部填充为0了
 	.endr
 
 #undef PMDS

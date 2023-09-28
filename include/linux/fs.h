@@ -521,7 +521,8 @@ struct block_device {
 	 */
 	int			bd_openers;
 	/*
-	 * 对应的块设备文件inode
+	 * bdevfs inode
+	 * - 非devtmpfs inode
 	 */
 	struct inode *		bd_inode;	/* will die */
 	/*

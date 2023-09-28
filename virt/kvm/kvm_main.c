@@ -697,6 +697,10 @@ static struct kvm *kvm_create_vm(unsigned long type)
 		return ERR_PTR(-ENOMEM);
 
 	spin_lock_init(&kvm->mmu_lock);
+	/*
+	 * 因为kvm的每个虚拟机都对应一个用户态的进程，所以这里将此用户态进程的
+	 * mm_struct增加引用计数后记录到kvm->mm字段；
+	 */
 	mmgrab(current->mm);
 	kvm->mm = current->mm;
 	kvm_eventfd_init(kvm);
@@ -1132,6 +1136,9 @@ int __kvm_set_memory_region(struct kvm *kvm,
 			goto out_free;
 	}
 
+	/*
+	 * 这里使用的是RCU机制，所以需要拷贝一份新的；
+	 */
 	slots = kvzalloc(sizeof(struct kvm_memslots), GFP_KERNEL_ACCOUNT);
 	if (!slots)
 		goto out_free;
@@ -1164,6 +1171,9 @@ int __kvm_set_memory_region(struct kvm *kvm,
 		slots = old_memslots;
 	}
 
+	/*
+	 * 处理好反向映射？
+	 */
 	r = kvm_arch_prepare_memory_region(kvm, &new, mem, change);
 	if (r)
 		goto out_slots;
@@ -1213,6 +1223,9 @@ EXPORT_SYMBOL_GPL(kvm_set_memory_region);
 static int kvm_vm_ioctl_set_memory_region(struct kvm *kvm,
 					  struct kvm_userspace_memory_region *mem)
 {
+	/*
+	 * mem->slot的低16位是slot id；
+	 */
 	if ((u16)mem->slot >= KVM_USER_MEM_SLOTS)
 		return -EINVAL;
 
@@ -2860,6 +2873,9 @@ static int kvm_vm_ioctl_create_vcpu(struct kvm *kvm, u32 id)
 	kvm->created_vcpus++;
 	mutex_unlock(&kvm->lock);
 
+	/*
+	 * arch vcpu 创建
+	 */
 	vcpu = kvm_arch_vcpu_create(kvm, id);
 	if (IS_ERR(vcpu)) {
 		r = PTR_ERR(vcpu);
@@ -2868,6 +2884,9 @@ static int kvm_vm_ioctl_create_vcpu(struct kvm *kvm, u32 id)
 
 	preempt_notifier_init(&vcpu->preempt_notifier, &kvm_preempt_ops);
 
+	/*
+	 * arch vcpu 设置
+	 */
 	r = kvm_arch_vcpu_setup(vcpu);
 	if (r)
 		goto vcpu_destroy;

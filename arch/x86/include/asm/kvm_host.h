@@ -309,8 +309,17 @@ struct kvm_rmap_head {
 	unsigned long val;
 };
 
+/*
+ * EPT中的一个节点？
+ */
 struct kvm_mmu_page {
+	/*
+	 * 作为链表元素加入kvm->arch.active_mmu_pages或者invalid_list中；
+	 */
 	struct list_head link;
+	/*
+	 * 作为链表元素加入kvm->arch.mmu_page_hash中，hash key由gfn和role决定；
+	 */
 	struct hlist_node hash_link;
 	struct list_head lpage_disallowed_link;
 
@@ -324,13 +333,28 @@ struct kvm_mmu_page {
 	 * hash table.
 	 */
 	union kvm_mmu_page_role role;
+	/*
+	 * - 在direct map中，
+	 * - 在shadow map中，
+	 */
 	gfn_t gfn;
 
+	/*
+	 * 保存struct page的指针；
+	 * - 见kvm_mmu_get_page();
+	 */
 	u64 *spt;
 	/* hold the gfn of each spte inside spt */
 	gfn_t *gfns;
+	/*
+	 * 该页被多少个vcpu当作EPT根
+	 */
 	int root_count;          /* Currently serving as active root */
 	unsigned int unsync_children;
+	/*
+	 * 指向上一级page table
+	 * - 可能是ept，可能是spt
+	 */
 	struct kvm_rmap_head parent_ptes; /* rmap pointers to parent sptes */
 	DECLARE_BITMAP(unsync_child_bitmap, 512);
 
@@ -822,7 +846,7 @@ struct kvm_arch_memory_slot {
 	 * 保存的是gfn与其对应页表项的rmap，KVM_NR_PAGE_SIZES表示页表项的种类，
 	 * 目前为3，分别表示4KB、2MB和1GB页面
 	 *
-	 * 通过这个，可以唯一定位到page
+	 * ??? 通过这个，可以唯一定位到page ???
 	 */
 	struct kvm_rmap_head *rmap[KVM_NR_PAGE_SIZES];
 	/*

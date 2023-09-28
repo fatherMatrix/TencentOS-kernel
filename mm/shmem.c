@@ -3714,6 +3714,9 @@ static int shmem_fill_super(struct super_block *sb, struct fs_context *fc)
 #endif
 	uuid_gen(&sb->s_uuid);
 
+	/*
+	 * 内部会给根目录设置ops和fops，后面新产生的inode的ops和fops都会继承；
+	 */
 	inode = shmem_get_inode(sb, NULL, S_IFDIR | sbinfo->mode, 0, VM_NORESERVE);
 	if (!inode)
 		goto failed;

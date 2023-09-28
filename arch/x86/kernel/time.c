@@ -98,7 +98,9 @@ void __init hpet_time_init(void)
 
 	/*
 	 * 上面本质上就是在HPET和PIT中选出一个可以用的--时钟事件源--赋值给全局
-	 * 变量global_clock_event
+	 * 变量global_clock_event。
+	 *
+	 * 后面怎么切换为LAPIC中的时钟呢？
 	 */
 
 	/*
@@ -107,6 +109,8 @@ void __init hpet_time_init(void)
 	 * BSP在初始化过程中有会周期性地收到0号时钟中断，并进行中断处理；
 	 *
 	 * 这个时候已经开中断了；
+	 * - 在哪里开的中断？
+	 *   - start_kernel()中进入late_time_init()之前就已经打开了中断；
 	 */
 	setup_default_timer_irq();
 }

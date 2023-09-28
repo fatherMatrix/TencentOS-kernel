@@ -1763,6 +1763,7 @@ clean: $(clean-dirs)
 quiet_cmd_tags = GEN     $@
       cmd_tags = $(BASH) $(srctree)/scripts/tags.sh $@
 
+# 在scripts/Kbuild.include中定义了：cmd = @set -e; $(echo-cmd) $(cmd_$(1)) 
 tags TAGS cscope gtags: FORCE
 	$(call cmd,tags)
 

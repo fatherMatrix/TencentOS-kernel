@@ -121,8 +121,9 @@ static bool __head check_la57_support(unsigned long physaddr)
  *
  * 要注意的是，进入这个函数时我们还在使用解压内核时用的4GB的页表(该页表在数值上
  * 就是物理地址到物理地址的映射)。但这部分代码在编译链接时已经是虚拟地址了，所以
- * 在该函数内对全局变量的访问都要使用fixup_pointer调整到物理地址(局部变量和代码
- * 都是地址无关的)。
+ * 在该函数内对全局变量的访问都要使用fixup_pointer()调整到物理地址，即此时的运行
+ * 地址。
+ * - 局部变量和代码都是地址无关的，所以无须fixup_pointer()调整。
  */
 unsigned long __head __startup_64(unsigned long physaddr,
 				  struct boot_params *bp)

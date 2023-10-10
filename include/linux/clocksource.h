@@ -78,7 +78,29 @@ struct module;
  * structure.
  *
  * 实现计时功能，用来提供时间
- * 区别于clock_event_device，用来提供定时功能
+ * xxxxxxxxxxxxxxxxxxxxxxxxxx
+ * - 区别于clock_event_device，用来提供定时功能
+ * xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+ *
+ * 上面的结论是错误的，clocksource和clock_event_device是两个时代下对时钟中断来
+ * 源的抽象：
+ * - clocksource只具有周期模式，典型周期为250HZ。用于支持ms级别的基于time wheel
+ *   的低精度时钟；
+ * - clock_event_device可处于one-shot模式。用于支持基于红黑树的高精度时钟hrtimer，
+ *   即红黑树中最左节点的过期时间被设置为one-shot模式的下次到期时间，事件触发之
+ *   后再将最做节点设置为one-shot模式的下次到期时间；
+ *
+ * 举个例子：
+ * # cat /sys/devices/system/clockevents/clockevent0/current_device
+ * lapic-deadline
+ *
+ * # cat /sys/devices/system/clockevents/broadcast/current_device
+ * hpet
+ *
+ * # cat /sys/devices/system/clocksource/clocksource0/available_clocksource
+ * tsc hpet acpi_pm
+ *
+ * 通过上面的例子可以得知：hpet既是一个clocksource，也是一个clock_event_device；
  */
 struct clocksource {
 	u64 (*read)(struct clocksource *cs);
@@ -96,7 +118,7 @@ struct clocksource {
 	 */
 	const char *name;
 	/*
-	 * 链接到全局的
+	 * 链接到全局的clocksource_list链表；
 	 */
 	struct list_head list;
 	/*

@@ -18,9 +18,22 @@
 /* Policies */
 enum {
 	MPOL_DEFAULT,
+	/*
+	 * 有限在指定节点分配内存，当内存不足时，选择离指定内存节点最近的节点进
+	 * 行内存分配；
+	 */
 	MPOL_PREFERRED,
+	/*
+	 * 必须在绑定的节点分配，如果内存不足，则进行swap；
+	 */
 	MPOL_BIND,
+	/*
+	 * 本地节点和远程节点均可允许内存分配；
+	 */
 	MPOL_INTERLEAVE,
+	/*
+	 * 优先在本地节点分配，如果内存不足，可以在远程节点分配；
+	 */
 	MPOL_LOCAL,
 	MPOL_MAX,	/* always last member of enum */
 };

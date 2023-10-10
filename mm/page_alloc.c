@@ -3838,7 +3838,7 @@ try_this_zone:
 				gfp_mask, alloc_flags, ac->migratetype);
 		if (page) {
 			/*
-			 * 对高阶原子类型、符合页、NO_WATERMARK等情况初始化page
+			 * 对高阶原子类型、复合页、NO_WATERMARK等情况初始化page
 			 * 中的标志位；
 			 */
 			prep_new_page(page, order, gfp_mask, alloc_flags);
@@ -3847,8 +3847,8 @@ try_this_zone:
 			 * If this is a high-order atomic allocation then check
 			 * if the pageblock should be reserved for the future
 			 *
-			 * 一个优化：是否将此次分配的整个页块保留为高阶原子分配
-			 * 的迁移类型；
+			 * 一个优化：是否将此次分配的page所在的整个pageblock保留
+			 * 为高阶原子分配的迁移类型；
 			 */
 			if (unlikely(order && (alloc_flags & ALLOC_HARDER)))
 				reserve_highatomic_pageblock(page, zone, order);

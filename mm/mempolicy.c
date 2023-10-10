@@ -2176,11 +2176,17 @@ EXPORT_SYMBOL(alloc_pages_vma);
  */
 struct page *alloc_pages_current(gfp_t gfp, unsigned order)
 {
+	/*
+	 * 使用默认策略；
+	 */
 	struct mempolicy *pol = &default_policy;
 	struct page *page;
 
 	/*
 	 * 中断上下文里分配内存时，选用default_policy
+	 * - 诶，中断上下文里还能分配内存？
+	 *
+	 * 如果不是在中断上下文里分配，则选用current的策略；
 	 */
 	if (!in_interrupt() && !(gfp & __GFP_THISNODE))
 		pol = get_task_policy(current);

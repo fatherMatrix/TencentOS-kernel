@@ -39,21 +39,49 @@ struct notifier_block;		/* in notifier.h */
 #endif
 
 struct vm_struct {
+	/*
+	 * 所有vm_struct组成一个单链表，链表头是vmlist
+	 */
 	struct vm_struct	*next;
+	/*
+	 * 虚拟地址空间区域的起始地址；
+	 */
 	void			*addr;
 	unsigned long		size;
 	unsigned long		flags;
+	/*
+	 * 这个区域映射的page列表；
+	 */
 	struct page		**pages;
+	/*
+	 * pages数组的长度；
+	 */
 	unsigned int		nr_pages;
+	/*
+	 * ioremap相关
+	 */
 	phys_addr_t		phys_addr;
 	const void		*caller;
 };
 
 struct vmap_area {
+	/*
+	 * 表示一个虚拟地址空间区域的开始地址；
+	 * - 这个值和vm->addr是相同的；
+	 */
 	unsigned long va_start;
+	/*
+	 * 结束地址；
+	 */
 	unsigned long va_end;
 
+	/*
+	 * 插入vmap_area_root或free_vmap_area_root红黑树；
+	 */
 	struct rb_node rb_node;         /* address sorted rbtree */
+	/*
+	 * 插入vmap_area_list或free_vmap_area_list链表；
+	 */
 	struct list_head list;          /* address sorted list */
 
 	/*
@@ -65,7 +93,14 @@ struct vmap_area {
 	 */
 	union {
 		unsigned long subtree_max_size; /* in "free" tree */
+		/*
+		 * 指向对应的vm_struct结构体；
+		 */
 		struct vm_struct *vm;           /* in "busy" tree */
+		/*
+		 * 用于加入到全局链表vmap_purge_list中；
+		 * - 用于lazy释放，减少碎片
+		 */
 		struct llist_node purge_list;   /* in purge list */
 	};
 };

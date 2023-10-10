@@ -96,6 +96,8 @@ enum clock_event_state {
  * @cpumask:		cpumask to indicate for which CPUs this device works
  * @list:		list head for the management code
  * @owner:		module reference
+ *
+ * 参见clocksource的注释；
  */
 struct clock_event_device {
 	void			(*event_handler)(struct clock_event_device *);

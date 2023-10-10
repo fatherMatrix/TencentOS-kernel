@@ -46,6 +46,10 @@ struct vfree_deferred {
 	struct llist_head list;
 	struct work_struct wq;
 };
+/*
+ * 该percpu变量的配置在vmalloc_init()中；
+ * - 将每个cpu上的vfree_deferred->wq.func都设置为了free_work()函数；
+ */
 static DEFINE_PER_CPU(struct vfree_deferred, vfree_deferred);
 
 static void __vunmap(const void *, int);
@@ -67,6 +71,9 @@ static void vunmap_pte_range(pmd_t *pmd, unsigned long addr, unsigned long end)
 
 	pte = pte_offset_kernel(pmd, addr);
 	do {
+		/*
+		 * 这里是清除了的
+		 */
 		pte_t ptent = ptep_get_and_clear(&init_mm, addr, pte);
 		WARN_ON(!pte_none(ptent) && !pte_present(ptent));
 	} while (pte++, addr += PAGE_SIZE, addr != end);
@@ -128,11 +135,34 @@ static void vunmap_page_range(unsigned long addr, unsigned long end)
 	unsigned long next;
 
 	BUG_ON(addr >= end);
+	/*
+	 * 得到addr在PGD中对应的pgd_t
+	 */
 	pgd = pgd_offset_k(addr);
 	do {
+		/*
+		 * 下一个pgd_t对应的虚地址
+		 * - 主要用于判断此循环的结束点
+		 */
 		next = pgd_addr_end(addr, end);
+		/*
+		 * 如果此页表项是空的，说明没有下一级页表，退出即可；
+		 * 如果此页表项是错误的，清除后返回即可，不再考虑下一级页表；
+		 * - 这一项都坏了，下级页表的位置都没办法确定是正确的，索性就不
+		 *   处理了吧；
+		 */
 		if (pgd_none_or_clear_bad(pgd))
 			continue;
+		/*
+		 * 走到这里，说明这一级页表项是有的，也有下一级页表项，要继续往
+		 * 下走。但问题是：这一级的pgd_t是啥时候被清除的？
+		 * - 这里确实不应该清除，因为要清除的地址范围可能仅处于这个pgd_t
+		 *   覆盖的地址范围中的一小段，且这一小段是处于第n级页表。这里把
+		 *   pgd_t也清除的话，那就是干掉了该pgd_t覆盖的整个地址范围；
+		 * - 而且除了PTE之外的各级页表本身就不应该被清除，他们指向的是其
+		 *   他页表，释放内存的时候释放的是pte_t指向的物理页，页表后面还
+		 *   是要用的；
+		 */
 		vunmap_p4d_range(pgd, addr, next);
 	} while (pgd++, addr = next, addr != end);
 }
@@ -230,6 +260,9 @@ static int vmap_page_range_noflush(unsigned long start, unsigned long end,
 	int nr = 0;
 
 	BUG_ON(addr >= end);
+	/*
+	 * 注意这里设置的init_mm主内核页表
+	 */
 	pgd = pgd_offset_k(addr);
 	do {
 		next = pgd_addr_end(addr, end);
@@ -246,7 +279,13 @@ static int vmap_page_range(unsigned long start, unsigned long end,
 {
 	int ret;
 
+	/*
+	 * 设置init_mm主内核页表
+	 */
 	ret = vmap_page_range_noflush(start, end, prot, pages);
+	/*
+	 * 没找到定义？
+	 */
 	flush_cache_vmap(start, end);
 	return ret;
 }
@@ -1015,6 +1054,9 @@ __alloc_vmap_area(unsigned long size, unsigned long align,
 	enum fit_type type;
 	int ret;
 
+	/*
+	 * 在free_vmap_area_root红黑树中快速找到一个符合条件的空间虚拟地址空间
+	 */
 	va = find_vmap_lowest_match(size, align, vstart);
 	if (unlikely(!va))
 		return vend;
@@ -1067,6 +1109,9 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 
 	might_sleep();
 
+	/*
+	 * 内存分配
+	 */
 	va = kmem_cache_alloc_node(vmap_area_cachep,
 			gfp_mask & GFP_RECLAIM_MASK, node);
 	if (unlikely(!va))
@@ -1109,11 +1154,16 @@ retry:
 	/*
 	 * If an allocation fails, the "vend" address is
 	 * returned. Therefore trigger the overflow path.
+	 *
+	 * 返回在free_vmap_area_root红黑树中找到的空闲虚拟地址空间
 	 */
 	addr = __alloc_vmap_area(size, align, vstart, vend);
 	if (unlikely(addr == vend))
 		goto overflow;
 
+	/*
+	 * 插入到vmap_area_root红黑树；
+	 */
 	va->va_start = addr;
 	va->va_end = addr + size;
 	va->vm = NULL;
@@ -1128,6 +1178,10 @@ retry:
 	return va;
 
 overflow:
+	/*
+	 * 没有找到空闲的虚拟地址空间，所以要集中释放一下lazy释放机制积攒的，期
+	 * 望可以回收到满足要求的虚拟地址空间；
+	 */
 	spin_unlock(&vmap_area_lock);
 	if (!purged) {
 		purge_vmap_area_lazy();
@@ -1261,6 +1315,10 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end)
 	/*
 	 * First make sure the mappings are removed from all page-tables
 	 * before they are freed.
+	 *
+	 * 主内核页表到其他内核页表的同步
+	 * - 这里同步的是前面对页表映射的取消动作，即将非主内核页表中该清零的地
+	 *   方清零；
 	 */
 	vmalloc_sync_unmappings();
 
@@ -1275,9 +1333,15 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end)
 			end = va->va_end;
 	}
 
+	/*
+	 * smp_call_function() + ipi中断
+	 */
 	flush_tlb_kernel_range(start, end);
 	resched_threshold = lazy_max_pages() << 1;
 
+	/*
+	 * 将vmap_purge_list链表中的vmap_area重新放回free_vmap_area_root红黑树；
+	 */
 	spin_lock(&vmap_area_lock);
 	llist_for_each_entry_safe(va, n_va, valist, purge_list) {
 		unsigned long nr = (va->va_end - va->va_start) >> PAGE_SHIFT;
@@ -1292,6 +1356,9 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end)
 
 		atomic_long_sub(nr, &vmap_lazy_nr);
 
+		/*
+		 * 要配置CONFIG_PREEMPTION后下面的cond_resched_lock()才会生效；
+		 */
 		if (atomic_long_read(&vmap_lazy_nr) < resched_threshold)
 			cond_resched_lock(&vmap_area_lock);
 	}
@@ -1351,10 +1418,17 @@ static void free_vmap_area_noflush(struct vmap_area *va)
 static void free_unmap_vmap_area(struct vmap_area *va)
 {
 	flush_cache_vunmap(va->va_start, va->va_end);
+	/*
+	 * 取消页表映射
+	 */
 	unmap_vmap_area(va);
 	if (debug_pagealloc_enabled_static())
 		flush_tlb_kernel_range(va->va_start, va->va_end);
 
+	/*
+	 * 首先，将vmap_area从vmap_area_root红黑树上摘下来；
+	 * 然后，将vmap_area链接到vmap_purge_list链表上，lazy回收；
+	 */
 	free_vmap_area_noflush(va);
 }
 
@@ -1859,6 +1933,10 @@ void __init vm_area_register_early(struct vm_struct *vm, size_t align)
 	vm_area_add_early(vm);
 }
 
+/*
+ * 看样子是将所有的空闲的内核虚地址空间都建立起vmap_area结构体，并保存在
+ * free_vmap_area_root和free_vmap_area_list中；
+ */
 static void vmap_init_free_space(void)
 {
 	unsigned long vmap_start = 1;
@@ -1915,15 +1993,25 @@ void __init vmalloc_init(void)
 		struct vmap_block_queue *vbq;
 		struct vfree_deferred *p;
 
+		/*
+		 * 初始化percpu的vmap_block_queue
+		 * - 作用是？
+		 */
 		vbq = &per_cpu(vmap_block_queue, i);
 		spin_lock_init(&vbq->lock);
 		INIT_LIST_HEAD(&vbq->free);
+		/*
+		 * 初始化percpu的vfree_deferred，将其func设置为free_work()
+		 */
 		p = &per_cpu(vfree_deferred, i);
 		init_llist_head(&p->list);
 		INIT_WORK(&p->wq, free_work);
 	}
 
 	/* Import existing vmlist entries. */
+	/*
+	 * 这部分已经存在的vm_struct是什么时候创建的？
+	 */
 	for (tmp = vmlist; tmp; tmp = tmp->next) {
 		va = kmem_cache_zalloc(vmap_area_cachep, GFP_NOWAIT);
 		if (WARN_ON_ONCE(!va))
@@ -2056,6 +2144,10 @@ static struct vm_struct *__get_vm_area_node(unsigned long size,
 		align = 1ul << clamp_t(int, get_count_order_long(size),
 				       PAGE_SHIFT, IOREMAP_MAX_ORDER);
 
+	/*
+	 * 分配vm_struct结构体内存
+	 * - 初始化为全0
+	 */
 	area = kzalloc_node(sizeof(*area), gfp_mask & GFP_RECLAIM_MASK, node);
 	if (unlikely(!area))
 		return NULL;
@@ -2063,12 +2155,20 @@ static struct vm_struct *__get_vm_area_node(unsigned long size,
 	if (!(flags & VM_NO_GUARD))
 		size += PAGE_SIZE;
 
+	/*
+	 * 分配vmap_area结构体
+	 * - 已经通过free_vmap_area_root红黑树找到了合适的空闲的虚拟地址空间；
+	 * - 已经将vmap_area插入到了vmap_area_root红黑树中
+	 */
 	va = alloc_vmap_area(size, align, start, end, node, gfp_mask);
 	if (IS_ERR(va)) {
 		kfree(area);
 		return NULL;
 	}
 
+	/*
+	 * 将vmap_area结构体中的必要字段写到vm_struct中；
+	 */
 	setup_vmalloc_vm(area, va, flags, caller);
 
 	return area;
@@ -2153,14 +2253,25 @@ struct vm_struct *remove_vm_area(const void *addr)
 	might_sleep();
 
 	spin_lock(&vmap_area_lock);
+	/*
+	 * 找到对应的vmap_area结构体
+	 */
 	va = __find_vmap_area((unsigned long)addr);
 	if (va && va->vm) {
 		struct vm_struct *vm = va->vm;
 
+		/*
+		 * 此时vmap_area->vm字段已经设置为NULL，在后面的函数
+		 * free_unmap_vmap_area()中可以复用此union字段将vmap_area结构体
+		 * 链接到vmap_purge_list链表中；
+		 */
 		va->vm = NULL;
 		spin_unlock(&vmap_area_lock);
 
 		kasan_free_shadow(vm);
+		/*
+		 * 取消页表映射，并将vmap_area挂到vmap_purge_list链表等待lazy回收；
+		 */
 		free_unmap_vmap_area(va);
 
 		return vm;
@@ -2188,6 +2299,10 @@ static void vm_remove_mappings(struct vm_struct *area, int deallocate_pages)
 	int flush_dmap = 0;
 	int i;
 
+	/*
+	 * 删除vmap_area;
+	 * 取消页表映射
+	 */
 	remove_vm_area(area->addr);
 
 	/* If this is not VM_FLUSH_RESET_PERMS memory, no need for the below. */
@@ -2238,6 +2353,9 @@ static void __vunmap(const void *addr, int deallocate_pages)
 			addr))
 		return;
 
+	/*
+	 * 在vmap_area_root红黑树中找到addr对应的vm_struct结构体；
+	 */
 	area = find_vm_area(addr);
 	if (unlikely(!area)) {
 		WARN(1, KERN_ERR "Trying to vfree() nonexistent vm area (%p)\n",
@@ -2248,8 +2366,16 @@ static void __vunmap(const void *addr, int deallocate_pages)
 	debug_check_no_locks_freed(area->addr, get_vm_area_size(area));
 	debug_check_no_obj_freed(area->addr, get_vm_area_size(area));
 
+	/*
+	 * 这里面主要处理的是：
+	 * 1. vmap_area
+	 * 2. 页表映射
+	 */ 
 	vm_remove_mappings(area, deallocate_pages);
 
+	/*
+	 * 释放对应的物理页；
+	 */
 	if (deallocate_pages) {
 		int i;
 
@@ -2278,6 +2404,14 @@ static inline void __vfree_deferred(const void *addr)
 	 */
 	struct vfree_deferred *p = raw_cpu_ptr(&vfree_deferred);
 
+	/*
+	 * llist_add()返回true意味着此添加操作之前链表是空的；
+	 * - 这里就是如果以前是空的，现在不为空了，则调度工作队列；
+	 * - 这里的(struct llist_node *)addr意图是：
+	 *   > 即然addr之乡的内存已经要被释放了，那么内存中的数据就不重要了，该
+	 *     内存可以随意使用。不如就把该内存的前8个字节用来作为一个要被挂载
+	 *     的struct llist_node结构体；
+	 */
 	if (llist_add((struct llist_node *)addr, &p->list))
 		schedule_work(&p->wq);
 }
@@ -2411,6 +2545,9 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	nr_pages = get_vm_area_size(area) >> PAGE_SHIFT;
 	array_size = (nr_pages * sizeof(struct page *));
 
+	/*
+	 * 分配vm_struct->pages数组本身的内存
+	 */
 	/* Please note that the recursion is strictly bounded. */
 	if (array_size > PAGE_SIZE) {
 		pages = __vmalloc_node(array_size, 1, nested_gfp|highmem_mask,
@@ -2428,6 +2565,9 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	area->pages = pages;
 	area->nr_pages = nr_pages;
 
+	/*
+	 * 分配实际需要的物理页
+	 */
 	for (i = 0; i < area->nr_pages; i++) {
 		struct page *page;
 
@@ -2436,6 +2576,12 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 		else
 			page = alloc_pages_node(node, alloc_mask|highmem_mask, 0);
 
+		/*
+		 * 分配不到足够的物理页的话，就把当前的这个vmalloc()的结果伪装为
+		 * 一个只有i个页的vmalloc()结果，并跳转调用__vfree()将其释放；
+		 * - 这里的vmalloc()结果其实并没有调用map_vm_area()去建立映射，
+		 *   此时可以直接调用__vfree()吗？
+		 */
 		if (unlikely(!page)) {
 			/* Successfully allocated i pages, free them in __vunmap() */
 			area->nr_pages = i;
@@ -2448,6 +2594,10 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	}
 	atomic_long_add(area->nr_pages, &nr_vmalloc_pages);
 
+	/*
+	 * 建立主内核页表中的映射
+	 * - 其他进程的只会在PGD这一级产生内核态的缺页异常，同步一下即可；
+	 */
 	if (map_vm_area(area, prot, pages))
 		goto fail;
 	return area->addr;
@@ -2491,11 +2641,19 @@ void *__vmalloc_node_range(unsigned long size, unsigned long align,
 	if (!size || (size >> PAGE_SHIFT) > totalram_pages())
 		goto fail;
 
+	/*
+	 * 获取vm_struct结构体
+	 * - 里面也分配的vmap_area结构体
+	 * - 通过free_vmap_area_root红黑树分配了空闲虚拟地址空间
+	 */
 	area = __get_vm_area_node(size, align, VM_ALLOC | VM_UNINITIALIZED |
 				vm_flags, start, end, node, gfp_mask, caller);
 	if (!area)
 		goto fail;
 
+	/*
+	 * 分配物理页、映射物理页
+	 */
 	addr = __vmalloc_area_node(area, gfp_mask, prot, node);
 	if (!addr)
 		return NULL;

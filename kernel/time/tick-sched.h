@@ -11,6 +11,7 @@ enum tick_device_mode {
 
 /*
  * 这是对时钟事件源设备的一层包装
+ * - 在引入动态时钟特性时引入；
  */
 struct tick_device {
 	struct clock_event_device *evtdev;

@@ -494,9 +494,19 @@ void smp_call_function_many(const struct cpumask *mask,
 		return;
 	}
 
+	/*
+	 * 每个cpu有一个call_function_data结构体，结构体内部又有一个percpu的
+	 * __call_single_data结构体；
+	 */
 	cfd = this_cpu_ptr(&cfd_data);
 
+	/*
+	 * 大概意思是：cfd->cpumask = mask & cpu_online_mask
+	 */
 	cpumask_and(cfd->cpumask, mask, cpu_online_mask);
+	/*
+	 * 把自己从cpumask中扣出来，on_each_cpu()中会执行自己cpu上该做的；
+	 */
 	__cpumask_clear_cpu(this_cpu, cfd->cpumask);
 
 	/* Some callers race with other cpus changing the passed mask */
@@ -507,6 +517,10 @@ void smp_call_function_many(const struct cpumask *mask,
 	for_each_cpu(cpu, cfd->cpumask) {
 		call_single_data_t *csd = per_cpu_ptr(cfd->csd, cpu);
 
+		/*
+		 * 发送方锁定这个lock
+		 * 处理方解锁这个lock
+		 */
 		csd_lock(csd);
 		if (wait)
 			csd->flags |= CSD_FLAG_SYNCHRONOUS;

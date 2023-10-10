@@ -203,6 +203,9 @@ static void vmalloc_sync(void)
 		struct page *page;
 
 		spin_lock(&pgd_lock);
+		/*
+		 * 所有用来做PGD的page都挂在了pgd_list链表上
+		 */
 		list_for_each_entry(page, &pgd_list, lru) {
 			spinlock_t *pgt_lock;
 

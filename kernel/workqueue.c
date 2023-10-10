@@ -1424,6 +1424,11 @@ static void insert_work(struct pool_workqueue *pwq, struct work_struct *work,
 	 */
 	smp_mb();
 
+	/*
+	 * 如果当前pool中没有正在运行的worker，则唤醒；
+	 * 如果有正在运行的worker，则由该worker决定是否需要唤醒更多的worker；
+	 * - 参见process_one_work()
+	 */
 	if (__need_more_worker(pool))
 		wake_up_worker(pool);
 }
@@ -2492,6 +2497,9 @@ static void set_pf_worker(bool val)
  * will be explained in rescuer_thread().
  *
  * Return: 0
+ *
+ * 谁负责来唤醒worker？
+ * - wake_up_worker()
  */
 static int worker_thread(void *__worker)
 {

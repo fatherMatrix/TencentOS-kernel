@@ -164,9 +164,9 @@ struct cred {
 	 * cap_bprm_set_creds
 	 *   get_file_caps
 	 *     清空cred->cap_permitted
-	 *     bprm_caps_from_vfs_caps			(2)-A
+	 *     bprm_caps_from_vfs_caps			(2)-A     sel4中到这里bset还是满的?
 	 *   handle_privileged_root
-	 *     特权用户cred->cap_permitted提权
+	 *     特权用户cred->cap_permitted提权                    sel4中这里使用削减的bset配置p?
 	 *   ...					(1)
 	 *   ...					(2)-B
 	 *   ...					(4)

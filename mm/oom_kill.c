@@ -645,11 +645,23 @@ done:
 	put_task_struct(tsk);
 }
 
+/*
+ * 为什么do_send_sig_info()后还需要oom_reaper()？
+ * - 因为通过信号迫使进程退出是异步的，且不一定能保证进程在恰当的时间退出（例如
+ *   进程本身被阻塞导致无法调度等），此时使用oom_reaper()先于进程exit进行内存回
+ *   收匿名页和swap内存；
+ */
 static int oom_reaper(void *unused)
 {
 	while (true) {
 		struct task_struct *tsk = NULL;
 
+		/*
+		 * 这里用信号量是不是更合适？因为信号量是可以进行计数的，这里用
+		 * wait_queue的话，能保证每个需要reap的task都被reap掉吗？
+		 * - 这里只有当条件（第二个参数）不成立时才会睡眠，如果成立会直
+		 *   接通过；所以比信号量更轻量化；
+		 */
 		wait_event_freezable(oom_reaper_wait, oom_reaper_list != NULL);
 		spin_lock(&oom_reaper_lock);
 		if (oom_reaper_list != NULL) {
@@ -668,6 +680,10 @@ static int oom_reaper(void *unused)
 static void wake_oom_reaper(struct task_struct *tsk)
 {
 	/* mm is already queued? */
+	/*
+	 * 设置并返回原来的值；
+	 * - 如果原来已经有内核路径设置过了，那么后续操作就不需要了；
+	 */
 	if (test_and_set_bit(MMF_OOM_REAP_QUEUED, &tsk->signal->oom_mm->flags))
 		return;
 
@@ -709,6 +725,9 @@ static void mark_oom_victim(struct task_struct *tsk)
 
 	WARN_ON(oom_killer_disabled);
 	/* OOM killer might race with memcg OOM */
+	/*
+	 * 设置TIF_MEMDIE并返回task_struct->flags中该位原来的值；
+	 */
 	if (test_and_set_tsk_thread_flag(tsk, TIF_MEMDIE))
 		return;
 
@@ -723,6 +742,8 @@ static void mark_oom_victim(struct task_struct *tsk)
 	 * if it is frozen because OOM killer wouldn't be able to free
 	 * any memory and livelock. freezing_slow_path will tell the freezer
 	 * that TIF_MEMDIE tasks should be ignored.
+	 *
+	 * 如果该task处于freeze阶段，则要将其唤醒；
 	 */
 	__thaw_task(tsk);
 	atomic_inc(&oom_victims);
@@ -855,8 +876,7 @@ static bool task_will_free_mem(struct task_struct *task)
 	 */
 	for_each_process(p) {
 		/*
-		 * 查看是否有其他进程共享了当前待评估进程的mm_struct；
-		 * - 为什么不同的进程间会存在共享mm的情况呢？
+		 * 查看当前进程的线程是否还在共享mm_struct；
 		 */
 		if (!process_shares_mm(p, mm))
 			continue;

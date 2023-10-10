@@ -574,6 +574,9 @@ static void __init mm_init(void)
 	kmemleak_init();
 	pgtable_init();
 	debug_objects_mem_init();
+	/*
+	 * vmalloc()相关的初始化操作
+	 */
 	vmalloc_init();
 	ioremap_huge_init();
 	/* Should be run before the first non-init thread is created */
@@ -1297,6 +1300,11 @@ static noinline void __init kernel_init_freeable(void)
 
 	cad_pid = task_pid(current);
 
+	/*
+	 * 主cpu的配置
+	 * - lapic timer
+	 * - 
+	 */
 	smp_prepare_cpus(setup_max_cpus);
 
 	/*

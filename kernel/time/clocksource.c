@@ -87,6 +87,9 @@ EXPORT_SYMBOL_GPL(clocks_calc_mult_shift);
  */
 static struct clocksource *curr_clocksource;
 static struct clocksource *suspend_clocksource;
+/*
+ * 系统中所有时钟源(clocksource)的链表，链表元素是clocksource->list；
+ */
 static LIST_HEAD(clocksource_list);
 static DEFINE_MUTEX(clocksource_mutex);
 static char override_name[CS_NAME_LEN];

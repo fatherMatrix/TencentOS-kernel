@@ -489,6 +489,10 @@ static void exit_mm(void)
 	 * 内部会触发内存释放操作；
 	 */
 	mmput(mm);
+	/*
+	 * oom_killer_disable()中会先等待oom_victims为0后才正式返回；
+	 * - 这里就是唤醒一下oom_killer_disable()中的睡眠；
+	 */
 	if (test_thread_flag(TIF_MEMDIE))
 		exit_oom_victim();
 }
@@ -877,6 +881,11 @@ void __noreturn do_exit(long code)
 	 * 设置进程状态为TASK_DEAD，然后schedule出去；
 	 * - 但要注意，进程退出时是没办法把自己完全清洗干净的（task_struct，内
 	 *   核栈等）；进程退出后首先会变为僵尸进程，等待父进程调用wait()来收尸
+	 *   ? schedule
+	 *       ...
+	 *         finish_task_switch
+	 *           put_task_stack
+	 *     所以到底是父进程来回收？还是调度出去后自己回收？
 	 *
 	 * 僵尸进程在哪里设置的？
 	 */

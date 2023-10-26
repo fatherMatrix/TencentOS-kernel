@@ -3660,6 +3660,9 @@ static int kvm_vcpu_ioctl_interrupt(struct kvm_vcpu *vcpu,
 	 * 如果内核里什么都没有(KVM_IRQCHIP_NONE)，都在qemu中模拟的，会进入下面
 	 * 的分支；主要是设置vcpu->arch.interrupt.nr = irq->irq；
 	 * - 什么都没有意味着lapic也没有；
+	 *
+	 * KVM_IRQCHIP_SPLIT模式设置的是pending_external_vector，两者区别参见
+	 * vcpu->arch.interrupt的注释；
 	 */
 	if (!irqchip_in_kernel(vcpu->kvm)) {
 		kvm_queue_interrupt(vcpu, irq->irq, false);
@@ -8572,6 +8575,9 @@ static int vcpu_run(struct kvm_vcpu *vcpu)
 
 		kvm_check_async_pf_completion(vcpu);
 
+		/*
+		 * 如果有信号，则在这里强制退出；
+		 */
 		if (signal_pending(current)) {
 			r = -EINTR;
 			vcpu->run->exit_reason = KVM_EXIT_INTR;

@@ -144,6 +144,9 @@
 #define		APIC_EILVT_MASKED	(1 << 16)
 
 #define APIC_BASE (fix_to_virt(FIX_APIC_BASE))
+/*
+ * 参见sdm v3: Table 11-6. Local APIC Register Address Map Supported by x2APIC
+ */
 #define APIC_BASE_MSR	0x800
 #define XAPIC_ENABLE	(1UL << 11)
 #define X2APIC_ENABLE	(1UL << 10)

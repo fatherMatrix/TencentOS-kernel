@@ -156,7 +156,9 @@ static const struct inode_operations proc_file_inode_operations = {
 /*
  * This function parses a name such as "tty/driver/serial", and
  * returns the struct proc_dir_entry for "/proc/tty/driver", and
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * returns "serial" in residual.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  */
 static int __xlate_proc_name(const char *name, struct proc_dir_entry **ret,
 			     const char **residual)
@@ -254,6 +256,9 @@ struct dentry *proc_lookup_de(struct inode *dir, struct dentry *dentry,
 	struct inode *inode;
 
 	read_lock(&proc_subdir_lock);
+	/*
+	 * 在parent中通过红黑树查找dentry->d_name.name对应的proc_dir_entry
+	 */
 	de = pde_subdir_find(de, dentry->d_name.name, dentry->d_name.len);
 	if (de) {
 		pde_get(de);
@@ -396,6 +401,10 @@ static struct proc_dir_entry *__proc_create(struct proc_dir_entry **parent,
 	const char *fn;
 	struct qstr qstr;
 
+	/*
+	 * parent返回待插入节点父节点对应的proc_dir_entry结构体；
+	 * fn返回待插入节点的最后分量；
+	 */
 	if (xlate_proc_name(name, parent, &fn) != 0)
 		goto out;
 	qstr.name = fn;

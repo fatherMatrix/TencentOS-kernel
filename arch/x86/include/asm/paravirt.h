@@ -642,6 +642,10 @@ static inline void __set_fixmap(unsigned /* enum fixed_addresses */ idx,
 static __always_inline void pv_queued_spin_lock_slowpath(struct qspinlock *lock,
 							u32 val)
 {
+	/*
+	 * pv_ops全局变量在声明时，将其设置为native_queued_spin_lock_slowpath()
+	 * kvm_spinlock_init()中，将其设置为__pv_queued_spin_lock_slowpath()
+	 */
 	PVOP_VCALL2(lock.queued_spin_lock_slowpath, lock, val);
 }
 

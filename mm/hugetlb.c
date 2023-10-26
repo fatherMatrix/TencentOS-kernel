@@ -41,8 +41,17 @@
 #include <linux/page_owner.h>
 #include "internal.h"
 
+/*
+ * 巨型页池的数量
+ */
 int hugetlb_max_hstate __read_mostly;
+/*
+ * 默认巨型页大小的选择id
+ */
 unsigned int default_hstate_idx;
+/*
+ * 不同页大小的巨型页池
+ */
 struct hstate hstates[HUGE_MAX_HSTATE];
 /*
  * Minimum page order among possible hugepage sizes, set to a proper value
@@ -2284,6 +2293,12 @@ found:
 	BUG_ON(!IS_ALIGNED(virt_to_phys(m), huge_page_size(h)));
 	/* Put them into a private list first because mem_map is not up yet */
 	INIT_LIST_HEAD(&m->list);
+	/*
+	 * 一开始mem_map还没准备好，先将分配好的巨型页放到私有链表
+	 * huge_boot_pages中；当巨页子系统初始化好之后，再把该链表中的巨型页放到
+	 * 对应的巨型页池中；
+	 * - hugetlb_init() -> gather_bootmem_prealloc()
+	 */
 	list_add(&m->list, &huge_boot_pages);
 	m->hstate = h;
 	return 1;
@@ -2308,8 +2323,15 @@ static void __init gather_bootmem_prealloc(void)
 		struct hstate *h = m->hstate;
 
 		WARN_ON(page_count(page) != 1);
+		/*
+		 * 将分配的巨型页内存对应的一串page结构体组织成复合页的形式
+		 */
 		prep_compound_huge_page(page, h->order);
 		WARN_ON(PageReserved(page));
+		/*
+		 * 操作复合页中与巨型页相关的字段，并将巨型页添加到对应的巨型页
+		 * 池中；
+		 */
 		prep_new_huge_page(h, page, page_to_nid(page));
 		put_page(page); /* free it into the hugepage allocator */
 
@@ -2318,6 +2340,8 @@ static void __init gather_bootmem_prealloc(void)
 		 * to restore the 'stolen' pages to totalram_pages in order to
 		 * fix confusing memory reports from free(1) and another
 		 * side-effects, like CommitLimit going negative.
+		 *
+		 * 修正内存统计，应该是bootmem分配内存是没有进行统计；
 		 */
 		if (hstate_is_gigantic(h))
 			adjust_managed_page_count(page, 1 << h->order);
@@ -2327,6 +2351,9 @@ static void __init gather_bootmem_prealloc(void)
 
 static void __init hugetlb_hstate_alloc_pages(struct hstate *h)
 {
+	/*
+	 * 
+	 */
 	unsigned long i;
 	nodemask_t *node_alloc_noretry;
 
@@ -2348,10 +2375,22 @@ static void __init hugetlb_hstate_alloc_pages(struct hstate *h)
 	if (node_alloc_noretry)
 		nodes_clear(*node_alloc_noretry);
 
+	/*
+	 * os会在两个不同的时间点调本函数，导致下面的两种分配方式会在合适的时间
+	 * 进入合适的分支；
+	 */
 	for (i = 0; i < h->max_huge_pages; ++i) {
+		/*
+		 * 如果巨型页长度超过页分配器支持的最大阶数，那么从引导内存分配
+		 * 器分配巨型页；
+		 */
 		if (hstate_is_gigantic(h)) {
 			if (!alloc_bootmem_huge_page(h))
 				break;
+		/*
+		 * 否则，从页分配器（伙伴系统？）
+		 * - 系统启动阶段，伙伴系统还没初始化好怎么办？
+		 */
 		} else if (!alloc_pool_huge_page(h,
 					 &node_states[N_MEMORY],
 					 node_alloc_noretry))
@@ -3016,6 +3055,9 @@ static int __init hugetlb_init(void)
 	/*
 	 * 伙伴系统可以分配的巨型页在这里分配到hstate中，1GB的巨型页伙伴系统分配不了，
 	 * 可以在系统启动阶段提前分配好；
+	 * - hugetlb_nrpages_setup()
+	 *   -> hugetlb_hstate_alloc_pages()
+	 *      -> alloc_bootmem_huge_page()
 	 */
 	hugetlb_init_hstates();
 	/*
@@ -3115,6 +3157,8 @@ static int __init hugetlb_nrpages_setup(char *s)
 	 * Global state is always initialized later in hugetlb_init.
 	 * But we need to allocate >= MAX_ORDER hstates here early to still
 	 * use the bootmem allocator.
+	 *
+	 * 负责预先分配指定数量的永久巨型页；
 	 */
 	if (hugetlb_max_hstate && parsed_hstate->order >= MAX_ORDER)
 		hugetlb_hstate_alloc_pages(parsed_hstate);
@@ -3123,6 +3167,10 @@ static int __init hugetlb_nrpages_setup(char *s)
 
 	return 1;
 }
+/*
+ * 在hugepages参数之前，有一个体系结构相关的hugepagesz参数，其对应的处理函数是
+ * setup_hugepagesz()；
+ */
 __setup("hugepages=", hugetlb_nrpages_setup);
 
 static int __init hugetlb_default_setup(char *s)

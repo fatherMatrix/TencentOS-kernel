@@ -10,19 +10,30 @@
 
 /*
  * Execute a iomap write on a segment of the mapping that spans a
+ *                                                        ^^^^^^^
  * contiguous range of pages that have identical block mapping state.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^
  *
  * This avoids the need to map pages individually, do individual allocations
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * for each page and most importantly avoid the need for filesystem specific
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * locking per page. Instead, all the operations are amortised over the entire
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * range of pages. It is assumed that the filesystems will lock whatever
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * resources they require in the iomap_begin call, and release them in the
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * iomap_end call.
+ * ^^^^^^^^^^^^^^^
  */
 loff_t
 iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 		const struct iomap_ops *ops, void *data, iomap_actor_t actor)
 {
+	/*
+	 * 用于保存数据的文件偏移到磁盘偏移间的映射
+	 */
 	struct iomap iomap = { 0 };
 	loff_t written = 0, ret;
 
@@ -39,7 +50,8 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	 * back out at this point as there is nothing to undo.
 	 *
 	 * 对xfs，对应函数xfs_file_iomap_begin()
-	 * - 
+	 * - 该接口主要作用是构建文件块和磁盘块的地址映射；
+	 * - 如果文件块在磁盘上没有对应的地址，则分配新的地址（相当于分配了磁盘块）；
 	 */
 	ret = ops->iomap_begin(inode, pos, length, flags, &iomap);
 	if (ret)
@@ -62,13 +74,19 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	 * failures exposing transient data.
 	 *
 	 * xfs中buffer io对应iomap_write_actor()
+	 * - 
 	 * xfs中direct io对应iomap_dio_actor()
+	 * - 该函数内部调用iomap_dio_bio_actor()，对iomap中的数据创建bio并调用
+	 *   submit_bio()将其提交到块层；
 	 */
 	written = actor(inode, pos, length, data, &iomap);
 
 	/*
 	 * Now the data has been copied, commit the range we've copied.  This
 	 * should not fail unless the filesystem has had a fatal error.
+	 *
+	 * 对xfs，对应函数xfs_file_iomap_end()
+	 * - 猜测：对于写操作，且有磁盘上空间的释放需求时，在这里做；
 	 */
 	if (ops->iomap_end) {
 		ret = ops->iomap_end(inode, pos, length,

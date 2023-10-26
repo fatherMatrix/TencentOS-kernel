@@ -203,6 +203,12 @@ static inline void native_apic_msr_write(u32 reg, u32 v)
 	    reg == APIC_LVR)
 		return;
 
+	/*
+	 * 右移4位的原因：
+	 * - 参见sdm v3:
+	 *   Table 11-6. Local APIC Register Address Map Supported by x2APIC
+	 *   的前两列；
+	 */
 	wrmsr(APIC_BASE_MSR + (reg >> 4), v, 0);
 }
 

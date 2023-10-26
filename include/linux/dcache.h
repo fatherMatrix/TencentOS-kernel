@@ -97,7 +97,7 @@ extern struct dentry_stat_t dentry_stat;
  *   	引节点
  *
  * - 正在使用状态：
- *   	正在被使用，d_lockref的值大于0，d_inode仍然指向相关的索引节点
+ *   	正在被使用，d_lockref的值大于0，d_inode指向相关的索引节点
  *
  * - 负状态：
  *   	与目录项关联的索引节点不存在，相应的磁盘索引节点已经删除

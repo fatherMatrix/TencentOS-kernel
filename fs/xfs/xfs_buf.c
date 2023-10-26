@@ -613,6 +613,9 @@ xfs_buf_find(
 	}
 
 	/* No match found */
+	/*
+	 * 当传入的参数中new_bp为NULL时，如果cache miss，则直接返回-ENOENT；
+	 */
 	if (!new_bp) {
 		XFS_STATS_INC(btp->bt_mount, xb_miss_locked);
 		spin_unlock(&pag->pag_buf_lock);
@@ -826,6 +829,10 @@ xfs_buf_read_map(
 
 	if (!(bp->b_flags & XBF_DONE)) {
 		XFS_STATS_INC(target->bt_mount, xb_get_read);
+		/*
+		 * 目前遇到过的该ops：
+		 * - xfs_bmbt_buf_ops
+		 */
 		bp->b_ops = ops;
 		_xfs_buf_read(bp, flags);
 		return bp;

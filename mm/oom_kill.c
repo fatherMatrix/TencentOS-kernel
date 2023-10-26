@@ -1090,7 +1090,13 @@ bool out_of_memory(struct oom_control *oc)
 	if (oom_killer_disabled)
 		return false;
 
+	/*
+	 * 如果oc->memcg为NULL，则进入下面的分支；
+	 */
 	if (!is_memcg_oom(oc)) {
+		/*
+		 * 调用oom_notify_list上注册的回调
+		 */
 		blocking_notifier_call_chain(&oom_notify_list, 0, &freed);
 		if (freed > 0)
 			/* Got some memory back in the last second. */
@@ -1103,7 +1109,9 @@ bool out_of_memory(struct oom_control *oc)
 	 * quickly exit and free its memory.
 	 *
 	 * 如果当前进程正因为各种原因将要退出，或者释放内存，则将当前进程作为OOM
-	 * 候选者，然后唤醒OOM reaper内核线程去进行收割，从而释放内存；
+	 * 候选者，然后唤醒OOM reaper内核线程先于current响应信号去进行内存收割，
+	 * 从而尽快释放内存；
+	 * - 详见oom_reaper()注释
 	 */
 	if (task_will_free_mem(current)) {
 		mark_oom_victim(current);

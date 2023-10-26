@@ -332,23 +332,62 @@ unsigned long hugetlb_get_unmapped_area(struct file *file, unsigned long addr,
 struct hstate {
 	int next_nid_to_alloc;
 	int next_nid_to_free;
+	/*
+	 * 巨型页尺寸的阶数
+	 */
 	unsigned int order;
+	/*
+	 * 巨型页页号的掩码，将虚拟地址和mask按位与，得到巨型页页号
+	 */
 	unsigned long mask;
+	/*
+	 * 永久巨型页的最大数量
+	 */
 	unsigned long max_huge_pages;
+	/*
+	 * 永巨型页的数量
+	 */
 	unsigned long nr_huge_pages;
+	/*
+	 * 空闲巨型页的数量
+	 */
 	unsigned long free_huge_pages;
 	unsigned long resv_huge_pages;
+	/*
+	 * 临时巨型页的数量
+	 */
 	unsigned long surplus_huge_pages;
+	/*
+	 * 临时巨型页的最大数量
+	 */
 	unsigned long nr_overcommit_huge_pages;
+	/*
+	 * 把已经分配出去的巨型页链接起来
+	 */
 	struct list_head hugepage_activelist;
+	/*
+	 * 每个内存节点一个空闲巨型页链表
+	 */
 	struct list_head hugepage_freelists[MAX_NUMNODES];
+	/*
+	 * 每个内存节点中巨型页的数量
+	 */
 	unsigned int nr_huge_pages_node[MAX_NUMNODES];
+	/*
+	 * 每个内存节点中空闲巨型页的数量
+	 */
 	unsigned int free_huge_pages_node[MAX_NUMNODES];
+	/*
+	 * 每个内存节点中临时巨型页的数量
+	 */
 	unsigned int surplus_huge_pages_node[MAX_NUMNODES];
 #ifdef CONFIG_CGROUP_HUGETLB
 	/* cgroup control files */
 	struct cftype cgroup_files[5];
 #endif
+	/*
+	 * 巨型页池的名称，格式是hugepages-<size>kB
+	 */
 	char name[HSTATE_NAME_LEN];
 };
 

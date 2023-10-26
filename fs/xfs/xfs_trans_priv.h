@@ -53,6 +53,10 @@ struct xfs_ail_cursor {
  */
 struct xfs_ail {
 	struct xfs_mount	*ail_mount;
+	/*
+	 * 为kthread_run()创建的xfsaild内核线程
+	 * - 参见xfs_trans_ail_init()
+	 */
 	struct task_struct	*ail_task;
 	struct list_head	ail_head;
 	xfs_lsn_t		ail_target;

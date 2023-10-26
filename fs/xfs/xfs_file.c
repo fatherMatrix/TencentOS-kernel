@@ -578,6 +578,8 @@ xfs_file_dio_aio_write(
 
 	trace_xfs_file_direct_write(ip, count, iocb->ki_pos);
 	/*
+	 * 前面的代码都是在做各种参数检查和对齐；
+	 *
 	 * 关键的读写动作
 	 */
 	ret = iomap_dio_rw(iocb, from, &xfs_iomap_ops, &xfs_dio_write_ops);
@@ -776,6 +778,9 @@ xfs_file_write_iter(
 		 * allow an operation to fall back to buffered mode.
 		 */
 		ret = xfs_file_dio_aio_write(iocb, from);
+		/*
+		 * 对于-EREMCHG，允许回退到buffer io；
+		 */
 		if (ret != -EREMCHG)
 			return ret;
 	}

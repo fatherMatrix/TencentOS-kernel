@@ -22,8 +22,14 @@
 #define IOMAP_DIO_WRITE		(1 << 30)
 #define IOMAP_DIO_DIRTY		(1 << 31)
 
+/*
+ * 描述一个dio操作；
+ */
 struct iomap_dio {
 	struct kiocb		*iocb;
+	/*
+	 * 当前只有一个成员字段：end_io；
+	 */
 	const struct iomap_dio_ops *dops;
 	loff_t			i_size;
 	loff_t			size;
@@ -432,6 +438,9 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	if (!count)
 		return 0;
 
+	/*
+	 * 为iomap_dio结构体分配内存；
+	 */
 	dio = kmalloc(sizeof(*dio), GFP_KERNEL);
 	if (!dio)
 		return -ENOMEM;
@@ -445,6 +454,7 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	dio->i_size = i_size_read(inode);
 	/*
 	 * 对xfs，dops是xfs_dio_write_ops；
+	 * - 其实只有一个字段，就是end_io，用于设置dio结束时的回调；
 	 */
 	dio->dops = dops;
 	dio->error = 0;

@@ -258,9 +258,15 @@ static int proc_root_getattr(const struct path *path, struct kstat *stat,
 
 static struct dentry *proc_root_lookup(struct inode * dir, struct dentry * dentry, unsigned int flags)
 {
+	/*
+	 * 这个是/proc/<pid>的查找
+	 */
 	if (!proc_pid_lookup(dentry, flags))
 		return NULL;
 
+	/*
+	 * 这个是处理/proc/xxx的查找
+	 */
 	return proc_lookup(dir, dentry, flags);
 }
 

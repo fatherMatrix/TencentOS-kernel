@@ -28,6 +28,20 @@ static __always_inline u32 queued_fetch_set_pending_acquire(struct qspinlock *lo
 }
 
 #ifdef CONFIG_PARAVIRT_SPINLOCKS
+/*
+ * native_queued_spin_lock_slowpath()和__pv_queued_spin_lock_slowpath()在哪里定义呢？
+ * - 对于native_queued_spin_lock_slowpath()，在kernel/locking/qspinlock.c中，先
+ *   声明了一个正经的queued_spin_lock_slowpath()函数，但是，在声明该函数的上面，
+ *   写了一句：
+ *   	#define queued_spin_lock_slowpath       native_queued_spin_lock_slowpath
+ *   此时，后面这个queued_spin_lock_slowpath()声明就会被预处理器替换为native_xxx；
+ *   该部分为#ifndef _GEN_PV_LOCK_SLOWPATH宏控制区域；
+ * - 对于__pv_queued_spin_lock_slowpath()，是在kernel/locking/qspinlock.c的结尾
+ *   处声明了_GEN_PV_LOCK_SLOWPATH宏后重新#include "qspinlock.c"。而该宏激活的
+ *   作用域内、#include "qspinlock.c"之前写了一句：
+ *   	#define queued_spin_lock_slowpath       __pv_queued_spin_lock_slowpath
+ *   从而生成__pv_xxx代码；
+ */
 extern void native_queued_spin_lock_slowpath(struct qspinlock *lock, u32 val);
 extern void __pv_init_lock_hash(void);
 extern void __pv_queued_spin_lock_slowpath(struct qspinlock *lock, u32 val);

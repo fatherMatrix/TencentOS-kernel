@@ -58,8 +58,17 @@ struct vm_fault;
 struct iomap_page_ops;
 
 struct iomap {
+	/*
+	 * 磁盘偏移
+	 */
 	u64			addr; /* disk offset of mapping, bytes */
+	/*
+	 * 文件偏移
+	 */
 	loff_t			offset;	/* file offset of mapping, bytes */
+	/*
+	 * 长度
+	 */
 	u64			length;	/* length of mapping, bytes */
 	u16			type;	/* type of mapping */
 	u16			flags;	/* flags for mapping */

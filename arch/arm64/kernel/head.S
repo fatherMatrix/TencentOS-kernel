@@ -106,7 +106,13 @@ pe_header:
 	 *                                        current RELR displacement
 	 */
 ENTRY(stext)
+	/*
+	 * 保存boot参数
+	 */
 	bl	preserve_boot_args
+	/*
+	 * 异常级别的切换以及不同级别的部分控制寄存器设置
+	 */
 	bl	el2_setup			// Drop to EL1, w0=cpu_boot_mode
 	adrp	x23, __PHYS_OFFSET
 	and	x23, x23, MIN_KIMG_ALIGN - 1	// KASLR offset, defaults to 0
@@ -126,9 +132,15 @@ ENDPROC(stext)
  * Preserve the arguments passed by the bootloader in x0 .. x3
  */
 preserve_boot_args:
+	/*
+	 * 将fdt首地址暂时存放至x21，释放x0用于其他目的
+	 */
 	mov	x21, x0				// x21=FDT
 
 	adr_l	x0, boot_args			// record the contents of
+	/*
+	 * 下面这两部依次将x21, x1, x2, x3存到boot_args中
+	 */
 	stp	x21, x1, [x0]			// x0 .. x3 at kernel entry
 	stp	x2, x3, [x0, #16]
 

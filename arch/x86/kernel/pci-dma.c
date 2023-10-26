@@ -124,6 +124,11 @@ static __init int iommu_setup(char *p)
 	return 0;
 }
 early_param("iommu", iommu_setup);
+/*
+ * 下面这个注释是为了方便以后我用grep -rnE "setup.*iommu="来搜索到这个函数；
+	__setup("iommu=", iommu_setup);
+ * 不能有*，哈哈哈；
+ */
 
 static int __init pci_iommu_init(void)
 {

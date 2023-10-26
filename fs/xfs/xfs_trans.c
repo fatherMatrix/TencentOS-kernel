@@ -773,7 +773,7 @@ xfs_trans_add_item(
 	ASSERT(!test_bit(XFS_LI_DIRTY, &lip->li_flags));
 
 	/*
-	 * 将log item添加到xfs-trans->t_items链表
+	 * 将log item添加到xfs_trans->t_items链表
 	 */
 	list_add_tail(&lip->li_trans, &tp->t_items);
 	trace_xfs_trans_add_item(tp, _RET_IP_);

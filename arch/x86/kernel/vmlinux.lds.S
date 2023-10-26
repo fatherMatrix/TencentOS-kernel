@@ -118,7 +118,10 @@ SECTIONS
 #endif
 
 	/* Text and read-only data */
-	/* AT后面跟的是加载地址 */
+	/*
+	 * AT后面跟的是加载地址；
+	 * 对64位来说，LOAD_OFFSET就是__START_KERNEL_map
+	 */
 	.text :  AT(ADDR(.text) - LOAD_OFFSET) {
 		_text = .;
 		_stext = .;

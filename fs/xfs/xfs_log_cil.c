@@ -948,6 +948,10 @@ xlog_cil_push_now(
 	ASSERT(push_seq && push_seq <= cil->xc_current_sequence);
 
 	/* start on any pending background push to minimise wait time on it */
+	/*
+	 * 这里对应xlog_cil_push_work
+	 * - 参见xlog_cil_init()
+	 */
 	flush_work(&cil->xc_push_work);
 
 	/*

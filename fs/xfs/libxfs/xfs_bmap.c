@@ -1198,8 +1198,12 @@ xfs_iread_extents(
 	/*
 	 * Go down the tree until leaf level is reached, following the first
 	 * pointer (leftmost) at each level.
+	 *
+	 * 这里为什么不能用一个变量单独记录leftmost叶节点呢？
 	 */
 	while (level-- > 0) {
+		/* * 通过xfs_buf读取bno
+		 */
 		error = xfs_btree_read_bufl(mp, tp, bno, &bp,
 				XFS_BMAP_BTREE_REF, &xfs_bmbt_buf_ops);
 		if (error)
@@ -1216,6 +1220,8 @@ xfs_iread_extents(
 
 	/*
 	 * Here with bp and block set to the leftmost leaf node in the tree.
+	 *
+	 * 怎么确保这个时候xfs_ifork->if_root都加载进来了？
 	 */
 	i = 0;
 	xfs_iext_first(ifp, &icur);
@@ -1241,6 +1247,7 @@ xfs_iread_extents(
 		}
 		/*
 		 * Read-ahead the next leaf block, if any.
+		 * - 叶子节点的左右兄弟应该是用于链表指针了；
 		 */
 		nextbno = be64_to_cpu(block->bb_u.l.bb_rightsib);
 		if (nextbno != NULLFSBLOCK)
@@ -1248,11 +1255,20 @@ xfs_iread_extents(
 					     &xfs_bmbt_buf_ops);
 		/*
 		 * Copy records into the extent records.
+		 *
+		 * 在block中找到第一个xfs_bmbt_rec_t；
 		 */
 		frp = XFS_BMBT_REC_ADDR(mp, block, 1);
+		/*
+		 * 将block中的xfs_bmbt_rec_t转换为xfs_bmbt_irec_t，并插入到内存
+		 * 中的xfs_ifork->if_root表示的b+树中；
+		 */
 		for (j = 0; j < num_recs; j++, frp++, i++) {
 			xfs_failaddr_t	fa;
 
+			/*
+			 * 将xfs_bmbt_rec_t转换到xfs_bmbt_irec_t中
+			 */
 			xfs_bmbt_disk_get_all(frp, &new);
 			fa = xfs_bmap_validate_extent(ip, whichfork, &new);
 			if (fa) {
@@ -1262,6 +1278,10 @@ xfs_iread_extents(
 						frp, sizeof(*frp), fa);
 				goto out_brelse;
 			}
+			/*
+			 * 将xfs_bmbt_irec_t转换为xfs_iext_rec插入到
+			 * xfs_ifork->if_root中；
+			 */
 			xfs_iext_insert(ip, &icur, &new, state);
 			trace_xfs_read_extent(ip, &icur, state, _THIS_IP_);
 			xfs_iext_next(ifp, &icur);
@@ -1400,12 +1420,18 @@ xfs_bmap_last_extent(
 	struct xfs_iext_cursor	icur;
 	int			error;
 
+	/*
+	 * 保证extent btree全部读入内存；
+	 */
 	if (!(ifp->if_flags & XFS_IFEXTENTS)) {
 		error = xfs_iread_extents(tp, ip, whichfork);
 		if (error)
 			return error;
 	}
 
+	/*
+	 * 这个就是纯粹的内存操作了
+	 */
 	xfs_iext_last(ifp, &icur);
 	if (!xfs_iext_get_extent(ifp, &icur, rec))
 		*is_empty = 1;
@@ -3709,6 +3735,9 @@ xfs_bmapi_trim_map(
 		return;
 	}
 
+	/*
+	 * 还能有这种情况？
+	 */
 	if (obno > *bno)
 		*bno = obno;
 	ASSERT((*bno >= obno) || (n == 0));
@@ -3789,6 +3818,10 @@ xfs_bmapi_update_map(
 
 /*
  * Map file blocks to filesystem blocks without allocation.
+ *
+ * 这里mval应该是个数组，nmap表示其数组元素个数；本函数应该是可以读取区间[bno,
+ * bno+len]的最多nmap个extent，且如果在读取多个extent时出了错误，则通过nmap返回
+ * 正确读取的extent个数；
  */
 int
 xfs_bmapi_read(
@@ -3828,6 +3861,9 @@ xfs_bmapi_read(
 
 	XFS_STATS_INC(mp, xs_blk_mapr);
 
+	/*
+	 * 在xfs_inode中根据whichfork取出对应的fork出来；
+	 */
 	ifp = XFS_IFORK_PTR(ip, whichfork);
 	if (!ifp) {
 		/* No CoW fork?  Return a hole. */
@@ -3853,12 +3889,20 @@ xfs_bmapi_read(
 		return -EFSCORRUPTED;
 	}
 
+	/*
+	 * 如果不是整个extent都被读进内存了，则读盘；
+	 * - 保证整个extent信息都在内存里
+	 */
 	if (!(ifp->if_flags & XFS_IFEXTENTS)) {
 		error = xfs_iread_extents(NULL, ip, whichfork);
 		if (error)
 			return error;
 	}
 
+	/*
+	 * 找到包含bno的extent
+	 * - 关注一些本函数注释中的波浪线部分
+	 */
 	if (!xfs_iext_lookup_extent(ip, ifp, bno, &icur, &got))
 		eof = true;
 	end = bno + len;
@@ -3868,6 +3912,10 @@ xfs_bmapi_read(
 		/* Reading past eof, act as though there's a hole up to end. */
 		if (eof)
 			got.br_startoff = end;
+		/*
+		 * 有这种情况是因为上面的xfs_iext_lookup_extent()有可能返回一个
+		 * br_startoff > bno的第一个extent，即bno位于hole中；
+		 */
 		if (got.br_startoff > bno) {
 			/* Reading in a hole.  */
 			mval->br_startoff = bno;

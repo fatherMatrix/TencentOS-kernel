@@ -1966,6 +1966,9 @@ static inline void try_to_enable_x2apic(int remap_mode) { }
 static inline void __x2apic_enable(void) { }
 #endif /* !CONFIG_X86_X2APIC */
 
+/*
+ * IR表示的是Interrupt Remapping
+ */
 void __init enable_IR_x2apic(void)
 {
 	unsigned long flags;

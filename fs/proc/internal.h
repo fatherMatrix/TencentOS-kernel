@@ -38,6 +38,10 @@ struct proc_dir_entry {
 	/* protects ->pde_openers and all struct pde_opener instances */
 	spinlock_t pde_unload_lock;
 	struct completion *pde_unload_completion;
+	/*
+	 * /proc/中的文件inode->i_op来自于这里；
+	 * - 参见proc_get_inode()
+	 */
 	const struct inode_operations *proc_iops;
 	const struct file_operations *proc_fops;
 	const struct dentry_operations *proc_dops;

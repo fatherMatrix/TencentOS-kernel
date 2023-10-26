@@ -3906,9 +3906,17 @@ static inline bool vma_is_accessible(struct vm_area_struct *vma)
 static vm_fault_t create_huge_pud(struct vm_fault *vmf)
 {
 #ifdef CONFIG_TRANSPARENT_HUGEPAGE
-	/* No support for anonymous transparent PUD pages yet */
+	/*
+	 * No support for anonymous transparent PUD pages yet
+	 *
+	 * 哦吼，果然，透明巨型页的匿名页是没办法支持1GB的
+	 * - 因为这个时候已经没办法通过页分配器分配连续的1GB物理内存了
+	 */
 	if (vma_is_anonymous(vmf->vma))
 		return VM_FAULT_FALLBACK;
+	/*
+	 * 我猜测文件系统应该也没办法实现1GB的透明巨型页吧？
+	 */
 	if (vmf->vma->vm_ops->huge_fault)
 		return vmf->vma->vm_ops->huge_fault(vmf, PE_SIZE_PUD);
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */

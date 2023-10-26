@@ -2360,7 +2360,7 @@ int kvm_apic_accept_pic_intr(struct kvm_vcpu *vcpu)
 	 * 多核系统上只会有一个核对应的LAPIC的LVT0的delivery mode设置为了
 	 * EXTINT模式，用于模拟8259a
 	 *
-	 * 这里会检查LAPIC海要不要接受pic的中断，如果不接受，本函数会返回0，外
+	 * 这里会检查LAPIC还要不要接受pic的中断，如果不接受，本函数会返回0，外
 	 * 面就不会执行kvm_make_request和kvm_vcpu_kick；
 	 */
 	if ((lvt0 & APIC_LVT_MASKED) == 0 &&

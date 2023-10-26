@@ -158,6 +158,9 @@ xfs_iomap_eof_align_last_fsb(
 		error = xfs_bmap_eof(ip, new_last_fsb, XFS_DATA_FORK, &eof);
 		if (error)
 			return error;
+		/*
+		 * 如果new_last_fsb处于last extent之外
+		 */
 		if (eof)
 			*last_fsb = new_last_fsb;
 	}
@@ -187,7 +190,13 @@ xfs_iomap_write_direct(
 	int		bmapi_flags = XFS_BMAPI_PREALLOC;
 	uint		tflags = 0;
 
+	/*
+	 * 表示是否为一个real time inode
+	 */
 	rt = XFS_IS_REALTIME_INODE(ip);
+	/*
+	 * 获取extent size
+	 */
 	extsz = xfs_get_extsz_hint(ip);
 	lockmode = XFS_ILOCK_SHARED;	/* locked by caller */
 
@@ -198,7 +207,11 @@ xfs_iomap_write_direct(
 	if ((offset + count) > XFS_ISIZE(ip)) {
 		/*
 		 * Assert that the in-core extent list is present since this can
+		 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		 * call xfs_iread_extents() and we only have the ilock shared.
+		 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+		 * xfs_iread_extents()中可能要读写磁盘？
+		 *
 		 * This should be safe because the lock was held around a bmapi
 		 * call in the caller and we only need it to access the in-core
 		 * list.
@@ -225,6 +238,9 @@ xfs_iomap_write_direct(
 		quota_flag = XFS_QMOPT_RES_RTBLKS;
 	} else {
 		resrtextents = 0;
+		/*
+		 * 计算需要保留的磁盘空间
+		 */
 		resblks = qblocks = XFS_DIOSTRAT_SPACE_RES(mp, resaligned);
 		quota_flag = XFS_QMOPT_RES_REGBLKS;
 	}
@@ -937,6 +953,9 @@ xfs_file_iomap_begin(
 {
 	struct xfs_inode	*ip = XFS_I(inode);
 	struct xfs_mount	*mp = ip->i_mount;
+	/*
+	 * 表示一个data extent，内存数据结构
+	 */
 	struct xfs_bmbt_irec	imap;
 	xfs_fileoff_t		offset_fsb, end_fsb;
 	int			nimaps = 1, error = 0;
@@ -965,11 +984,16 @@ xfs_file_iomap_begin(
 	 * check for as many conditions that would result in blocking as
 	 * possible. This removes most of the non-blocking checks from the
 	 * mapping code below.
+	 *
+	 * 加锁
 	 */
 	error = xfs_ilock_for_iomap(ip, flags, &lockmode);
 	if (error)
 		return error;
 
+	/*
+	 * 不允许写入后文件总长度大于xfs_mount->m_super->s_maxbytes
+	 */
 	ASSERT(offset <= mp->m_super->s_maxbytes);
 	if (offset > mp->m_super->s_maxbytes - length)
 		length = mp->m_super->s_maxbytes - offset;
@@ -979,6 +1003,15 @@ xfs_file_iomap_begin(
 	offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	end_fsb = XFS_B_TO_FSB(mp, offset + length);
 
+	/*
+	 * 对于读操作，这里就是找到[offset_fsb, end_fsb)/]?这个区间的映射；
+	 * - 最后一个参数为0表示一个DATA_FORK；
+	 *
+	 * 理论上说，这里只有一个xfs_bmbt_irec，如果[offset_fsb, end_fsb)/]?跨
+	 * 了两个extent怎么办？
+	 * - [offset, end_fsb)/]?肯定是连续的，两个连续的extent应该会被合并为一
+	 *   个extent的吧？
+	 */
 	error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb, &imap,
 			       &nimaps, 0);
 	if (error)
@@ -991,9 +1024,17 @@ xfs_file_iomap_begin(
 			goto out_unlock;
 	}
 
+	/*
+	 * 对于读操作来说，上面通过xfs_bmapi_read()找到映射后，就没有可做的了；
+	 * 直接退出本函数；
+	 */
 	/* Non-modifying mapping requested, so we are done */
 	if (!(flags & (IOMAP_WRITE | IOMAP_ZERO)))
 		goto out_found;
+
+	/*
+	 * 对于写操作，可能还要分配磁盘空间等；
+	 */
 
 	/*
 	 * Break shared extents if necessary. Checks for non-blocking IO have

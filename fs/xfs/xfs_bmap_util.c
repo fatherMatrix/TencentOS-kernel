@@ -182,6 +182,8 @@ xfs_bmap_rtalloc(
  * Check if the endoff is outside the last extent. If so the caller will grow
  * the allocation to a stripe unit boundary.  All offsets are considered outside
  * the end of file for an empty fork, so 1 is returned in *eof in that case.
+ *
+ * 检查endoff是否在last extent之外，如果是的话，通过eof返回1；
  */
 int
 xfs_bmap_eof(

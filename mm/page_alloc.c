@@ -4010,6 +4010,10 @@ __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
 	 * failures more gracefully we should just bail out here.
 	 */
 
+	/*
+	 * OOM killer回收到的内存有可能是其他node上的，当本次内存申请指定了当前
+	 * node时，OOM killer要跳过；
+	 */
 	/* The OOM killer may not free memory on a specific node */
 	if (gfp_mask & __GFP_THISNODE)
 		goto out;

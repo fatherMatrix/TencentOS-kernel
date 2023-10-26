@@ -605,9 +605,18 @@ xfs_is_quota_inode(struct xfs_sb *sbp, xfs_ino_t ino)
  * File system block to byte conversions.
  */
 #define XFS_FSB_TO_B(mp,fsbno)	((xfs_fsize_t)(fsbno) << (mp)->m_sb.sb_blocklog)
+/*
+ * 猜测：
+ * - XFS_B_TO_FSBT()用于计算起始位置（该结果就是要写的第一个块）
+ * - XFS_B_TO_FSB()用于计算结束位置（该结果就是第一个不能写的块，即最后一个可写
+ *   的块号+1）
+ */
 #define XFS_B_TO_FSB(mp,b)	\
 	((((uint64_t)(b)) + (mp)->m_blockmask) >> (mp)->m_sb.sb_blocklog)
 #define XFS_B_TO_FSBT(mp,b)	(((uint64_t)(b)) >> (mp)->m_sb.sb_blocklog)
+/*
+ * 得到b在一个blockszie中的偏移；
+ */
 #define XFS_B_FSB_OFFSET(mp,b)	((b) & (mp)->m_blockmask)
 
 /*
@@ -663,6 +672,9 @@ typedef struct xfs_agf {
 	__be32		agf_rmap_blocks;	/* rmapbt blocks used */
 	__be32		agf_refcount_blocks;	/* refcountbt blocks used */
 
+	/*
+	 * refcount tree的根节点和层级
+	 */
 	__be32		agf_refcount_root;	/* refcount tree root block */
 	__be32		agf_refcount_level;	/* refcount btree levels */
 
@@ -852,10 +864,16 @@ typedef struct xfs_timestamp {
  * On-disk inode structure.
  *
  * This is just the header or "dinode core", the inode is expanded to fill a
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * variable size the leftover area split into a data and an attribute fork.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * The format of the data and attribute fork depends on the format of the
  * inode as indicated by di_format and di_aformat.  To access the data and
  * attribute use the XFS_DFORK_DPTR, XFS_DFORK_APTR, and XFS_DFORK_PTR macros
+ *                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ *                   上面这三个宏作用是在磁盘上的xfs_dinode中获取data fork和
+ *                   attr fork，XFS_IFORK_xxx是在内存中的xfs_inode中获取对应的
+ *                   fork;
  * below.
  *
  * There is a very similar struct icdinode in xfs_inode which matches the
@@ -864,6 +882,8 @@ typedef struct xfs_timestamp {
  *
  * Note: di_flushiter is only used by v1/2 inodes - it's effectively a zeroed
  * padding field for v3 inodes.
+ *
+ * xfs inode磁盘数据结构
  */
 #define	XFS_DINODE_MAGIC		0x494e	/* 'IN' */
 typedef struct xfs_dinode {
@@ -887,6 +907,10 @@ typedef struct xfs_dinode {
 	__be32		di_extsize;	/* basic/minimum extent size for file */
 	__be32		di_nextents;	/* number of extents in data fork */
 	__be16		di_anextents;	/* number of extents in attribute fork*/
+	/*
+	 * data fork是紧跟在xfs_dinode后面的；
+	 * attr fork跟在data fork的后面，起始位置的偏移由di_forkoff << 3确定；
+	 */
 	__u8		di_forkoff;	/* attr fork offs, <<3 for 64b align */
 	__s8		di_aformat;	/* format of attr fork's data */
 	__be32		di_dmevmask;	/* DMIG event mask */
@@ -1561,6 +1585,16 @@ typedef struct xfs_bmdr_block {
 
 #define BMBT_STARTOFF_MASK	((1ULL << BMBT_STARTOFF_BITLEN) - 1)
 
+/*
+ * 磁盘数据结构，表示一个b+树叶子结点的record，格式如下：
+ * +------+---------------------------+-----------------------+-------------+
+ * | 127  | 126 - 73                  | 72 - 21               | 20 - 0      |
+ * +------+---------------------------+-----------------------+-------------+
+ * | flag | logical file block offset | absolute block number | # of blocks |
+ * +------+---------------------------+-----------------------+-------------+
+ * - 参见xfs_filesystem_structure:Data Extents
+ * - 对应的内存数据结构是xfs_bmbt_irec
+ */
 typedef struct xfs_bmbt_rec {
 	__be64			l0, l1;
 } xfs_bmbt_rec_t;
@@ -1619,6 +1653,10 @@ typedef __be64 xfs_bmbt_ptr_t, xfs_bmdr_ptr_t;
  */
 /* short form block header */
 struct xfs_btree_block_shdr {
+	/*
+	 * 对于叶子结点，这两个字段应该是用于链表指针了；
+	 * 对于内部节点，这两个字段用来干嘛了？	
+	 */
 	__be32		bb_leftsib;
 	__be32		bb_rightsib;
 
@@ -1642,6 +1680,9 @@ struct xfs_btree_block_lhdr {
 	__be32		bb_pad; /* padding for alignment */
 };
 
+/*
+ * 磁盘上btree的一个block
+ */
 struct xfs_btree_block {
 	__be32		bb_magic;	/* magic number for block type */
 	__be16		bb_level;	/* 0 is a leaf */

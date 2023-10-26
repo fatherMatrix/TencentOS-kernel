@@ -202,6 +202,7 @@ static struct super_block *alloc_super(struct file_system_type *type, int flags,
 {
 	/*
 	 * 分配super_block结构体对应的内存
+	 * - 分配的super_block默认为全0；
 	 */
 	struct super_block *s = kzalloc(sizeof(struct super_block),  GFP_USER);
 	static const struct super_operations default_op;

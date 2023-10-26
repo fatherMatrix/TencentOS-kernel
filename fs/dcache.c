@@ -3205,8 +3205,16 @@ out_err:
  * In that case, we know that the inode will be a regular file, and also this
  * will only occur during atomic_open. So we need to check for the dentry
  * being already hashed only in the final case.
+ *
+ * 将一个断开连接的dentry对象连接到dentry树中。
+ * - 如果inode表示目录之外的文件系统对象，则直接调用d_add即可；
+ * - 如果inode表示一个目录，则需确保只有一个dentry别名存在；
+ *   - 为什么？
  */
 struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry)
+/*               ^^^^^^
+ *               拼接的意思
+ */
 {
 	if (IS_ERR(inode))
 		return ERR_CAST(inode);
@@ -3247,9 +3255,12 @@ struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry)
 					inode->i_sb->s_type->name,
 					inode->i_sb->s_id);
 			} else if (!IS_ROOT(new)) {
+			/*
+			 * 如果找到的不是root
+			 * - 此处的root指的是本文件系统内，即vfsmount->mnt_root
+			 */
 				/*
-				 * 如果找到的不是root
-				 * 此处的root指的是本文件系统内，即vfsmount->mnt_root
+				 * 保护一下父节点，避免并发删除
 				 */
 				struct dentry *old_parent = dget(new->d_parent);
 				int err = __d_unalias(inode, dentry, new);

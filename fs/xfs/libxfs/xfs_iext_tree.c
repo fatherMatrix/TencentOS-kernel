@@ -114,8 +114,8 @@ enum {
  *		+-------+-------+-------+-------+-------+-------+------+-------+
  *              key1是ptr1中最小的一个key；
  *
- * xfs_iext_node是b+树的中间节点；
- * - b+树的内部节点，内存数据结构；
+ * xfs_iext_node是extent b+树的中间节点；
+ * - extent b+树的内部节点，内存数据结构；
  */
 struct xfs_iext_node {
 	uint64_t		keys[KEYS_PER_NODE];
@@ -124,8 +124,9 @@ struct xfs_iext_node {
 };
 
 /*
- * xfs_iext_leaf是b+树的叶子结点；
+ * xfs_iext_leaf是extent b+树的叶子结点；
  * - 既然有指针，那肯定是内存数据结构;
+ * - 对应的内部节点是xfs_iext_node；
  */
 struct xfs_iext_leaf {
 	struct xfs_iext_rec	recs[RECS_PER_LEAF];
@@ -172,6 +173,9 @@ xfs_iext_find_first_leaf(
 	if (!ifp->if_height)
 		return NULL;
 
+	/*
+	 * node读出来会不会非法呢？
+	 */
 	for (height = ifp->if_height; height > 1; height--) {
 		node = node->ptrs[0];
 		ASSERT(node);
@@ -326,6 +330,7 @@ xfs_iext_find_level(
 	/*
 	 * 遍历b+树，找到包含offset的叶子结点
 	 * - b+树一定在内存吗？
+	 *   - 是的，在本函数调用前，必须检查XFS_IFEXTENTS标志
 	 */
 	for (height = ifp->if_height; height > level; height--) {
 		for (i = 1; i < KEYS_PER_NODE; i++)
@@ -650,8 +655,14 @@ xfs_iext_insert(
 
 	xfs_iext_inc_seq(ifp);
 
+	/*
+	 * 高度为0表示树是空的，要分配一个叶子结点作为根节点
+	 */
 	if (ifp->if_height == 0)
 		xfs_iext_alloc_root(ifp, cur);
+	/*
+	 * 高度为1表示根节点是一个叶子结点
+	 */
 	else if (ifp->if_height == 1)
 		xfs_iext_realloc_root(ifp, cur);
 
@@ -921,16 +932,23 @@ xfs_iext_remove(
 
 /*
  * Lookup the extent covering bno.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  *
  * If there is an extent covering bno return the extent index, and store the
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * expanded extent structure in *gotp, and the extent cursor in *cur.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ *
  * If there is no extent covering bno, but there is an extent after it (e.g.
  * it lies in a hole) return that extent in *gotp and its cursor in *cur
  * instead. 这种情况也返回true；
+ *
  * If bno is beyond the last extent return false, and return an invalid
  * cursor value.
  *
  * 这里似乎假设b+树都在内存里，怎么保证呢？
+ * - 本函数调用前，都检查了XFS_IFEXTENTS标志，如果没有该标志，则全部读入并设置
+ *   该标志；
  */
 bool
 xfs_iext_lookup_extent(

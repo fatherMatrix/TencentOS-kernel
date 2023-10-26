@@ -3247,6 +3247,9 @@ struct dentry *proc_pid_lookup(struct dentry *dentry, unsigned int flags)
 	struct dentry *result = ERR_PTR(-ENOENT);
 
 	tgid = name_to_int(&dentry->d_name);
+	/*
+	 * 这个时候表示不是合法pid
+	 */
 	if (tgid == ~0U)
 		goto out;
 

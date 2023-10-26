@@ -1625,6 +1625,8 @@ xlog_grant_push_ail(
 	 * Get the transaction layer to kick the dirty buffers out to
 	 * disk asynchronously. No point in trying to do this if
 	 * the filesystem is shutting down.
+	 *
+	 * 将AIL中的log写出到盘上
 	 */
 	if (!XLOG_FORCED_SHUTDOWN(log))
 		xfs_ail_push(log->l_ailp, threshold_lsn);

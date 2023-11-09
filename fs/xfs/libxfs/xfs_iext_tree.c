@@ -318,6 +318,9 @@ xfs_iext_find_level(
 	xfs_fileoff_t		offset,
 	int			level)
 {
+	/*
+	 * 这是内存格式组织的b+树
+	 */
 	struct xfs_iext_node	*node = ifp->if_u1.if_root;
 	int			height, i;
 
@@ -944,7 +947,8 @@ xfs_iext_remove(
  * instead. 这种情况也返回true；
  *
  * If bno is beyond the last extent return false, and return an invalid
- * cursor value.
+ *                                                              ^^^^^^^
+ * cursor value. 此时gotp也是非法的；
  *
  * 这里似乎假设b+树都在内存里，怎么保证呢？
  * - 本函数调用前，都检查了XFS_IFEXTENTS标志，如果没有该标志，则全部读入并设置
@@ -962,7 +966,7 @@ xfs_iext_lookup_extent(
 
 	/*
 	 * 从b+树里找到包含offset的叶子结点；
-	 * - ifp是xfs_inode->i_df，标识b+树根
+	 * - 返回的是xfs_iext_leaf结构体；
 	 */
 	cur->leaf = xfs_iext_find_level(ifp, offset, 1);
 	if (!cur->leaf) {

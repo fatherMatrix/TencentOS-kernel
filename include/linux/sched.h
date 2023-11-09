@@ -1575,6 +1575,7 @@ extern struct pid *cad_pid;
 #define PF_MCE_PROCESS		0x00000080      /* Process policy on mce errors */
 /*
  * 好像通过了ns_capable()的检查就会给进程标志这个位，不论检查的是哪个cap
+ * - 这样合适吗？哪里清除这个位？
  */
 #define PF_SUPERPRIV		0x00000100	/* Used super-user privileges */
 #define PF_DUMPCORE		0x00000200	/* Dumped core */

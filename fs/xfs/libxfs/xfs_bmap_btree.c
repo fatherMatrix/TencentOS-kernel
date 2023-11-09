@@ -584,6 +584,9 @@ xfs_bmbt_maxrecs(
 	int			blocklen,
 	int			leaf)
 {
+	/*
+	 * 删掉header，得到数据的长度
+	 */
 	blocklen -= XFS_BMBT_BLOCK_LEN(mp);
 
 	if (leaf)

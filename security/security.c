@@ -304,18 +304,31 @@ static void __init ordered_lsm_init(void)
 	 * chosen_lsm_order和chosen_major_lsm均保存cmdline传入的lsm相关参数，分
 	 * 别对应cmdline的"lsm="和"security="，但是"lsm="表示指定多个安全模块的
 	 * 加载顺序，"security="是指定一个补充加载的安全模块(其他模块是否需要加
-	 * 载还是CONFIG_LSM决定)。"lsm="优先级更高，如果配置了，"security="就失
-	 * 效(作为即将淘汰接口建议不再使用)。
+	 * 载还是CONFIG_LSM决定)。
+	 *
+	 * "lsm="优先级更高，如果配置了，"security="就失效(作为即将淘汰接口建议
+	 * 不再使用)。
 	 *
 	 * builtin_lsm_order对应CONFIG_LSM；
 	 */
 	if (chosen_lsm_order) {
+		/*
+		 * 已经配置了chosen_lsm_order("lsm=")，所以
+		 * chosen_major_lsm("security=")失效了；
+		 */
 		if (chosen_major_lsm) {
 			pr_info("security= is ignored because it is superseded by lsm=\n");
 			chosen_major_lsm = NULL;
 		}
+		/*
+		 * 如果在命令行中配置了chosen_lsm_order，那么系统中挂载的lsm模
+		 * 块由chosen_lsm_order指定；
+		 */
 		ordered_lsm_parse(chosen_lsm_order, "cmdline");
 	} else
+		/*
+		 * 如果没有配置"lsm="，那么才由CONFIG_LSM指定；
+		 */
 		ordered_lsm_parse(builtin_lsm_order, "builtin");
 
 	for (lsm = ordered_lsms; *lsm; lsm++)
@@ -378,7 +391,8 @@ int __init early_security_init(void)
 
 	/* 
 	 * __start_early_lsm_info和__end_early_lsm_info是全局变量，是在链接脚本
-	 * 中初始化的，参见DEFINE_LSM和LSM_TABLE两个宏，注意.lsm_info.init段；
+	 * 中初始化的，参见DEFINE_LSM/DEFINE_EARLY_LSM/LSM_TABLE/EARLY_LSM_TABLE
+	 * 这几个宏，注意.lsm_info.init段；
 	 */
 	for (lsm = __start_early_lsm_info; lsm < __end_early_lsm_info; lsm++) {
 		if (!lsm->enabled)
@@ -413,6 +427,9 @@ int __init security_init(void)
 	 *
 	 * security_early_init()中注册lsm模块时，kmalloc还不可用。此时kmalloc已
 	 * 可用，所以把security_early_init()中留下的尾巴处理好
+	 * - 尾巴就是使用kmalloc()分配ordered_lsms数组的内存，并将所有要挂载的
+	 *   lsm模块都放到该数组里；
+	 * - 还有就是下面的lsm_append()也需要调用kmalloc()分配内存；
 	 */
 	for (lsm = __start_early_lsm_info; lsm < __end_early_lsm_info; lsm++) {
 		if (lsm->enabled)

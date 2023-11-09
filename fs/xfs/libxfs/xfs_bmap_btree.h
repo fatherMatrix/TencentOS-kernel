@@ -31,12 +31,15 @@ struct xfs_trans;
 		 XFS_BMBT_BLOCK_LEN(mp) + \
 		 ((index) - 1) * sizeof(xfs_bmbt_key_t)))
 
+/*
+ * 给定一个读入内存的bmbt的中间节点和index，返回ptr的地址；
+ */
 #define XFS_BMBT_PTR_ADDR(mp, block, index, maxrecs) \
 	((xfs_bmbt_ptr_t *) \
-		((char *)(block) + \
-		 XFS_BMBT_BLOCK_LEN(mp) + \
-		 (maxrecs) * sizeof(xfs_bmbt_key_t) + \
-		 ((index) - 1) * sizeof(xfs_bmbt_ptr_t)))
+		((char *)(block) + \				/* block在内存中的基地址 */
+		 XFS_BMBT_BLOCK_LEN(mp) + \			/* block中一开始存储的header */
+		 (maxrecs) * sizeof(xfs_bmbt_key_t) + \ 	/* 中间节点先存key */
+		 ((index) - 1) * sizeof(xfs_bmbt_ptr_t)))	/* 再存ptr */
 
 #define XFS_BMDR_REC_ADDR(block, index) \
 	((xfs_bmdr_rec_t *) \

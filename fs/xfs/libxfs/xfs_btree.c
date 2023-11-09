@@ -851,9 +851,14 @@ xfs_btree_read_bufl(
 	if (!xfs_verify_fsbno(mp, fsbno))
 		return -EFSCORRUPTED;
 	/*
-	 * 这里的地址应该是xfs自定义的磁盘地址，即agno|agbno
+	 * fsbno是xfs自定义的磁盘地址，即agno|agbno
+	 * d是绝对磁盘地址，sector号
 	 */
 	d = XFS_FSB_TO_DADDR(mp, fsbno);
+	/*
+	 * ops是xfs_bmbt_buf_ops
+	 * - 里面的方法主要是verify；
+	 */
 	error = xfs_trans_read_buf(mp, tp, mp->m_ddev_targp, d,
 				   mp->m_bsize, 0, &bp, ops);
 	if (error)

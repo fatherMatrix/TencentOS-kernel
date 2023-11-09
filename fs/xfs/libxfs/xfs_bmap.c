@@ -1163,6 +1163,9 @@ xfs_iread_extents(
 	struct xfs_inode	*ip,
 	int			whichfork)
 {
+	/*
+	 * 进来的tp有可能是NULL
+	 */
 	struct xfs_mount	*mp = ip->i_mount;
 	int			state = xfs_bmap_fork_to_state(whichfork);
 	struct xfs_ifork	*ifp = XFS_IFORK_PTR(ip, whichfork);
@@ -1186,12 +1189,18 @@ xfs_iread_extents(
 
 	/*
 	 * Root level must use BMAP_BROOT_PTR_ADDR macro to get ptr out.
+	 * - 诶，如果我这棵树就一个叶子结点怎么办？
 	 */
 	level = be16_to_cpu(block->bb_level);
 	if (unlikely(level == 0)) {
 		XFS_ERROR_REPORT(__func__, XFS_ERRLEVEL_LOW, mp);
 		return -EFSCORRUPTED;
 	}
+	/*
+	 * block是struct xfs_btree_block，指向xfs_ifork->if_broot;
+	 * pp返回的是block中第1个ptr的地址；
+	 * - 这句话里的ptr时磁盘结果中的ptr，即bno
+	 */
 	pp = XFS_BMAP_BROOT_PTR_ADDR(mp, block, 1, ifp->if_broot_bytes);
 	bno = be64_to_cpu(*pp);
 
@@ -1200,9 +1209,12 @@ xfs_iread_extents(
 	 * pointer (leftmost) at each level.
 	 *
 	 * 这里为什么不能用一个变量单独记录leftmost叶节点呢？
+	 * - 这是个磁盘数据结构
 	 */
 	while (level-- > 0) {
-		/* * 通过xfs_buf读取bno
+		/* 
+		 * 通过xfs_buf+submit_bio读取bno
+		 * - bp是struct xfs_buf *
 		 */
 		error = xfs_btree_read_bufl(mp, tp, bno, &bp,
 				XFS_BMAP_BTREE_REF, &xfs_bmbt_buf_ops);
@@ -3486,6 +3498,9 @@ xfs_bmap_btalloc(
 	/* Trim the allocation back to the maximum an AG can fit. */
 	args.maxlen = min(ap->length, mp->m_ag_max_usable);
 	blen = 0;
+	/*
+	 *
+	 */
 	if (nullfb) {
 		/*
 		 * Search for an allocation group with a single extent large
@@ -3583,6 +3598,9 @@ xfs_bmap_btalloc(
 	if (ap->datatype & XFS_ALLOC_USERDATA_ZERO)
 		args.ip = ap->ip;
 
+	/*
+	 * 分配磁盘空间，包括给btree用的，也包括给数据用的；
+	 */
 	error = xfs_alloc_vextent(&args);
 	if (error)
 		return error;
@@ -3690,12 +3708,23 @@ xfs_trim_extent(
 	xfs_fileoff_t		distance;
 	xfs_fileoff_t		end = bno + len;
 
+	/*
+	 * [bno, bno+len]不在这个extent中；
+	 */
 	if (irec->br_startoff + irec->br_blockcount <= bno ||
 	    irec->br_startoff >= end) {
 		irec->br_blockcount = 0;
 		return;
 	}
 
+	/*
+	 * bno在extent头后面：
+	 * |-----------------|                extent
+	 *       |---------|                  [bno, bno + len1]
+	 *       |---------------|            [bno, bno + len2]
+	 *       |-----------------------|    [bno, bno + len3]
+	 * |xxxxx|                            distance
+	 */
 	if (irec->br_startoff < bno) {
 		distance = bno - irec->br_startoff;
 		if (isnullstartblock(irec->br_startblock))
@@ -3707,6 +3736,12 @@ xfs_trim_extent(
 		irec->br_blockcount -= distance;
 	}
 
+	/*
+	 * 另一种情况：
+	 *          |-----------------|   extent
+	 *     |--------|                 [bno, bno + len]     
+	 *              |xxxxxxxxxxxxx|   distance
+	 */
 	if (end < irec->br_startoff + irec->br_blockcount) {
 		distance = irec->br_startoff + irec->br_blockcount - end;
 		irec->br_blockcount -= distance;
@@ -3742,7 +3777,13 @@ xfs_bmapi_trim_map(
 		*bno = obno;
 	ASSERT((*bno >= obno) || (n == 0));
 	ASSERT(*bno < end);
+	/*
+	 * xfs_fileoff_t, 文件块号
+	 */
 	mval->br_startoff = *bno;
+	/*
+	 * xfs_fsblock_t, 磁盘块号
+	 */
 	if (isnullstartblock(got->br_startblock))
 		mval->br_startblock = DELAYSTARTBLOCK;
 	else
@@ -3822,6 +3863,7 @@ xfs_bmapi_update_map(
  * 这里mval应该是个数组，nmap表示其数组元素个数；本函数应该是可以读取区间[bno,
  * bno+len]的最多nmap个extent，且如果在读取多个extent时出了错误，则通过nmap返回
  * 正确读取的extent个数；
+ * - nmap进入时保存了mval数组的最大长度
  */
 int
 xfs_bmapi_read(
@@ -3901,7 +3943,7 @@ xfs_bmapi_read(
 
 	/*
 	 * 找到包含bno的extent
-	 * - 关注一些本函数注释中的波浪线部分
+	 * - 该函数返回false说明bno在eof之后了；
 	 */
 	if (!xfs_iext_lookup_extent(ip, ifp, bno, &icur, &got))
 		eof = true;
@@ -3925,6 +3967,10 @@ xfs_bmapi_read(
 			mval->br_state = XFS_EXT_NORM;
 			bno += mval->br_blockcount;
 			len -= mval->br_blockcount;
+			/*
+			 * 也就是说，把[bno, bno+len]中属于hole的一部分先切出，
+			 * 放到要返回的mval数组中；
+			 */
 			mval++;
 			n++;
 			continue;
@@ -4074,10 +4120,20 @@ xfs_bmapi_allocate(
 	 * for in this bmap call but that wouldn't be as good.
 	 */
 	if (bma->wasdel) {
+	/*
+	 * wasdel为true时，表示bno处于已有的extents中；
+	 */
 		bma->length = (xfs_extlen_t)bma->got.br_blockcount;
 		bma->offset = bma->got.br_startoff;
+		/*
+		 * 将bma->icur所指向记录的前一记录格式化到bma->prev(xfs_bmbt_irec)
+		 * 中；
+		 */
 		xfs_iext_peek_prev_extent(ifp, &bma->icur, &bma->prev);
 	} else {
+	/*
+	 * 在洞中？
+	 */
 		bma->length = XFS_FILBLKS_MIN(bma->length, MAXEXTLEN);
 		if (!bma->eof)
 			bma->length = XFS_FILBLKS_MIN(bma->length,
@@ -4094,8 +4150,14 @@ xfs_bmapi_allocate(
 		bma->datatype = XFS_ALLOC_NOBUSY;
 		if (whichfork == XFS_DATA_FORK) {
 			if (bma->offset == 0)
+			/*
+			 * 文件开始
+			 */
 				bma->datatype |= XFS_ALLOC_INITIAL_USER_DATA;
 			else
+			/*
+			 * 非文件开始
+			 */
 				bma->datatype |= XFS_ALLOC_USERDATA;
 		}
 		if (bma->flags & XFS_BMAPI_ZERO)
@@ -4115,6 +4177,9 @@ xfs_bmapi_allocate(
 			return error;
 	}
 
+	/*
+	 * 上面都是设置一些分配的参数，现在开始正式分配；
+	 */
 	error = xfs_bmap_alloc(bma);
 	if (error)
 		return error;
@@ -4381,6 +4446,9 @@ xfs_bmapi_write(
 			goto error0;
 	}
 
+	/*
+	 * 为什么又要检查一次eof，上层函数的xfs_bmapi_read()中已经检查过了；
+	 */
 	if (!xfs_iext_lookup_extent(ip, ifp, bno, &bma.icur, &bma.got))
 		eof = true;
 	if (!xfs_iext_peek_prev_extent(ifp, &bma.icur, &bma.prev))
@@ -4395,6 +4463,11 @@ xfs_bmapi_write(
 
 		/* in hole or beyond EOF? */
 		if (eof || bma.got.br_startoff > bno) {
+		/*
+		 * 在hole中：
+		 * - 一种是超过了eof，相当于位于eof后面的大eof
+		 * - 另一种是在eof之前，一个普通的hole中
+		 */
 			/*
 			 * CoW fork conversions should /never/ hit EOF or
 			 * holes.  There should always be something for us
@@ -4405,6 +4478,9 @@ xfs_bmapi_write(
 
 			need_alloc = true;
 		} else if (isnullstartblock(bma.got.br_startblock)) {
+		/*
+		 * 没有在hole中，在已有的extent中；
+		 */
 			wasdelay = true;
 		}
 

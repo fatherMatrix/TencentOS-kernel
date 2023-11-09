@@ -1351,6 +1351,9 @@ retry_journal:
 	else
 		ret = __block_write_begin(page, pos, len, ext4_get_block);
 #endif
+	/*
+	 * data=journal的情况下，在这里对usr data进行journal？
+	 */
 	if (!ret && ext4_should_journal_data(inode)) {
 		ret = ext4_walk_page_buffers(handle, page_buffers(page),
 					     from, to, NULL,

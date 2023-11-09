@@ -14,6 +14,9 @@ struct xfs_inode;
 struct xfs_mount;
 
 typedef struct xfs_inode_log_item {
+	/*
+	 * 各种log_item的基类
+	 */
 	struct xfs_log_item	ili_item;	   /* common portion */
 	struct xfs_inode	*ili_inode;	   /* inode ptr */
 	xfs_lsn_t		ili_flush_lsn;	   /* lsn at last flush */

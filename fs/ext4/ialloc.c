@@ -952,6 +952,10 @@ repeat_in_this_group:
 			}
 		}
 		BUFFER_TRACE(inode_bitmap_bh, "get_write_access");
+		/*
+		 * 这里要更改inode_bitmap_bh了，在jbd2的世界中，要更改一个
+		 * buffer_head，都要获取相应的权限；
+		 */
 		err = ext4_journal_get_write_access(handle, inode_bitmap_bh);
 		if (err) {
 			ext4_std_error(sb, err);

@@ -446,6 +446,9 @@ handle_t *jbd2__journal_start(journal_t *journal, int nblocks, int rsv_blocks,
 			      gfp_t gfp_mask, unsigned int type,
 			      unsigned int line_no)
 {
+	/*
+	 * 参数nblocks表示需要多少磁盘块
+	 */
 	handle_t *handle = journal_current_handle();
 	int err;
 
@@ -491,7 +494,7 @@ handle_t *jbd2__journal_start(journal_t *journal, int nblocks, int rsv_blocks,
 			jbd2_free_handle(handle->h_rsv_handle);
 		jbd2_free_handle(handle);
 		return ERR_PTR(err);
-	}
+	
 	handle->h_type = type;
 	handle->h_line_no = line_no;
 	trace_jbd2_handle_start(journal->j_fs_dev->bd_dev,
@@ -1141,6 +1144,9 @@ int jbd2_journal_get_write_access(handle_t *handle, struct buffer_head *bh)
 	if (jbd2_write_access_granted(handle, bh, false))
 		return 0;
 
+	/*
+	 * 将buffer_head与journal_head联系起来
+	 */
 	jh = jbd2_journal_add_journal_head(bh);
 	/* We do not want to get caught playing with fields which the
 	 * log thread also manipulates.  Make sure that the buffer

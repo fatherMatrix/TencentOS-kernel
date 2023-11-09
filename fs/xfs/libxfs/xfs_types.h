@@ -26,6 +26,9 @@ typedef int32_t		xfs_tid_t;	/* transaction identifier */
 typedef uint32_t	xfs_dablk_t;	/* dir/attr block number (in file) */
 typedef uint32_t	xfs_dahash_t;	/* dir/attr hash value */
 
+/*
+ * 高位是AG no，低位是在AG中的bno
+ */
 typedef uint64_t	xfs_fsblock_t;	/* blockno in filesystem (agno|agbno) */
 typedef uint64_t	xfs_rfsblock_t;	/* blockno in filesystem (raw) */
 typedef uint64_t	xfs_rtblock_t;	/* extent (block) in realtime area */
@@ -116,6 +119,14 @@ typedef enum {
 /*
  * This enum is used in string mapping in xfs_trace.h and scrub/trace.h;
  * please keep the TRACE_DEFINE_ENUMs for it up to date.
+ *
+ * XFS_BTNUM_BNOi:  free space btree sorted by block ino
+ * XFS_BTNUM_CNTi:  free space btree sorted by block count
+ *
+ * XFS_BTNUM_BMAPi: 每个inode用来映射file offset -> fs block的树
+ *
+ * XFS_BTNUM_INOi:  用于跟踪inode，分配inode 
+ * XFS_BTNUM_FINOi: 用于存储未分配的inode，作为一个optional feature加速INOi的工作
  */
 typedef enum {
 	XFS_BTNUM_BNOi, XFS_BTNUM_CNTi, XFS_BTNUM_RMAPi, XFS_BTNUM_BMAPi,
@@ -152,6 +163,9 @@ typedef uint32_t	xfs_dqid_t;
 #define	XFS_NBWORD	(1 << XFS_NBWORDLOG)
 #define	XFS_WORDMASK	((1 << XFS_WORDLOG) - 1)
 
+/*
+ * 标识一个B+树某个叶子结点中的第pos个记录
+ */
 struct xfs_iext_cursor {
 	struct xfs_iext_leaf	*leaf;
 	int			pos;
@@ -169,11 +183,12 @@ typedef enum {
 typedef struct xfs_bmbt_irec
 {
 	/*
-	 * 文件内偏移
+	 * 文件内块偏移
 	 */
 	xfs_fileoff_t	br_startoff;	/* starting file offset */
 	/*
-	 * 块偏移，是文件内还是文件系统内？
+	 * 文件系统内块偏移
+	 * - xfs_fsblock_t是AGno | block offset in AG；
 	 */
 	xfs_fsblock_t	br_startblock;	/* starting block number */
 	/*

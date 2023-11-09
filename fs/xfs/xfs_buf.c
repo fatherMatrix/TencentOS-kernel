@@ -834,6 +834,9 @@ xfs_buf_read_map(
 		 * - xfs_bmbt_buf_ops
 		 */
 		bp->b_ops = ops;
+		/*
+		 * 调用submit_bio()
+		 */
 		_xfs_buf_read(bp, flags);
 		return bp;
 	}

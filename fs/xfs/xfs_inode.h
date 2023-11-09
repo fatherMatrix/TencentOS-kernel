@@ -21,6 +21,9 @@ struct xfs_mount;
 struct xfs_trans;
 struct xfs_dquot;
 
+/*
+ * 对应磁盘数据结构xfs_dinode
+ */
 typedef struct xfs_inode {
 	/* Inode linking and identification information. */
 	struct xfs_mount	*i_mount;	/* fs mount struct ptr */

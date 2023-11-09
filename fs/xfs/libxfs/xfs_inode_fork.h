@@ -17,6 +17,7 @@ struct xfs_ifork {
 	/*
 	 * data的btree树根，整棵树用来定位文件每个extent存储在哪里
 	 * - 这个数据结构不是用来表示磁盘上btree节点的吗？为什么注释是incore？
+	 *   > 读入内存的磁盘格式？
 	 */
 	struct xfs_btree_block	*if_broot;	/* file's incore btree root */
 	unsigned int		if_seq;		/* fork mod counter */
@@ -27,10 +28,14 @@ struct xfs_ifork {
 		 * - 这里是用于映射文件偏移与磁盘偏移的extent btree，所以可以全
 		 *   部读入内存，尺寸并不大；
 		 * - 内存格式；
+		 * - 用完全内存格式的b+树重新组织并保存了if_broot的b+树；
 		 */
 		void		*if_root;	/* extent tree root */
 		char		*if_data;	/* inline file data */
 	} if_u1;
+	/*
+	 * if_broot中的大小？
+	 */
 	short			if_broot_bytes;	/* bytes allocated for root */
 	unsigned char		if_flags;	/* per-fork flags */
 };

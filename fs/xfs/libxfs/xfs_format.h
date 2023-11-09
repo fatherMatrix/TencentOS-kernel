@@ -98,13 +98,18 @@ struct xfs_ifork;
 typedef struct xfs_sb {
 	uint32_t	sb_magicnum;	/* magic number == XFS_SB_MAGIC */
 	/*
-	 * crash验证为4096
+	 * 空间分配的最小单位
+	 * - crash验证为4096，可能的取值[512, 65536]字节；
+	 * - 文件系统的逻辑块大小？
 	 */
 	uint32_t	sb_blocksize;	/* logical block size, bytes */
 	/*
 	 * data和metadata可以使用的全部block数量
 	 */
 	xfs_rfsblock_t	sb_dblocks;	/* number of data blocks */
+	/*
+	 * 实时设备中的block数量
+	 */
 	xfs_rfsblock_t	sb_rblocks;	/* number of realtime blocks */
 	xfs_rtblock_t	sb_rextents;	/* number of realtime extents */
 	uuid_t		sb_uuid;	/* user-visible file system unique id */
@@ -130,8 +135,20 @@ typedef struct xfs_sb {
 	xfs_extlen_t	sb_rbmblocks;	/* number of rt bitmap blocks */
 	xfs_extlen_t	sb_logblocks;	/* number of log blocks */
 	uint16_t	sb_versionnum;	/* header version == XFS_SB_VERSION */
+	/*
+	 * 底层存储盘的sector大小，direct io的最小单位
+	 */
 	uint16_t	sb_sectsize;	/* volume sector size, bytes */
+	/*
+	 * inode的尺寸
+	 * - 典型大小为256字节
+	 * - 可以配置为2048字节
+	 */
 	uint16_t	sb_inodesize;	/* inode size, bytes */
+	/*
+	 * 每个block包含的inode数量
+	 * - 等于sb_blocksize /sb_inodesize
+	 */
 	uint16_t	sb_inopblock;	/* inodes per block */
 	char		sb_fname[XFSLABEL_MAX]; /* file system name */
 	uint8_t		sb_blocklog;	/* log2 of sb_blocksize */
@@ -140,17 +157,38 @@ typedef struct xfs_sb {
 	uint8_t		sb_inopblog;	/* log2 of sb_inopblock */
 	uint8_t		sb_agblklog;	/* log2 of sb_agblocks (rounded up) */
 	uint8_t		sb_rextslog;	/* log2 of sb_rextents */
+	/*
+	 * 被置位说明正在创建文件系统；
+	 */
 	uint8_t		sb_inprogress;	/* mkfs is in progress, don't mount */
+	/*
+	 * (inode占用空间/总空间)的最大值
+	 */
 	uint8_t		sb_imax_pct;	/* max % of fs for inode space */
 					/* statistics */
 	/*
 	 * These fields must remain contiguous.  If you really
 	 * want to change their layout, make sure you fix the
 	 * code in xfs_trans_apply_sb_deltas().
+	 *
+	 * 全局已分配的inode数量
+	 * - 只在AG 0中保存
 	 */
 	uint64_t	sb_icount;	/* allocated inodes */
+	/*
+	 * 空闲节点数量
+	 * - 只在AG 0中保存
+	 */
 	uint64_t	sb_ifree;	/* free inodes */
+	/*
+	 * 空闲数据块数量
+	 * - 只在AG 0中保存
+	 */
 	uint64_t	sb_fdblocks;	/* free data blocks */
+	/*
+	 * 空闲extent数量
+	 * - 只在AG 0中保存
+	 */
 	uint64_t	sb_frextents;	/* free realtime extents */
 	/*
 	 * End contiguous fields.
@@ -606,7 +644,7 @@ xfs_is_quota_inode(struct xfs_sb *sbp, xfs_ino_t ino)
  */
 #define XFS_FSB_TO_B(mp,fsbno)	((xfs_fsize_t)(fsbno) << (mp)->m_sb.sb_blocklog)
 /*
- * 猜测：
+ * 在loff_t(byte)到文件内bno间转换；
  * - XFS_B_TO_FSBT()用于计算起始位置（该结果就是要写的第一个块）
  * - XFS_B_TO_FSB()用于计算结束位置（该结果就是第一个不能写的块，即最后一个可写
  *   的块号+1）
@@ -653,27 +691,47 @@ typedef struct xfs_agf {
 	__be32		agf_magicnum;	/* magic number == XFS_AGF_MAGIC */
 	__be32		agf_versionnum;	/* header version == XFS_AGF_VERSION */
 	__be32		agf_seqno;	/* sequence # starting from 0 */
+	/*
+	 * 表明本AG的在文件系统中的长度；
+	 * - 对于non-last AG，该字段必须等于xfs_sb.sb_agblocks
+	 * - 对于last AG，该字段可以小于xfs_sb.sb_agblklog
+	 */
 	__be32		agf_length;	/* size in blocks of a.g. */
 	/*
 	 * Freespace and rmap information
+	 *
+	 * 是两个数组，每个数组对应3棵树；
 	 */
 	__be32		agf_roots[XFS_BTNUM_AGF];	/* root blocks */
 	__be32		agf_levels[XFS_BTNUM_AGF];	/* btree levels */
 
+	/*
+	 * 以free list方式管理的空闲地址
+	 */
 	__be32		agf_flfirst;	/* first freelist block's index */
 	__be32		agf_fllast;	/* last freelist block's index */
 	__be32		agf_flcount;	/* count of blocks in freelist */
 	__be32		agf_freeblks;	/* total free blocks */
 
+	/*
+	 * 当前AG中最长连续空闲block的大小
+	 */
 	__be32		agf_longest;	/* longest free space */
+	/* 
+	 * 当前AG中用于free space btree的block数量
+	 * - 仅当sb_features2中有XFS_SB_VERSION2_LAZYSBCOUNTBIT设置时有效
+	 */
 	__be32		agf_btreeblks;	/* # of blocks held in AGF btrees */
 	uuid_t		agf_uuid;	/* uuid of filesystem */
 
+	/*
+	 * 当前AG中用于reverse mapping btree的block数量
+	 */
 	__be32		agf_rmap_blocks;	/* rmapbt blocks used */
 	__be32		agf_refcount_blocks;	/* refcountbt blocks used */
 
 	/*
-	 * refcount tree的根节点和层级
+	 * 当前AG中refcount tree的根节点block号和层级
 	 */
 	__be32		agf_refcount_root;	/* refcount tree root block */
 	__be32		agf_refcount_level;	/* refcount btree levels */
@@ -746,6 +804,9 @@ typedef struct xfs_agf {
  */
 #define	XFS_AGI_UNLINKED_BUCKETS	64
 
+/*
+ * AG的第三个sector，描述inode btree
+ */
 typedef struct xfs_agi {
 	/*
 	 * Common allocation group header information
@@ -884,6 +945,7 @@ typedef struct xfs_timestamp {
  * padding field for v3 inodes.
  *
  * xfs inode磁盘数据结构
+ * - 内存数据结构是xfs_inode
  */
 #define	XFS_DINODE_MAGIC		0x494e	/* 'IN' */
 typedef struct xfs_dinode {
@@ -904,6 +966,9 @@ typedef struct xfs_dinode {
 	xfs_timestamp_t	di_ctime;	/* time created/inode modified */
 	__be64		di_size;	/* number of bytes in file */
 	__be64		di_nblocks;	/* # of direct & btree blocks used */
+	/*
+	 * 最小的extent size？
+	 */
 	__be32		di_extsize;	/* basic/minimum extent size for file */
 	__be32		di_nextents;	/* number of extents in data fork */
 	__be16		di_anextents;	/* number of extents in attribute fork*/
@@ -936,6 +1001,9 @@ typedef struct xfs_dinode {
 
 	/* structure must be padded to 64 bit alignment */
 } xfs_dinode_t;
+/*
+ * 紧跟在xfs_dinode_t后的
+ */
 
 #define XFS_DINODE_CRC_OFF	offsetof(struct xfs_dinode, di_crc)
 
@@ -1280,18 +1348,36 @@ struct xfs_dsymlink_hdr {
 
 /*
  * Data record/key structure
+ *
+ * free space btree的叶节点记录，磁盘结构
+ * - btree的中间节点是xfs_btree_sblock_t，即xfs_btree_block；
  */
 typedef struct xfs_alloc_rec {
+	/*
+	 * 所有的偏移都是AG-relative，所以32位就够了
+	 */
 	__be32		ar_startblock;	/* starting block number */
 	__be32		ar_blockcount;	/* count of free blocks */
-} xfs_alloc_rec_t, xfs_alloc_key_t;
+} xfs_alloc_rec_t, 
 
+/*
+ * free space btree的中间节点key
+ */
+xfs_alloc_key_t;
+
+/*
+ * free space btree的叶节点记录，内存结构
+ */
 typedef struct xfs_alloc_rec_incore {
 	xfs_agblock_t	ar_startblock;	/* starting block number */
 	xfs_extlen_t	ar_blockcount;	/* count of free blocks */
 } xfs_alloc_rec_incore_t;
 
-/* btree pointer type */
+/*
+ * btree pointer type
+ *
+ * free space btree的中间节点ptr
+ */
 typedef __be32 xfs_alloc_ptr_t;
 
 /*
@@ -1337,6 +1423,8 @@ static inline xfs_inofree_t xfs_inobt_maskn(int i, int n)
  * The holemask of the sparse record format allows an inode chunk to have holes
  * that refer to blocks not owned by the inode record. This facilitates inode
  * allocation in the event of severe free space fragmentation.
+ *
+ * inode btree叶子结点记录，磁盘结构
  */
 typedef struct xfs_inobt_rec {
 	__be32		ir_startino;	/* starting inode number */
@@ -1350,9 +1438,15 @@ typedef struct xfs_inobt_rec {
 			__u8	ir_freecount;	/* count of free inodes */
 		} sp;
 	} ir_u;
+	/*
+	 * 位图，用于表示这个chunk中的64个inode哪些是空闲的
+	 */
 	__be64		ir_free;	/* free inode mask */
 } xfs_inobt_rec_t;
 
+/*
+ * inode btree叶子结点记录，内存结构
+ */
 typedef struct xfs_inobt_rec_incore {
 	xfs_agino_t	ir_startino;	/* starting inode number */
 	uint16_t	ir_holemask;	/* hole mask for sparse chunks */
@@ -1655,7 +1749,8 @@ typedef __be64 xfs_bmbt_ptr_t, xfs_bmdr_ptr_t;
 struct xfs_btree_block_shdr {
 	/*
 	 * 对于叶子结点，这两个字段应该是用于链表指针了；
-	 * 对于内部节点，这两个字段用来干嘛了？	
+	 * 对于内部节点，这两个字段用来干嘛了？
+	 * - 对于内部节点，这两个字段恒为NULL；
 	 */
 	__be32		bb_leftsib;
 	__be32		bb_rightsib;

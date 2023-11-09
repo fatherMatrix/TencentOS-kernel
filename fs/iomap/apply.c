@@ -52,6 +52,7 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	 * 对xfs，对应函数xfs_file_iomap_begin()
 	 * - 该接口主要作用是构建文件块和磁盘块的地址映射；
 	 * - 如果文件块在磁盘上没有对应的地址，则分配新的地址（相当于分配了磁盘块）；
+	 * - 里面通过xfs_trans_alloc() -> xfs_trans_commit()提交日志；
 	 */
 	ret = ops->iomap_begin(inode, pos, length, flags, &iomap);
 	if (ret)
@@ -78,6 +79,12 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	 * xfs中direct io对应iomap_dio_actor()
 	 * - 该函数内部调用iomap_dio_bio_actor()，对iomap中的数据创建bio并调用
 	 *   submit_bio()将其提交到块层；
+	 *
+	 * 从这里相对上面xfs_trans_commit()的位置可以得出结论：
+	 * - xfs中的日志仅作用于metadata
+	 * - 又由于其日志是异步的，所以在user data落盘之前，并不能保证metadata
+	 *   持久化（log落盘或metadata本身落盘）了。即user data和metadata持久化
+	 *   的先后顺序不保证。对应ext4中的data=writeback
 	 */
 	written = actor(inode, pos, length, data, &iomap);
 

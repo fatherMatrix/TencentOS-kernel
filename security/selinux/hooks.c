@@ -3154,7 +3154,18 @@ static int selinux_inode_setxattr(struct dentry *dentry, const char *name,
 	u32 newsid, sid = current_sid();
 	int rc = 0;
 
+	/*
+	 * 开启selinux后，有CAP_SYS_ADMIN的用户比如secadm也无法setxattr()，最终
+	 * 原因是走进了下面这个if分支，最终调用了selinux_capable()并返回失败；
+	 * 猜测可能是selinux内部的TE机制对capability有自己的映射；
+	 *
+	 * 这里可以考虑给security.biba单独写个逻辑，使selinux完全不接管biba，并
+	 * 在biba中仅判断uid是否有CAP_SYS_ADMIN;
+	 */
 	if (strcmp(name, XATTR_NAME_SELINUX)) {
+		/*
+		 * security.biba/security.xxx走这里
+		 */
 		rc = cap_inode_setxattr(dentry, name, value, size, flags);
 		if (rc)
 			return rc;
@@ -3163,6 +3174,10 @@ static int selinux_inode_setxattr(struct dentry *dentry, const char *name,
 		   ordinary setattr permission. */
 		return dentry_has_perm(current_cred(), dentry, FILE__SETATTR);
 	}
+
+	/*
+	 * security.selinux走下面
+	 */
 
 	if (!selinux_state.initialized)
 		return (inode_owner_or_capable(inode) ? 0 : -EPERM);

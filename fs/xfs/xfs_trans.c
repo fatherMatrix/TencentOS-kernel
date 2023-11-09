@@ -302,6 +302,9 @@ xfs_trans_alloc(
 	INIT_LIST_HEAD(&tp->t_items);
 	INIT_LIST_HEAD(&tp->t_busy);
 	INIT_LIST_HEAD(&tp->t_dfops);
+	/*
+	 * 这是啥意思？
+	 */
 	tp->t_firstblock = NULLFSBLOCK;
 
 	error = xfs_trans_reserve(tp, resp, blocks, rtextents);

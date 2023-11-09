@@ -413,6 +413,9 @@ xfs_trans_brelse(
 	 * set. We wouldn't want the next user of the buffer to get confused.
 	 */
 	ASSERT(!(bip->bli_flags & XFS_BLI_LOGGED));
+	/*
+	 * 将xfs_log_item_t从xfs_trans的链表中删除
+	 */
 	xfs_trans_del_item(&bip->bli_item);
 	bip->bli_flags &= ~XFS_BLI_HOLD;
 

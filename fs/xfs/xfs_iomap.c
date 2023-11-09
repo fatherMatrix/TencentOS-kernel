@@ -95,6 +95,9 @@ xfs_hole_to_iomap(
 	xfs_fileoff_t		offset_fsb,
 	xfs_fileoff_t		end_fsb)
 {
+	/*
+	 * 这是一个特殊的磁盘地址，表示一个hole，不需要真的对应磁盘地址；
+	 */
 	iomap->addr = IOMAP_NULL_ADDR;
 	iomap->type = IOMAP_HOLE;
 	iomap->offset = XFS_FSB_TO_B(ip->i_mount, offset_fsb);
@@ -274,6 +277,9 @@ xfs_iomap_write_direct(
 			resblks = XFS_DIOSTRAT_SPACE_RES(mp, 0) << 1;
 		}
 	}
+	/*
+	 * 事务开始
+	 */
 	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_write, resblks, resrtextents,
 			tflags, &tp);
 	if (error)
@@ -286,11 +292,18 @@ xfs_iomap_write_direct(
 	if (error)
 		goto out_trans_cancel;
 
+	/*
+	 * 关联事务和xfs_inode
+	 * - 其实是给xfs_inode分配一个xfs_log_item_t的派生类，并将其li_trans字段
+	 *   挂到xfs_trans->t_items链表中；
+	 */
 	xfs_trans_ijoin(tp, ip, 0);
 
 	/*
 	 * From this point onwards we overwrite the imap pointer that the
 	 * caller gave to us.
+	 *
+	 * 将file block映射到fs block，并进行必要的分配
 	 */
 	nimaps = 1;
 	error = xfs_bmapi_write(tp, ip, offset_fsb, count_fsb,
@@ -300,6 +313,9 @@ xfs_iomap_write_direct(
 
 	/*
 	 * Complete the transaction
+	 *
+	 * 可以发现user data是没有进行log的
+	 * - 猜测xfs的日志系统对应的是ext4的ordered模式？
 	 */
 	error = xfs_trans_commit(tp);
 	if (error)
@@ -550,14 +566,19 @@ xfs_file_iomap_begin_delay(
 	struct xfs_mount	*mp = ip->i_mount;
 	/*
 	 * 将offset转换为以block为单位的索引
+	 * - 要操作的第一个块；
 	 */
 	xfs_fileoff_t		offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	/*
-	 * 文件写到最大时，最后一个block的索引
+	 * 文件写到最大时，最后一个block的fsbno索引+1
+	 * - 第一个不能操作的块
 	 */
 	xfs_fileoff_t		maxbytes_fsb =
 		XFS_B_TO_FSB(mp, mp->m_super->s_maxbytes);
 	xfs_fileoff_t		end_fsb;
+	/*
+	 * 就是bmbt中的一个incore record
+	 */
 	struct xfs_bmbt_irec	imap, cmap;
 	struct xfs_iext_cursor	icur, ccur;
 	xfs_fsblock_t		prealloc_blocks = 0;
@@ -584,12 +605,19 @@ xfs_file_iomap_begin_delay(
 
 	XFS_STATS_INC(mp, xs_blk_mapw);
 
+	/*
+	 * 保证extent btree全部读入内存；
+	 */
 	if (!(ip->i_df.if_flags & XFS_IFEXTENTS)) {
 		error = xfs_iread_extents(NULL, ip, XFS_DATA_FORK);
 		if (error)
 			goto out_unlock;
 	}
 
+	/*
+	 * 使用的是FSB而不是FSBT，所以end_fsb表示的是第一个不能操作的块，即最后
+	 * 一个可以操作的块fsbno+1;
+	 */
 	end_fsb = min(XFS_B_TO_FSB(mp, offset + count), maxbytes_fsb);
 
 	/*
@@ -599,13 +627,34 @@ xfs_file_iomap_begin_delay(
 	 * perform read-modify-write cycles for unaligned writes.
 	 *
 	 * xfs_inode->i_df表示data fork的b+树
+	 *
+	 * 函数返回true时，imap和icur中都存储着对应extent的两种表示；
+	 * 下面这个函数返回false说明offset_fsb超出了extent树的最大偏移，即超过
+	 * 了eof；此时icur和imap中的内容都非法；
+	 *
+	 * 局部变量icur到这里第一次启用；
 	 */
 	eof = !xfs_iext_lookup_extent(ip, &ip->i_df, offset_fsb, &icur, &imap);
 	if (eof)
+		/*
+		 * 进入到这里时，说明xfs_iext_lookup_extent()返回了false，此时
+		 * imap内的信息时非法的，要在这里给他一个值；
+		 * - 这个值的意义是什么呢？
+		 */
 		imap.br_startoff = end_fsb; /* fake hole until the end */
 
-	/* We never need to allocate blocks for zeroing a hole. */
+	/*
+	 * We never need to allocate blocks for zeroing a hole.
+	 *
+	 * 这个IOMAP_ZERO好像仅用来填洞？
+	 */
 	if ((flags & IOMAP_ZERO) && imap.br_startoff > offset_fsb) {
+	/*
+	 * imap.br_startoff > offset_fsb，说明找到的extent在offset_fsb的后面；
+	 */
+		/*
+		 * 构建一个从[offset_fsb, end_fsb)的hole的iomap
+		 */
 		xfs_hole_to_iomap(ip, iomap, offset_fsb, imap.br_startoff);
 		goto out_unlock;
 	}
@@ -623,15 +672,26 @@ xfs_file_iomap_begin_delay(
 			ASSERT(!xfs_is_reflink_inode(ip));
 			xfs_ifork_init_cow(ip);
 		}
+		/*
+		 * 返回false表示在cow_fork中没有找到覆盖offset_fsb或位于
+		 * offset_fsb后的extent，即表示offset_fsb超出了eof；
+		 */
 		cow_eof = !xfs_iext_lookup_extent(ip, ip->i_cowfp, offset_fsb,
 				&ccur, &cmap);
 		if (!cow_eof && cmap.br_startoff <= offset_fsb) {
+			/*
+			 * 进入到这里，说明cow_eof是false，即xfs_iext_lookup_extent()
+			 * 返回了true，即offset_fsb在cow的eof之内；
+			 */
 			trace_xfs_reflink_cow_found(ip, &cmap);
 			whichfork = XFS_COW_FORK;
 			goto done;
 		}
 	}
 
+	/*
+	 * imap.br_startoff <= offset_fsb，表明offset刚好落到了一个extent中；
+	 */
 	if (imap.br_startoff <= offset_fsb) {
 		/*
 		 * For reflink files we may need a delalloc reservation when
@@ -645,6 +705,9 @@ xfs_file_iomap_begin_delay(
 			goto done;
 		}
 
+		/*
+		 * 找到extent覆盖[offset_fsb, end_fsb]的部分；
+		 */
 		xfs_trim_extent(&imap, offset_fsb, end_fsb - offset_fsb);
 
 		/* Trim the mapping to the nearest shared extent boundary. */
@@ -666,6 +729,10 @@ xfs_file_iomap_begin_delay(
 		whichfork = XFS_COW_FORK;
 		end_fsb = imap.br_startoff + imap.br_blockcount;
 	} else {
+	/*
+	 * 进到这里，说明offset_fsb不落于任何现有的extent中；
+	 * - 也包含offset超出eof的情况
+	 */
 		/*
 		 * We cap the maximum length we map here to MAX_WRITEBACK_PAGES
 		 * pages to keep the chunks of work done where somewhat
@@ -749,6 +816,9 @@ done:
 		xfs_trim_extent(&imap, cmap.br_startoff, cmap.br_blockcount);
 		shared = true;
 	}
+	/*
+	 * 通过imap构建iomap
+	 */
 	error = xfs_bmbt_to_iomap(ip, iomap, &imap, shared);
 out_unlock:
 	xfs_iunlock(ip, XFS_ILOCK_EXCL);
@@ -1004,13 +1074,15 @@ xfs_file_iomap_begin(
 	end_fsb = XFS_B_TO_FSB(mp, offset + length);
 
 	/*
-	 * 对于读操作，这里就是找到[offset_fsb, end_fsb)/]?这个区间的映射；
+	 * 对于读操作，这里就是找到[offset_fsb, end_fsb)这个区间的映射；
 	 * - 最后一个参数为0表示一个DATA_FORK；
 	 *
-	 * 理论上说，这里只有一个xfs_bmbt_irec，如果[offset_fsb, end_fsb)/]?跨
-	 * 了两个extent怎么办？
-	 * - [offset, end_fsb)/]?肯定是连续的，两个连续的extent应该会被合并为一
-	 *   个extent的吧？
+	 * 理论上说，这里只有一个xfs_bmbt_irec，如果[offset_fsb, end_fsb)跨了两
+	 * 个extent怎么办？
+	 * - [offset, end_fsb)肯定是连续的，两个连续的extent应该会被合并为一个
+	 *   extent的吧？
+	 * - 如果真的跨了多个extent，nimaps变量在xfs_bmapi_read()内部也可以通过
+	 *   指针修改的吧？
 	 */
 	error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb, &imap,
 			       &nimaps, 0);
@@ -1108,6 +1180,9 @@ xfs_file_iomap_begin(
 	 */
 	if (lockmode == XFS_ILOCK_EXCL)
 		xfs_ilock_demote(ip, lockmode);
+	/*
+	 * 内部会触发xfs_trans_alloc() -> xfs_trans_commit()
+	 */
 	error = xfs_iomap_write_direct(ip, offset, length, &imap,
 			nimaps);
 	if (error)
@@ -1117,6 +1192,10 @@ xfs_file_iomap_begin(
 	trace_xfs_iomap_alloc(ip, offset, length, XFS_DATA_FORK, &imap);
 
 out_finish:
+	/*
+	 * 将最终确定的extent(xfs_bmbt_irec)格式化给iomap，后面的数据写入要通过
+	 * iomap来submit_bio()；
+	 */
 	return xfs_bmbt_to_iomap(ip, iomap, &imap, shared);
 
 out_found:

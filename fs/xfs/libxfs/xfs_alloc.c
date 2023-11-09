@@ -1504,6 +1504,8 @@ xfs_alloc_ag_vextent_size(
 restart:
 	/*
 	 * Allocate and initialize a cursor for the by-size btree.
+	 *
+	 * 从free space sorted by block count的btree中查找；
 	 */
 	cnt_cur = xfs_allocbt_init_cursor(args->mp, args->tp, args->agbp,
 		args->agno, XFS_BTNUM_CNT);
@@ -1512,6 +1514,8 @@ restart:
 
 	/*
 	 * Look for an entry >= maxlen+alignment-1 blocks.
+	 *
+	 * 在cntbt中找到大于maxlen+alignment-1的extents
 	 */
 	if ((error = xfs_alloc_lookup_ge(cnt_cur, 0,
 			args->maxlen + args->alignment - 1, &i)))
@@ -1957,6 +1961,7 @@ xfs_alloc_compute_maxlevels(
 
 /*
  * Find the length of the longest extent in an AG.  The 'need' parameter
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * specifies how much space we're going to need for the AGFL and the
  * 'reserved' parameter tells us how many blocks in this AG are reserved for
  * other callers.
@@ -2040,7 +2045,13 @@ xfs_alloc_space_available(
 
 	reservation = xfs_ag_resv_needed(pag, args->resv);
 
-	/* do we have enough contiguous free space for the allocation? */
+	/*
+	 * do we have enough contiguous free space for the allocation?
+	 *                   ^^^^^^^^^^
+	 *                 为什么要求连续？
+	 * 这里的minlen应该值得是要写入的数据需要的最小的len？而不是修改btree需
+	 * 要的最小的len？
+	 */
 	alloc_len = args->minlen + (args->alignment - 1) + args->minalignslop;
 	longest = xfs_alloc_longest_free_extent(pag, min_free, reservation);
 	if (longest < alloc_len)
@@ -2219,6 +2230,8 @@ xfs_defer_agfl_block(
 /*
  * Decide whether to use this allocation group for this allocation.
  * If so, fix up the btree freelist's size.
+ *
+ * freelist是用来保存用于btree本身的空闲块的；
  */
 int			/* error */
 xfs_alloc_fix_freelist(
@@ -2238,6 +2251,9 @@ xfs_alloc_fix_freelist(
 	/* deferred ops (AGFL block frees) require permanent transactions */
 	ASSERT(tp->t_flags & XFS_TRANS_PERM_LOG_RES);
 
+	/*
+	 * 从磁盘读入AG数据
+	 */
 	if (!pag->pagf_init) {
 		error = xfs_alloc_read_agf(mp, tp, args->agno, flags, &agbp);
 		if (error)
@@ -2260,6 +2276,10 @@ xfs_alloc_fix_freelist(
 		goto out_agbp_relse;
 	}
 
+	/*
+	 * 计算这次插入要消耗多少freelist中的block elements，也就是这次插入要新
+	 * 增几个btree block
+	 */
 	need = xfs_alloc_min_freelist(mp, pag);
 	if (!xfs_alloc_space_available(args, need, flags |
 			XFS_ALLOC_FLAG_CHECK))
@@ -2335,6 +2355,9 @@ xfs_alloc_fix_freelist(
 	targs.alignment = targs.minlen = targs.prod = 1;
 	targs.type = XFS_ALLOCTYPE_THIS_AG;
 	targs.pag = pag;
+	/*
+	 * 这里面会将agflbp与xfs_trans进行关联
+	 */
 	error = xfs_alloc_read_agfl(mp, tp, targs.agno, &agflbp);
 	if (error)
 		goto out_agbp_relse;
@@ -2370,6 +2393,9 @@ xfs_alloc_fix_freelist(
 				goto out_agflbp_relse;
 		}
 	}
+	/*
+	 * agflbp和tp的关联是在xfs_alloc_read_agfl()中进行的；
+	 */
 	xfs_trans_brelse(tp, agflbp);
 	args->agbp = agbp;
 	return 0;
@@ -2840,6 +2866,10 @@ xfs_alloc_vextent(
 		 */
 		args->agno = XFS_FSB_TO_AGNO(mp, args->fsbno);
 		args->pag = xfs_perag_get(mp, args->agno);
+		/*
+		 * 更新freelist，保证修改btree导致的空间分配不会失败；
+		 * - user data分配是否成功不考虑是吧？
+		 */
 		error = xfs_alloc_fix_freelist(args, 0);
 		if (error) {
 			trace_xfs_alloc_vextent_nofix(args);
@@ -2850,6 +2880,10 @@ xfs_alloc_vextent(
 			break;
 		}
 		args->agbno = XFS_FSB_TO_AGBNO(mp, args->fsbno);
+		/*
+		 * 实际的分配
+		 * - 下面的case标签也都会调用到此函数；
+		 */
 		if ((error = xfs_alloc_ag_vextent(args)))
 			goto error0;
 		break;

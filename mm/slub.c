@@ -3854,9 +3854,15 @@ void *__kmalloc(size_t size, gfp_t flags)
 	struct kmem_cache *s;
 	void *ret;
 
+	/*
+	 * kmalloc()分配大内存时直接调用alloc_pages()
+	 */
 	if (unlikely(size > KMALLOC_MAX_CACHE_SIZE))
 		return kmalloc_large(size, flags);
 
+	/*
+	 * 对于小的内存分配，可以使用slab分配器来分配
+	 */
 	s = kmalloc_slab(size, flags);
 
 	if (unlikely(ZERO_OR_NULL_PTR(s)))

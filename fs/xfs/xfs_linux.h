@@ -15,6 +15,9 @@
 
 typedef __s64			xfs_off_t;	/* <file offset> type */
 typedef unsigned long long	xfs_ino_t;	/* <inode> type */
+/*
+ * 绝对磁盘sector号
+ */
 typedef __s64			xfs_daddr_t;	/* <disk address> type */
 typedef __u32			xfs_dev_t;
 typedef __u32			xfs_nlink_t;

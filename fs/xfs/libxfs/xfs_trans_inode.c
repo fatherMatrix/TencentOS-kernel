@@ -20,6 +20,8 @@
  *
  * The inode must be locked, and it cannot be associated with any transaction.
  * If lock_flags is non-zero the inode will be unlocked on transaction commit.
+ *
+ * 给xfs_inode分配一个xfs_log_item，并将xfs_log_item链接到xfs_trans的链表t_items上；
  */
 void
 xfs_trans_ijoin(

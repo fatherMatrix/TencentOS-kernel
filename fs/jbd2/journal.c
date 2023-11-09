@@ -2460,6 +2460,9 @@ repeat:
 	if (!buffer_jbd(bh))
 		new_jh = journal_alloc_journal_head();
 
+	/*
+	 * 这里起到一个加锁的作用；
+	 */
 	jbd_lock_bh_journal_head(bh);
 	if (buffer_jbd(bh)) {
 		jh = bh2jh(bh);
@@ -2477,11 +2480,17 @@ repeat:
 		new_jh = NULL;		/* We consumed it */
 		set_buffer_jbd(bh);
 		bh->b_private = jh;
+		/*
+		 * 这里只是将journal_head与buffer_head联系起来；
+		 */
 		jh->b_bh = bh;
 		get_bh(bh);
 		BUFFER_TRACE(bh, "added journal_head");
 	}
 	jh->b_jcount++;
+	/*
+	 * 解锁
+	 */
 	jbd_unlock_bh_journal_head(bh);
 	if (new_jh)
 		journal_free_journal_head(new_jh);

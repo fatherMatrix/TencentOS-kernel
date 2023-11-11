@@ -2946,6 +2946,7 @@ bool ext4_empty_dir(struct inode *inode)
 
 /*
  * ext4_orphan_add() links an unlinked or truncated inode into a list of
+ *                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * such inodes, starting at the superblock, in case we crash before the
  * file is closed/deleted, or in case the inode truncate spans multiple
  * transactions and the last transaction is not recovered after a crash.

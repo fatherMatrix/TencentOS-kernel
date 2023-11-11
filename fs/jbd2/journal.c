@@ -202,10 +202,18 @@ loop:
 	jbd_debug(1, "commit_sequence=%u, commit_request=%u\n",
 		journal->j_commit_sequence, journal->j_commit_request);
 
+	/*
+	 * j_commit_request表示申请进行提交的事务id；
+	 * j_commit_sequence表示已经提交的最新的事务id；
+	 * 如果两者不相等，则进行一次事务提交；
+	 */
 	if (journal->j_commit_sequence != journal->j_commit_request) {
 		jbd_debug(1, "OK, requests differ\n");
 		write_unlock(&journal->j_state_lock);
 		del_timer_sync(&journal->j_commit_timer);
+		/*
+		 * 进行一次事务提交
+		 */
 		jbd2_journal_commit_transaction(journal);
 		write_lock(&journal->j_state_lock);
 		goto loop;
@@ -493,13 +501,24 @@ int __jbd2_log_start_commit(journal_t *journal, tid_t target)
 		/*
 		 * We want a new commit: OK, mark the request and wakeup the
 		 * commit thread.  We do _not_ do the commit ourselves.
+		 *
+		 * 我们自己就是那个要提交的transaction
 		 */
 
+		/*
+		 * 哪个transaction要提交，哪个transaction就把自己的t_tid写入
+		 * 到j_commit_request记录起来。kjournald会参考这个值，猜测这
+		 * 个值是要提交transaction的最高版本号，低于这个版本号的事务
+		 * 都会被kjournald提交？
+		 */
 		journal->j_commit_request = target;
 		jbd_debug(1, "JBD2: requesting commit %u/%u\n",
 			  journal->j_commit_request,
 			  journal->j_commit_sequence);
 		journal->j_running_transaction->t_requested = jiffies;
+		/*
+		 * 唤醒kjournald，唤醒后直接返回true退出了，是个非阻塞操作
+		 */
 		wake_up(&journal->j_wait_commit);
 		return 1;
 	} else if (!tid_geq(journal->j_commit_request, target))
@@ -2457,6 +2476,12 @@ struct journal_head *jbd2_journal_add_journal_head(struct buffer_head *bh)
 	struct journal_head *new_jh = NULL;
 
 repeat:
+	/*
+	 * 这里主要是检查buffer_head->b_state中是否含有BH_JBD位
+	 * - buffer_jbd()函数定义参见include/linux/jbd2.h中的BUFFER_FNS()宏
+	 * - BH_JBD并不是buffer_head自己定义的标志位，而是从BH_PrivateStart开始由jbd2
+	 *   自定义的标志位
+	 */
 	if (!buffer_jbd(bh))
 		new_jh = journal_alloc_journal_head();
 
@@ -2465,6 +2490,9 @@ repeat:
 	 */
 	jbd_lock_bh_journal_head(bh);
 	if (buffer_jbd(bh)) {
+		/*
+		 * 进入到这里，说明有另外的内核路径先于current进入到了else
+		 */
 		jh = bh2jh(bh);
 	} else {
 		J_ASSERT_BH(bh,
@@ -2478,7 +2506,14 @@ repeat:
 
 		jh = new_jh;
 		new_jh = NULL;		/* We consumed it */
+		/*
+		 * 设置buffer_head->b_state中的BH_JBD标志位
+		 * - 与buffer_jbd()相同，都是由BUFFER_FNS()宏展开的；
+		 */
 		set_buffer_jbd(bh);
+		/*
+		 * 将journal_head指针保存到buffer_head->private中
+		 */
 		bh->b_private = jh;
 		/*
 		 * 这里只是将journal_head与buffer_head联系起来；

@@ -3714,7 +3714,15 @@ static ssize_t ext4_direct_IO_write(struct kiocb *iocb, struct iov_iter *iter)
 	int orphan = 0;
 	handle_t *handle;
 
+	/*
+	 * inode->i_size和ext4_inode_info->i_disksize在绝大多数情况下应该一致，只有
+	 * 在truncate()过程中的时候。此时会先修改inode->i_size，写盘时再修改
+	 * ext4_inode_info->i_disksize，这里会产生一个时间差；
+	 */
 	if (final_size > inode->i_size || final_size > ei->i_disksize) {
+	/*
+	 * 这里要扩大文件的尺寸了，涉及到元数据的修改，因此要先进行journal
+	 */
 		/* Credits for sb + inode write */
 		handle = ext4_journal_start(inode, EXT4_HT_INODE, 2);
 		if (IS_ERR(handle)) {

@@ -71,6 +71,9 @@ handle_t *__ext4_journal_start_sb(struct super_block *sb, unsigned int line,
 	int err;
 
 	trace_ext4_journal_start(sb, blocks, rsv_blocks, _RET_IP_);
+	/*
+	 * 检查jbd是否可用，是否产生了EIO？
+	 */
 	err = ext4_journal_check_start(sb);
 	if (err < 0)
 		return ERR_PTR(err);

@@ -115,6 +115,9 @@ __releases(&journal->j_state_lock)
 	nblocks = jbd2_space_needed(journal);
 	while (jbd2_log_space_left(journal) < nblocks) {
 		write_unlock(&journal->j_state_lock);
+		/*
+		 * 获取j_checkpoint_mutex信号量
+		 */
 		mutex_lock_io(&journal->j_checkpoint_mutex);
 
 		/*
@@ -136,6 +139,9 @@ __releases(&journal->j_state_lock)
 		spin_lock(&journal->j_list_lock);
 		space_left = jbd2_log_space_left(journal);
 		if (space_left < nblocks) {
+			/*
+			 * 判断当前正在做checkpoint动作的transaction链表是否为NULL
+			 */
 			int chkpt = journal->j_checkpoint_transactions != NULL;
 			tid_t tid = 0;
 
@@ -144,8 +150,15 @@ __releases(&journal->j_state_lock)
 			spin_unlock(&journal->j_list_lock);
 			write_unlock(&journal->j_state_lock);
 			if (chkpt) {
+			/*
+			 * 如果当前有正在做checkpoint动作的transaction，则等待他们
+			 * 动作结束；
+			 */
 				jbd2_log_do_checkpoint(journal);
 			} else if (jbd2_cleanup_journal_tail(journal) == 0) {
+			/*
+			 * 感觉这一句可以合并jbd2_log_do_checkpoint()中的第一句，拿出来
+			 */
 				/* We were able to recover space; yay! */
 				;
 			} else if (tid) {
@@ -254,6 +267,10 @@ restart:
 		if (buffer_locked(bh)) {
 			get_bh(bh);
 			spin_unlock(&journal->j_list_lock);
+			/*
+			 * 等谁去把这个buffer写入磁盘呢？
+			 * - 该buffer所属的transaction吗？
+			 */
 			wait_on_buffer(bh);
 			/* the journal_head may have gone by now */
 			BUFFER_TRACE(bh, "brelse");

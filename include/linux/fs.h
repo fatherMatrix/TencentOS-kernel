@@ -2132,6 +2132,7 @@ static inline ssize_t call_write_iter(struct file *file, struct kiocb *kio,
 {
 	/*
 	 * xfs: xfs_file_write_iter()
+	 * ext4: ext4_file_write_iter()
 	 */
 	return file->f_op->write_iter(kio, iter);
 }

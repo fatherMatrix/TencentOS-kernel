@@ -26,6 +26,9 @@ static inline void bit_spin_lock(int bitnum, unsigned long *addr)
 #if defined(CONFIG_SMP) || defined(CONFIG_DEBUG_SPINLOCK)
 	while (unlikely(test_and_set_bit_lock(bitnum, addr))) {
 		preempt_enable();
+		/*
+		 * 这可真的是在while自旋，很浪费cache line
+		 */
 		do {
 			cpu_relax();
 		} while (test_bit(bitnum, addr));

@@ -413,6 +413,9 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 	J_ASSERT(journal->j_running_transaction != NULL);
 	J_ASSERT(journal->j_committing_transaction == NULL);
 
+	/*
+	 * 表明提交事务是当前正在运行的事务
+	 */
 	commit_transaction = journal->j_running_transaction;
 
 	trace_jbd2_start_commit(journal, commit_transaction);
@@ -421,6 +424,9 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 
 	write_lock(&journal->j_state_lock);
 	J_ASSERT(commit_transaction->t_state == T_RUNNING);
+	/*
+	 * 当前事务的状态上锁，不允许当前事务中再加入新的handle
+	 */
 	commit_transaction->t_state = T_LOCKED;
 
 	trace_jbd2_commit_locking(journal, commit_transaction);
@@ -435,6 +441,9 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 					      stats.run.rs_locked);
 
 	spin_lock(&commit_transaction->t_handle_lock);
+	/*
+	 * 如果目前还有正在更新这个transaction的，则进行等待；
+	 */
 	while (atomic_read(&commit_transaction->t_updates)) {
 		DEFINE_WAIT(wait);
 
@@ -537,6 +546,8 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 	/*
 	 * Now start flushing things to disk, in the order they appear
 	 * on the transaction lists.  Data blocks go first.
+	 *
+	 * 这个是处理transaction->t_inode_list，即data=ordered模式的情况；
 	 */
 	err = journal_submit_data_buffers(journal, commit_transaction);
 	if (err)

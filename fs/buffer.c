@@ -1076,9 +1076,13 @@ __getblk_slow(struct block_device *bdev, sector_t block,
  * @bh: the buffer_head to mark dirty
  *
  * mark_buffer_dirty() will set the dirty bit against the buffer, then set
+ *                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^       ^^^
  * its backing page dirty, then tag the page as dirty in the page cache
+ * ^^^^^^^^^^^^^^^^^^^^^^       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * and then attach the address_space's inode to its superblock's dirty
+ *          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * inode list.
+ * ^^^^^^^^^^
  *
  * mark_buffer_dirty() is atomic.  It takes bh->b_page->mapping->private_lock,
  * i_pages lock and mapping->host->i_lock.

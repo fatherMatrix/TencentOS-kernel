@@ -606,11 +606,19 @@ struct transaction_chp_stats_s {
 
 struct transaction_s
 {
-	/* Pointer to the journal for this transaction. [no locking] */
-	journal_t		*t_journal;	// 指向所属的journal
+	/*
+	 * Pointer to the journal for this transaction. [no locking]
+	 *
+	 * 指向所属的journal
+	 */
+	journal_t		*t_journal;
 
-	/* Sequence number for this transaction [no locking] */
-	tid_t			t_tid;		// 本事务的序列号
+	/*
+	 * Sequence number for this transaction [no locking]
+	 *
+	 * 本事务的序列号
+	 */
+	tid_t			t_tid;
 
 	/*
 	 * Transaction's current state
@@ -619,6 +627,8 @@ struct transaction_s
 	 * state and subsequent call of __jbd2_journal_drop_transaction()
 	 * FIXME: needs barriers
 	 * KLUDGE: [use j_state_lock]
+	 *
+	 * 事务的状态
 	 */
 	enum {
 		T_RUNNING,
@@ -648,24 +658,34 @@ struct transaction_s
 
 	/*
 	 * Doubly-linked circular list of all buffers reserved but not yet
+	 *                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * modified by this transaction [j_list_lock]
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 *
-	 * 本保留但未使用的buffer链表
+	 * 本transaction保留但未使用的buffer链表
 	 */
 	struct journal_head	*t_reserved_list;
 
 	/*
 	 * Doubly-linked circular list of all metadata buffers owned by this
+	 *                                ^^^^^^^^^^^^^^^^^^^^
 	 * transaction [j_list_lock]
 	 *
-	 * 元数据buffer链表，及其重要的数据
+	 * 元数据buffer链表
 	 */
 	struct journal_head	*t_buffers;
 
 	/*
 	 * Doubly-linked circular list of all forget buffers (superseded
+	 *                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * buffers which we can un-checkpoint once this transaction commits)
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * [j_list_lock]
+	 *
+	 * 本transaction提交后，可以被un-checkpoint的缓冲区。
+	 * - 当一个缓冲区正在被checkpointed，但是后来由调用journal_forget()，
+	 *   此时以前的checkpointed项就没用了。因此需要在这里记录下这个缓冲区，
+	 *   然后un-checkpoint这个缓冲区。
 	 */
 	struct journal_head	*t_forget;
 
@@ -696,6 +716,8 @@ struct transaction_s
 	/*
 	 * List of inodes whose data we've modified in data=ordered mode.
 	 * [j_list_lock]
+	 *
+	 * data=ordered的inode需要加入到此链表
 	 */
 	struct list_head	t_inode_list;
 
@@ -890,7 +912,7 @@ struct journal_s
 	 * checkpointing. [j_list_lock]
 	 *
 	 * 仍在等待进行checkpoint操作的所有事务组成的循环队列。一旦一个transaction
-	 * 执行checkpoint完成，则从此队列删除。第一项是最旧的transaction，一次类推
+	 * 执行checkpoint完成，则从此队列删除。第一项是最旧的transaction，依次类推
 	 */
 	transaction_t		*j_checkpoint_transactions;
 
@@ -899,6 +921,8 @@ struct journal_s
 	 *
 	 * Wait queue for waiting for a locked transaction to start committing,
 	 * or for a barrier lock to be released.
+	 *
+	 * 等待一个已上锁的transaction开始提交，或者等待一个barrier lock释放
 	 */
 	wait_queue_head_t	j_wait_transaction_locked;
 
@@ -918,6 +942,8 @@ struct journal_s
 
 	/**
 	 * @j_wait_updates: Wait queue to wait for updates to complete.
+	 *
+	 * 等待handle完成的等待队列
 	 */
 	wait_queue_head_t	j_wait_updates;
 
@@ -932,6 +958,9 @@ struct journal_s
 	 * @j_checkpoint_mutex:
 	 *
 	 * Semaphore for locking against concurrent checkpoints.
+	 *
+	 * 回收缓冲区空间的时候，需要获取这把锁。
+	 * - 猜测jbd2中对checkpoint的定义是从journal区冲刷到数据区？
 	 */
 	struct mutex		j_checkpoint_mutex;
 

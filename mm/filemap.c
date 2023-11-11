@@ -3247,7 +3247,8 @@ generic_file_direct_write(struct kiocb *iocb, struct iov_iter *from)
 	}
 
 	/*
-	 * 对ext4文件系统，这里是ext4_direct_IO()
+	 * 对ext4文件系统，这里是 ext4_direct_IO()
+	 * - 对于非direct io的操作，这里会返回0，表示要回退到buffer io操作；
 	 */
 	written = mapping->a_ops->direct_IO(iocb, from);
 
@@ -3486,6 +3487,8 @@ ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 		 * holes, for example.  For DAX files, a buffered write will
 		 * not succeed (even if it did, DAX does not handle dirty
 		 * page-cache pages correctly).
+		 *
+		 * 如果direct io需要退化为buffer io，那么written会返回0；
 		 */
 		if (written < 0 || !iov_iter_count(from) || IS_DAX(inode))
 			goto out;

@@ -98,6 +98,9 @@ static void jbd2_get_transaction(journal_t *journal,
 	add_timer(&journal->j_commit_timer);
 
 	J_ASSERT(journal->j_running_transaction == NULL);
+	/*
+	 * 将transaction关联到journal
+	 */
 	journal->j_running_transaction = transaction;
 	transaction->t_max_wait = 0;
 	transaction->t_start = jiffies;
@@ -263,8 +266,14 @@ static int add_transaction_credits(journal_t *journal, int blocks,
 	if (jbd2_log_space_left(journal) < jbd2_space_needed(journal)) {
 		atomic_sub(total, &t->t_outstanding_credits);
 		read_unlock(&journal->j_state_lock);
+		/*
+		 * 这一步似乎只是为了CONFIG_LOCKDEP做调试用
+		 */
 		jbd2_might_wait_for_commit(journal);
 		write_lock(&journal->j_state_lock);
+		/*
+		 * __jbd2_log_wait_for_space()中睡眠前会放锁，返回前会重新持锁
+		 */
 		if (jbd2_log_space_left(journal) < jbd2_space_needed(journal))
 			__jbd2_log_wait_for_space(journal);
 		write_unlock(&journal->j_state_lock);
@@ -310,8 +319,11 @@ static int start_this_handle(journal_t *journal, handle_t *handle,
 
 	/*
 	 * Limit the number of reserved credits to 1/2 of maximum transaction
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * size and limit the number of total credits to not exceed maximum
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * transaction size per operation.
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 */
 	if ((rsv_blocks > journal->j_max_transaction_buffers / 2) ||
 	    (rsv_blocks + blocks > journal->j_max_transaction_buffers)) {
@@ -356,6 +368,7 @@ repeat:
 	/*
 	 * Wait on the journal's transaction barrier if necessary. Specifically
 	 * we allow reserved handles to proceed because otherwise commit could
+	 *    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * deadlock on page writeback not being able to complete.
 	 */
 	if (!handle->h_reserved && journal->j_barrier_count) {
@@ -365,6 +378,10 @@ repeat:
 		goto repeat;
 	}
 
+	/*
+	 * 如果journal当前没有对应的正在运行的transaction，则将上面分配的new_transaction
+	 * 初始化后关联给journal
+	 */
 	if (!journal->j_running_transaction) {
 		read_unlock(&journal->j_state_lock);
 		if (!new_transaction)
@@ -415,6 +432,9 @@ repeat:
 		  atomic_read(&transaction->t_outstanding_credits),
 		  jbd2_log_space_left(journal));
 	read_unlock(&journal->j_state_lock);
+	/*
+	 * 对称的点在jbd2__journal_stop()
+	 */
 	current->journal_info = handle;
 
 	rwsem_acquire_read(&journal->j_trans_commit_map, 0, 0, _THIS_IP_);
@@ -442,6 +462,9 @@ static handle_t *new_handle(int nblocks)
 	return handle;
 }
 
+/*
+ * 主要作用是分配一个handle_t，并将其关联到正在运行的transaction上
+ */
 handle_t *jbd2__journal_start(journal_t *journal, int nblocks, int rsv_blocks,
 			      gfp_t gfp_mask, unsigned int type,
 			      unsigned int line_no)
@@ -457,6 +480,7 @@ handle_t *jbd2__journal_start(journal_t *journal, int nblocks, int rsv_blocks,
 
 	/*
 	 * 如果当前task有一个handle，则直接返回
+	 * - 返回前要对handle增加引用计数
 	 */
 	if (handle) {
 		J_ASSERT(handle->h_transaction->t_journal == journal);
@@ -470,6 +494,9 @@ handle_t *jbd2__journal_start(journal_t *journal, int nblocks, int rsv_blocks,
 	handle = new_handle(nblocks);
 	if (!handle)
 		return ERR_PTR(-ENOMEM);
+	/*
+	 * handle_t中还有一个handle_t的指针，用于描述rev_blocks指定的保留磁盘块
+	 */
 	if (rsv_blocks) {
 		handle_t *rsv_handle;
 
@@ -941,6 +968,9 @@ repeat:
 		 * with running write-out.
 		 */
 		JBUFFER_TRACE(jh, "Journalling dirty buffer");
+		/*
+		 * 将BH_Dirty转换为JBD_Dirty
+		 */
 		clear_buffer_dirty(bh);
 		set_buffer_jbddirty(bh);
 	}
@@ -957,6 +987,8 @@ repeat:
 	/*
 	 * The buffer is already part of this transaction if b_transaction or
 	 * b_next_transaction points to it
+	 *
+	 * 如果journal_buffer已经由transaction管理了，则直接返回
 	 */
 	if (jh->b_transaction == transaction ||
 	    jh->b_next_transaction == transaction)
@@ -965,6 +997,8 @@ repeat:
 	/*
 	 * this is the first time this transaction is touching this buffer,
 	 * reset the modified flag
+	 *
+	 * 所以b_modified和buffer_head是否为脏并无关系？
 	 */
 	jh->b_modified = 0;
 
@@ -984,6 +1018,11 @@ repeat:
 		 */
 		smp_wmb();
 		spin_lock(&journal->j_list_lock);
+		/*
+		 * 如果journal_buffer还没有被transaction管理，则将其放到指定的
+		 * transaction链表上；
+		 * - 这里面将jh->b_transaction设置为了transaction；
+		 */
 		__jbd2_journal_file_buffer(jh, transaction, BJ_Reserved);
 		spin_unlock(&journal->j_list_lock);
 		goto done;
@@ -1004,12 +1043,18 @@ repeat:
 
 	/*
 	 * There is one case we have to be very careful about.  If the
+	 *                                                      ^^^^^^
 	 * committing transaction is currently writing this buffer out to disk
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * and has NOT made a copy-out, then we cannot modify the buffer
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * contents at all right now.  The essence of copy-out is that it is
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * the extra copy, not the primary copy, which gets journaled.  If the
 	 * primary copy is already going to disk then we cannot do copy-out
 	 * here.
+	 *
+	 * journal_buffer在BJ_Shadow链表上，说明这个journal_buffer正在被回写
 	 */
 	if (buffer_shadow(bh)) {
 		JBUFFER_TRACE(jh, "on shadow: sleep");
@@ -1020,6 +1065,7 @@ repeat:
 
 	/*
 	 * Only do the copy if the currently-owning transaction still needs it.
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * If buffer isn't on BJ_Metadata list, the committing transaction is
 	 * past that stage (here we use the fact that BH_Shadow is set under
 	 * bh_state lock together with refiling to BJ_Shadow list and at this
@@ -1041,6 +1087,9 @@ repeat:
 		}
 		jh->b_frozen_data = frozen_buffer;
 		frozen_buffer = NULL;
+		/*
+		 * 拷贝数据
+		 */
 		jbd2_freeze_jh_data(jh);
 	}
 attach_next:
@@ -1141,6 +1190,9 @@ int jbd2_journal_get_write_access(handle_t *handle, struct buffer_head *bh)
 	if (is_handle_aborted(handle))
 		return -EROFS;
 
+	/*
+	 * 如果这个buffer_head已经和handle的transaction关联了，则直接退出
+	 */
 	if (jbd2_write_access_granted(handle, bh, false))
 		return 0;
 
@@ -1159,6 +1211,7 @@ int jbd2_journal_get_write_access(handle_t *handle, struct buffer_head *bh)
 
 /*
  * When the user wants to journal a newly created buffer_head
+ *                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * (ie. getblk() returned a new buffer and we are going to populate it
  * manually rather than reading off disk), then we need to keep the
  * buffer_head locked until it has been completely filled with new
@@ -1180,6 +1233,9 @@ int jbd2_journal_get_create_access(handle_t *handle, struct buffer_head *bh)
 {
 	transaction_t *transaction = handle->h_transaction;
 	journal_t *journal;
+	/*
+	 * 生成一个新的journal_head与buffer_head相关联，表示将bh纳入jbd管理
+	 */
 	struct journal_head *jh = jbd2_journal_add_journal_head(bh);
 	int err;
 
@@ -1208,6 +1264,9 @@ int jbd2_journal_get_create_access(handle_t *handle, struct buffer_head *bh)
 	J_ASSERT_JH(jh, buffer_locked(jh2bh(jh)));
 
 	if (jh->b_transaction == NULL) {
+	/*
+	 * 如果journal_head以前没有受jbd管理？
+	 */
 		/*
 		 * Previous jbd2_journal_forget() could have left the buffer
 		 * with jbddirty bit set because it was being committed. When
@@ -1222,9 +1281,18 @@ int jbd2_journal_get_create_access(handle_t *handle, struct buffer_head *bh)
 
 		JBUFFER_TRACE(jh, "file as BJ_Reserved");
 		spin_lock(&journal->j_list_lock);
+		/*
+		 * 将jh加入transaction的BJ_Reserved队列，供jbd管理使用
+		 */
 		__jbd2_journal_file_buffer(jh, transaction, BJ_Reserved);
 		spin_unlock(&journal->j_list_lock);
 	} else if (jh->b_transaction == journal->j_committing_transaction) {
+	/*
+	 * 如果当前journal_buffer已经由正在提交的事务（j_committing_transaction）
+	 * 管理，则将journal_buffer->b_next_transaction设置为handle->h_transaction。
+	 * 这意味着此journal_head在由正在提交的事务处理完之后，还要由handle->h_transaction
+	 * 处理；
+	 */
 		/* first access by this transaction */
 		jh->b_modified = 0;
 
@@ -1746,6 +1814,17 @@ int jbd2_journal_stop(handle_t *handle)
 							 handle->h_ref);
 			return err;
 		} else {
+			/*
+			 * 为什么只释放了handle->h_rsv_handle?
+			 * - goto free_and_exit后会同样调用jbd2_free_handle()
+			 *   来释放handle本身；
+			 *
+			 * 为什么只释放了handle->h_rsv_handle的内存？其内部
+			 * 不会再指向其他的堆空间了吗？
+			 * - handle_t这个东西中大部分都是用来记录资源用量的
+			 *   内嵌数据，仅有的指针也不是伴随handle_t的分配而
+			 *   嵌套分配的，生命周期无关（或长于handle_t）；
+			 */
 			if (handle->h_rsv_handle)
 				jbd2_free_handle(handle->h_rsv_handle);
 			goto free_and_exit;
@@ -1763,6 +1842,9 @@ int jbd2_journal_stop(handle_t *handle)
 	if (--handle->h_ref > 0) {
 		jbd_debug(4, "h_ref %d -> %d\n", handle->h_ref + 1,
 			  handle->h_ref);
+		/*
+		 * 这个时候err还是0呢，即正常返回
+		 */
 		return err;
 	}
 
@@ -1827,12 +1909,18 @@ int jbd2_journal_stop(handle_t *handle)
 			ktime_t expires = ktime_add_ns(ktime_get(),
 						       commit_time);
 			set_current_state(TASK_UNINTERRUPTIBLE);
+			/*
+			 * 睡到expires
+			 */
 			schedule_hrtimeout(&expires, HRTIMER_MODE_ABS);
 		}
 	}
 
 	if (handle->h_sync)
 		transaction->t_synchronous_commit = 1;
+	/*
+	 * 对称点在jbd2__journal_start() -> start_this_handle()
+	 */
 	current->journal_info = NULL;
 	atomic_sub(handle->h_buffer_credits,
 		   &transaction->t_outstanding_credits);
@@ -1853,7 +1941,11 @@ int jbd2_journal_stop(handle_t *handle)
 
 		jbd_debug(2, "transaction too old, requesting commit for "
 					"handle %p\n", handle);
-		/* This is non-blocking */
+		/*
+		 * This is non-blocking
+		 *
+		 * 开始日志的提交过程，但这是非阻塞的，需要在下面做等待
+		 */
 		jbd2_log_start_commit(journal, transaction->t_tid);
 
 		/*
@@ -1879,6 +1971,9 @@ int jbd2_journal_stop(handle_t *handle)
 
 	rwsem_release(&journal->j_trans_commit_map, 1, _THIS_IP_);
 
+	/*
+	 * 等待jbd2_log_start_commit()完成
+	 */
 	if (wait_for_commit)
 		err = jbd2_log_wait_commit(journal, tid);
 
@@ -1991,11 +2086,21 @@ static void __jbd2_journal_temp_unlink_buffer(struct journal_head *jh)
 		break;
 	}
 
+	/*
+	 * 将其从现在的链表上摘下来
+	 */
 	__blist_del_buffer(list, jh);
 	jh->b_jlist = BJ_None;
 	if (transaction && is_journal_aborted(transaction->t_journal))
 		clear_buffer_jbddirty(bh);
+	/*
+	 * test_clear_buffer_jbddirty()参见TAS_BUFFER_FNS()宏
+	 * - 清除一个bit，并返回其旧值
+	 */
 	else if (test_clear_buffer_jbddirty(bh))
+	/*
+	 * 将JBDDirty转换为buffer_head标准的BH_Dirty
+	 */
 		mark_buffer_dirty(bh);	/* Expose it to the VM */
 }
 
@@ -2499,9 +2604,21 @@ void __jbd2_journal_file_buffer(struct journal_head *jh,
 	}
 
 	if (jh->b_transaction)
+	/*
+	 * 因为前面第一个if的干预，能进入到这里说明其jh->b_jlist一定不等于传
+	 * 入的jlist参数；也就是说这个jh处于一个非期望的transaction链表中，
+	 * 此时需要先将其从该链表上取下来，以便后面的__blist_add_buffer()可以
+	 * 将其插入到正确的transaction链表上；
+	 */
 		__jbd2_journal_temp_unlink_buffer(jh);
 	else
+	/*
+	 * 本来就有jh，为什么还要用bh转一圈儿呢？
+	 */
 		jbd2_journal_grab_journal_head(bh);
+	/*
+	 * 以后会通过这个字段判断journal_buffer是否已经被transaction管理
+	 */
 	jh->b_transaction = transaction;
 
 	switch (jlist) {
@@ -2524,6 +2641,9 @@ void __jbd2_journal_file_buffer(struct journal_head *jh,
 		break;
 	}
 
+	/*
+	 * 将journal_head加入到transaction对应的链表中
+	 */
 	__blist_add_buffer(list, jh);
 	jh->b_jlist = jlist;
 

@@ -58,7 +58,13 @@ struct xfs_ail {
 	 * - 参见xfs_trans_ail_init()
 	 */
 	struct task_struct	*ail_task;
+	/*
+	 * 链表元素是xfs_log_item->li_ail；
+	 */
 	struct list_head	ail_head;
+	/*
+	 * 应该是ali_task写盘的最高lsn
+	 */
 	xfs_lsn_t		ail_target;
 	xfs_lsn_t		ail_target_prev;
 	struct list_head	ail_cursors;

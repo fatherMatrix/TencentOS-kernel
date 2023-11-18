@@ -289,6 +289,9 @@ xlog_grant_head_wait(
 	do {
 		if (XLOG_FORCED_SHUTDOWN(log))
 			goto shutdown;
+		/*
+		 * 这里也会tick ail，给log buffer腾空间；
+		 */
 		xlog_grant_push_ail(log, need_bytes);
 
 		__set_current_state(TASK_UNINTERRUPTIBLE);
@@ -305,6 +308,10 @@ xlog_grant_head_wait(
 			goto shutdown;
 	} while (xlog_space_left(log, &head->grant) < need_bytes);
 
+	/*
+	 * 唤醒之后我们先获取了head->lock，然后再判断xlog_space_left()，这可以
+	 * 保证已满足的条件不会被其他人先一步抢走；
+	 */
 	list_del_init(&tic->t_queue);
 	return 0;
 shutdown:
@@ -350,6 +357,9 @@ xlog_grant_head_check(
 	*need_bytes = xlog_ticket_reservation(log, head, tic);
 	free_bytes = xlog_space_left(log, &head->grant);
 	if (!list_empty_careful(&head->waiters)) {
+	/*
+	 * 如果head->waiters不为空，即已经有其他等待者；
+	 */
 		spin_lock(&head->lock);
 		if (!xlog_grant_head_wake(log, head, &free_bytes) ||
 		    free_bytes < *need_bytes) {
@@ -358,6 +368,9 @@ xlog_grant_head_check(
 		}
 		spin_unlock(&head->lock);
 	} else if (free_bytes < *need_bytes) {
+	/*
+	 * 如果目前没有其他等待者；
+	 */
 		spin_lock(&head->lock);
 		error = xlog_grant_head_wait(log, head, tic, *need_bytes);
 		spin_unlock(&head->lock);
@@ -476,14 +489,24 @@ xfs_log_reserve(
 	XFS_STATS_INC(mp, xs_try_logspace);
 
 	ASSERT(*ticp == NULL);
+	/*
+	 * 分配xlog_ticket，并计算需要保留的log space
+	 */
 	tic = xlog_ticket_alloc(log, unit_bytes, cnt, client, permanent, 0);
 	*ticp = tic;
 
+	/*
+	 * 检查log buffer的空闲空间，必要时将log buffer已经落盘的log对应的
+	 * item写入metadata region中；
+	 */
 	xlog_grant_push_ail(log, tic->t_cnt ? tic->t_unit_res * tic->t_cnt
 					    : tic->t_unit_res);
 
 	trace_xfs_log_reserve(log, tic);
 
+	/*
+	 * 等待log buffer中有至少need bytes给我们用
+	 */
 	error = xlog_grant_head_check(log, &log->l_reserve_head, tic,
 				      &need_bytes);
 	if (error)
@@ -492,6 +515,9 @@ xfs_log_reserve(
 	xlog_grant_add_space(log, &log->l_reserve_head.grant, need_bytes);
 	xlog_grant_add_space(log, &log->l_write_head.grant, need_bytes);
 	trace_xfs_log_reserve_exit(log, tic);
+	/*
+	 * debug时才编译代码
+	 */
 	xlog_verify_grant_tail(log);
 	return 0;
 
@@ -517,16 +543,30 @@ out_error:
 /*
  * This routine is called when a user of a log manager ticket is done with
  * the reservation.  If the ticket was ever used, then a commit record for
+ *                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * the associated transaction is written out as a log operation header with
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * no data.  The flag XLOG_TIC_INITED is set when the first write occurs with
+ * ^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ *           这里的第一次write指的是写入log buffer，这个注释应该是错误的：
+ *           - 该标志的设置在ticket被alloc的时候
+ *           - 该标志的清除在第一次被写入iclog(我理解应该是log buffer)时清除的
  * a given ticket.  If the ticket was one with a permanent reservation, then
+ * ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * a few operations are done differently.  Permanent reservation tickets by
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * default don't release the reservation.  They just commit the current
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * transaction with the belief that the reservation is still needed.  A flag
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * must be passed in before permanent reservations are actually released.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * When these type of tickets are not released, they need to be set into
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * the inited state again.  By doing this, a start record will be written
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * out when the next write occurs.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  */
 xfs_lsn_t
 xfs_log_done(
@@ -543,7 +583,7 @@ xfs_log_done(
 	     * If nothing was ever written, don't write out commit record.
 	     * If we get an error, just continue and give back the log ticket.
 	     */
-	    (((ticket->t_flags & XLOG_TIC_INITED) == 0) &&
+	    (((ticket->t_flags & XLOG_TIC_INITED) == 0) && 	/* 没有该标志表示已经写入过iclog了；*/
 	     (xlog_commit_record(log, ticket, iclog, &lsn)))) {
 		lsn = (xfs_lsn_t) -1;
 		regrant = false;
@@ -1221,6 +1261,10 @@ xlog_space_left(
 	 */
 	xlog_crack_grant_head(head, &head_cycle, &head_bytes);
 	xlog_crack_atomic_lsn(&log->l_tail_lsn, &tail_cycle, &tail_bytes);
+	/*
+	 * xlog->l_tail_lsn是cycle|block的组合，参见xlog_assign_atomic_lsn()参数名
+	 * - 猜测这里的block应该是basic block？
+	 */
 	tail_bytes = BBTOB(tail_bytes);
 
 	/*
@@ -1596,13 +1640,31 @@ xlog_grant_push_ail(
 	 * Set the threshold for the minimum number of free blocks in the
 	 * log to the maximum of what the caller needs, one quarter of the
 	 * log, and 256 blocks.
+	 *
+	 * 如果log space的空闲空间大于阈值，则返回；
+	 * - 感觉这里指的是log buffer？
 	 */
 	free_threshold = BTOBB(need_bytes);
+	/*
+	 * 最低25%
+	 */
 	free_threshold = max(free_threshold, (log->l_logBBsize >> 2));
+	/*
+	 * 最低256个Basic block
+	 */
 	free_threshold = max(free_threshold, 256);
 	if (free_blocks >= free_threshold)
 		return;
 
+	/*
+	 * 走到这里，说明log space的空闲空间小于阈值了，需要进行写盘操作；
+	 * - 感觉这里指的是log buffer？
+	 */
+
+	/*
+	 * 也就是说这里期望把lsn往前至少推max(25%, 256, need_bytes)个
+	 * basic block
+	 */
 	xlog_crack_atomic_lsn(&log->l_tail_lsn, &threshold_cycle,
 						&threshold_block);
 	threshold_block += free_threshold;
@@ -1616,6 +1678,9 @@ xlog_grant_push_ail(
 	 * Don't pass in an lsn greater than the lsn of the last
 	 * log record known to be on disk. Use a snapshot of the last sync lsn
 	 * so that it doesn't change between the compare and the set.
+	 *
+	 * 这里限制我们最终推lsn时不可以超过xlog->l_last_sync_lsn
+	 * - l_last_sync_lsn表示写到disk上的日志lsn；
 	 */
 	last_sync_lsn = atomic64_read(&log->l_last_sync_lsn);
 	if (XFS_LSN_CMP(threshold_lsn, last_sync_lsn) > 0)
@@ -1627,6 +1692,9 @@ xlog_grant_push_ail(
 	 * the filesystem is shutting down.
 	 *
 	 * 将AIL中的log写出到盘上
+	 * - 因为看上面的意思，要写的是[current, l_last_sync_lsn]的log，其中
+	 *   小于l_last_sync_lsn的log已经在disk上了，那这里的写应该是指将
+	 *   [current, l_last_sync_lsn]中的log写入到metadata region中；
 	 */
 	if (!XLOG_FORCED_SHUTDOWN(log))
 		xfs_ail_push(log->l_ailp, threshold_lsn);
@@ -1721,6 +1789,9 @@ xlog_bio_end_io(
 {
 	struct xlog_in_core	*iclog = bio->bi_private;
 
+	/*
+	 * 工作函数是：  xlog_ioend_work()
+	 */
 	queue_work(iclog->ic_log->l_ioend_workqueue,
 		   &iclog->ic_end_io_work);
 }
@@ -1780,6 +1851,9 @@ xlog_write_iclog(
 	bio_init(&iclog->ic_bio, iclog->ic_bvec, howmany(count, PAGE_SIZE));
 	bio_set_dev(&iclog->ic_bio, log->l_targ->bt_bdev);
 	iclog->ic_bio.bi_iter.bi_sector = log->l_logBBstart + bno;
+	/*
+	 * 回调函数
+	 */
 	iclog->ic_bio.bi_end_io = xlog_bio_end_io;
 	iclog->ic_bio.bi_private = iclog;
 	iclog->ic_bio.bi_opf = REQ_OP_WRITE | REQ_META | REQ_SYNC | REQ_FUA;
@@ -2175,6 +2249,9 @@ xlog_write_calc_vec_length(
 	}
 
 	ticket->t_res_num_ophdrs += headers;
+	/*
+	 * 明白了，一个xlog_op_header对应一个xfs_log_iovec；
+	 */
 	len += headers * sizeof(struct xlog_op_header);
 
 	return len;
@@ -2189,6 +2266,10 @@ xlog_write_start_rec(
 	struct xlog_op_header	*ophdr,
 	struct xlog_ticket	*ticket)
 {
+	/*
+	 * 如果ticket->t_flags中没有XLOG_TIC_INITED，即这不是第一次写，就返回。
+	 * - XLOG_START_TRANS仅需要写一次；
+	 */
 	if (!(ticket->t_flags & XLOG_TIC_INITED))
 		return 0;
 
@@ -2256,6 +2337,10 @@ xlog_write_setup_copy(
 {
 	int			still_to_copy;
 
+	/*
+	 * 这里是因为有可能在上一个log buffer中仅写了部分（bytes_consumed），因此
+	 * 要计算还需要写多少；
+	 */
 	still_to_copy = space_required - *bytes_consumed;
 	*copy_off = *bytes_consumed;
 
@@ -2394,6 +2479,9 @@ xlog_write(
 
 	*start_lsn = 0;
 
+	/*
+	 * 计算这个xfs_log_vec链表总共需要多少log buffer空间来存储
+	 */
 	len = xlog_write_calc_vec_length(ticket, log_vector);
 
 	/*
@@ -2425,6 +2513,11 @@ xlog_write(
 		void		*ptr;
 		int		log_offset;
 
+		/*
+		 * iclog返回出我们应该向哪个iclog写入；
+		 * log_offset返回出我们应该向iclog的什么位置开始写；
+		 * - 这个位置是从iclog->ic_datap开始算；
+		 */
 		error = xlog_state_get_iclog_space(log, len, &iclog, ticket,
 						   &contwr, &log_offset);
 		if (error)
@@ -2460,6 +2553,9 @@ xlog_write(
 			ASSERT(reg->i_len % sizeof(int32_t) == 0);
 			ASSERT((unsigned long)ptr % sizeof(int32_t) == 0);
 
+			/*
+			 * 在transaction的log buffer中添加xfs_op_header
+			 */
 			start_rec_copy = xlog_write_start_rec(ptr, ticket);
 			if (start_rec_copy) {
 				record_cnt++;
@@ -3021,6 +3117,9 @@ xlog_state_get_iclog_space(
 	int		  error;
 
 restart:
+	/*
+	 * 上锁
+	 */
 	spin_lock(&log->l_icloglock);
 	if (XLOG_FORCED_SHUTDOWN(log)) {
 		spin_unlock(&log->l_icloglock);
@@ -3032,10 +3131,20 @@ restart:
 		XFS_STATS_INC(log->l_mp, xs_log_noiclogs);
 
 		/* Wait for log writes to have flushed */
+		/*
+		 * 去xlog->l_flush_wait等待队列上睡眠，睡眠之前释放l_icloglock
+		 */
 		xlog_wait(&log->l_flush_wait, &log->l_icloglock);
 		goto restart;
 	}
 
+	/*
+	 * 走到这里，说明log buffer此时是可以写的，但空间是否足够呢？
+	 */
+
+	/*
+	 * 每个log record（log buffer）都以xlog_rec_header开头
+	 */
 	head = &iclog->ic_header;
 
 	atomic_inc(&iclog->ic_refcnt);	/* prevents sync */
@@ -3052,6 +3161,10 @@ restart:
 				    log->l_iclog_hsize,
 				    XLOG_REG_TYPE_LRHEADER);
 		head->h_cycle = cpu_to_be32(log->l_curr_cycle);
+		/*
+		 * 计算iclog->ic_header->h_lsn，来源是xlog->l_curr_cycle和
+		 * xlog->l_curr_block；
+		 */
 		head->h_lsn = cpu_to_be64(
 			xlog_assign_lsn(log->l_curr_cycle, log->l_curr_block));
 		ASSERT(log->l_curr_block >= 0);
@@ -3075,10 +3188,17 @@ restart:
 		 * racing with concurrent atomic_dec_and_lock() calls in
 		 * xlog_state_release_iclog() when there is more than one
 		 * reference to the iclog.
+		 *
+		 * 如果refcnt不是1，则将refcnt-1，并返回true；
+		 * 如果refcnt是1，则什么都不做，并返回false；
 		 */
 		if (!atomic_add_unless(&iclog->ic_refcnt, -1, 1)) {
 			/* we are the only one */
 			spin_unlock(&log->l_icloglock);
+			/*
+			 * 进入到这里，说明我们是当前iclog的唯一写者，可以进行
+			 * 写盘操作；
+			 */
 			error = xlog_state_release_iclog(log, iclog);
 			if (error)
 				return error;
@@ -3187,6 +3307,12 @@ xlog_ungrant_log_space(
 		bytes += ticket->t_unit_res*ticket->t_cnt;
 	}
 
+	/*
+	 * l_reserve_head只是个计数还是真正表示了已使用的位置？
+	 * - 如果真正表示了已使用的位置，那么这里直接减小l_reserve_head的做法
+	 *   似乎不正确？比如在本ticket的reserve和现在的ugrant中间如果有另一个
+	 *   ticket 2被reserve了，那么这里减小的岂不是减小的是ticket 2的空间？
+	 */
 	xlog_grant_sub_space(log, &log->l_reserve_head.grant, bytes);
 	xlog_grant_sub_space(log, &log->l_write_head.grant, bytes);
 
@@ -3215,6 +3341,10 @@ xlog_state_release_iclog(
 		return -EIO;
 
 	ASSERT(atomic_read(&iclog->ic_refcnt) > 0);
+	/*
+	 * 将refcnt-1，如果结果为0，则对l_icloglock加锁并返回true；
+	 * 否则返回false；
+	 */
 	if (!atomic_dec_and_lock(&iclog->ic_refcnt, &log->l_icloglock))
 		return 0;
 
@@ -3271,6 +3401,9 @@ xlog_state_switch_iclogs(
 	log->l_prev_cycle = log->l_curr_cycle;
 
 	/* roll log?: ic_offset changed later */
+	/*
+	 * 切换到下一个log buffer，此时需要将标志当前可用block的计数后移？
+	 */
 	log->l_curr_block += BTOBB(eventual_size)+BTOBB(log->l_iclog_hsize);
 
 	/* Round up to next log-sunit */
@@ -3280,6 +3413,9 @@ xlog_state_switch_iclogs(
 		log->l_curr_block = roundup(log->l_curr_block, sunit_bb);
 	}
 
+	/*
+	 * log buffer数组空间用完了，要回环
+	 */
 	if (log->l_curr_block >= log->l_logBBsize) {
 		/*
 		 * Rewind the current block before the cycle is bumped to make
@@ -3528,6 +3664,9 @@ xfs_log_force_lsn(
 	XFS_STATS_INC(mp, xs_log_force);
 	trace_xfs_log_force(mp, lsn, _RET_IP_);
 
+	/*
+	 * Push CIL到iclog
+	 */
 	lsn = xlog_cil_force_lsn(mp->m_log, lsn);
 	if (lsn == NULLCOMMITLSN)
 		return 0;
@@ -3615,10 +3754,6 @@ xfs_log_calc_unit_res(
 	 * Note: 上面的结构就是多个(xlog_op_header, log item)的序列而已。其中的
 	 * <trans-hdr>只是众多log_item中的一种而已，没什么特殊的。
 	 *
-	 * 但我怎么感觉应该是这样：
-	 * <start-oph><trans-hdr><reg1-oph><reg1><reg2-oph><reg2>...<commit-oph>
-	 * - 好像是不对的
-	 *
 	 * We need to account for all the leadup data and trailer data
 	 * around the transaction data.
 	 * And then we need to account for the worst case in terms of using
@@ -3661,12 +3796,17 @@ xfs_log_calc_unit_res(
 	 * Fundamentally, this means we must pass the entire log vector to
 	 * xlog_write to guarantee this.
 	 *
-	 * 计算有多少个xlog_op_header_t
+	 * 一个log buffer（iclog）可能放不下这个transaction，这里计算需要多少个
+	 * iclog才可能放得下；
 	 */
 	iclog_space = log->l_iclog_size - log->l_iclog_hsize;
 	num_headers = howmany(unit_bytes, iclog_space);
 
-	/* for split-recs - ophdrs added when data split over LRs */
+	/*
+	 * for split-recs - ophdrs added when data split over LRs
+	 *
+	 * 每用一个log buffer都需要添加一个op header(XLOG_CONTINUE_TRANS)
+	 */
 	unit_bytes += sizeof(xlog_op_header_t) * num_headers;
 
 	/* add extra header reservations if we overrun */
@@ -3713,6 +3853,7 @@ xlog_ticket_alloc(
 
 	/*
 	 * 计算需要保留的字节数；
+	 * - 主要是在unit_bytes上加上op header等；
 	 */
 	unit_res = xfs_log_calc_unit_res(log->l_mp, unit_bytes);
 

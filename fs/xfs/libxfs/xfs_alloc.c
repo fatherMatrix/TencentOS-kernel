@@ -2740,7 +2740,15 @@ xfs_read_agf(
 	ASSERT(agno != NULLAGNUMBER);
 	error = xfs_trans_read_buf(
 			mp, tp, mp->m_ddev_targp,
+			/*
+			 * 计算agno表示的AG的第一个fsblock起始位置的basic block number；
+			 */
 			XFS_AG_DADDR(mp, agno, XFS_AGF_DADDR(mp)),
+			/*
+			 * XFS_FSS_TO_BB()计算xfs sector(block)包含的传统sector(basic block)的个数
+			 * - 这里的作用就是保证xfs_trans_read_buf()读取的是一个底层盘上的最小读取
+			 *   单位。即对于机械盘，读1个sector；对于nvme盘，读8个sector；
+			 */
 			XFS_FSS_TO_BB(mp, 1), flags, bpp, &xfs_agf_buf_ops);
 	if (error)
 		return error;
@@ -2770,6 +2778,9 @@ xfs_alloc_read_agf(
 	trace_xfs_alloc_read_agf(mp, agno);
 
 	ASSERT(agno != NULLAGNUMBER);
+	/*
+	 * 读取AGno的AGF header
+	 */
 	error = xfs_read_agf(mp, tp, agno,
 			(flags & XFS_ALLOC_FLAG_TRYLOCK) ? XBF_TRYLOCK : 0,
 			bpp);
@@ -2781,6 +2792,12 @@ xfs_alloc_read_agf(
 
 	agf = XFS_BUF_TO_AGF(*bpp);
 	pag = xfs_perag_get(mp, agno);
+	/*
+	 * - 这里就从来不担心pag为NULL吗？
+	 * - 如果pag->pafg_init为true，这个AGF不就白读了吗？为什么不能先判断一下
+	 *   再读呢？
+	 *   > 这个AGF是调用者需要的，pag->pagf_init只是顺便
+	 */
 	if (!pag->pagf_init) {
 		pag->pagf_freeblks = be32_to_cpu(agf->agf_freeblks);
 		pag->pagf_btreeblks = be32_to_cpu(agf->agf_btreeblks);

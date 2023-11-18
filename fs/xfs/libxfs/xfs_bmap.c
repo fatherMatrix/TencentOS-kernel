@@ -3699,6 +3699,9 @@ xfs_bmap_alloc(
 }
 
 /* Trim extent to fit a logical block range. */
+/*
+ * 其实就是将irec切到与[bno, bno+len]相交的部分
+ */
 void
 xfs_trim_extent(
 	struct xfs_bmbt_irec	*irec,
@@ -3739,7 +3742,7 @@ xfs_trim_extent(
 	/*
 	 * 另一种情况：
 	 *          |-----------------|   extent
-	 *     |--------|                 [bno, bno + len]     
+	 *     |--------|                 [bno, bno + len1]     
 	 *              |xxxxxxxxxxxxx|   distance
 	 */
 	if (end < irec->br_startoff + irec->br_blockcount) {
@@ -3762,10 +3765,14 @@ xfs_bmapi_trim_map(
 	int			n,
 	int			flags)
 {
-	if ((flags & XFS_BMAPI_ENTIRE) ||
-	    got->br_startoff + got->br_blockcount <= obno) {
+	if ((flags & XFS_BMAPI_ENTIRE) ||			/* 调用函数要求返回一个完整的extent */
+	    got->br_startoff + got->br_blockcount <= obno) {	/* 这个是干嘛的？ */
 		*mval = *got;
 		if (isnullstartblock(got->br_startblock))
+		/*
+		 * 看网上一些博客，这里指的是如果br_startblock不是有效的，
+		 * 则将其设置为DELAY START BLOCK；
+		 */
 			mval->br_startblock = DELAYSTARTBLOCK;
 		return;
 	}
@@ -3787,6 +3794,15 @@ xfs_bmapi_trim_map(
 	if (isnullstartblock(got->br_startblock))
 		mval->br_startblock = DELAYSTARTBLOCK;
 	else
+	/*
+	 * 如果br_startblock是有效的，则进行偏移？偏移你妈呢？ -- 懂了：
+	 * - 通过xfs_iext_lookup_extent()/xfs_iext_next_extent()返回的extent
+	 *   有两种可能：
+	 *   > bno < br_startblock，即bno处于hole中，这种情况在本函数外部已经处理了；
+	 *   > bno >= br_startblock，即bno切实处于extent中：
+	 *     - 对于等于的情况，没有什么可以做的了；
+	 *     - 对于大于的情况，我们要将返回的mval对齐到bno真正开始的地方；
+	 */
 		mval->br_startblock = got->br_startblock +
 					(*bno - got->br_startoff);
 	/*
@@ -3816,6 +3832,22 @@ xfs_bmapi_update_map(
 	int			*n,
 	int			flags)
 {
+	/*
+	 * 大概情况如下，画个图真的省了太多功夫，他奶奶的：
+	 *
+	 * +--------+--------+--------+--------+--------+
+	 * | mval 0 | mval 1 | mval 2 | ...... | mval n |
+	 * +--------+--------+--------+--------+--------+
+	 *          ^
+	 *          |
+	 *      +------+
+	 *      | mval |
+	 *      +------+
+	 *      ^
+	 *      |
+	 *     map
+	 *
+	 */
 	xfs_bmbt_irec_t	*mval = *map;
 
 	ASSERT((flags & XFS_BMAPI_ENTIRE) ||
@@ -3826,6 +3858,10 @@ xfs_bmapi_update_map(
 	*bno = mval->br_startoff + mval->br_blockcount;
 	*len = end - *bno;
 	if (*n > 0 && mval->br_startoff == mval[-1].br_startoff) {
+	/*
+	 * 已经写到mval数组中的前一项与当前项的br_startoff相等，还能有这种
+	 * 情况？
+	 */
 		/* update previous map with new information */
 		ASSERT(mval->br_startblock == mval[-1].br_startblock);
 		ASSERT(mval->br_blockcount > mval[-1].br_blockcount);
@@ -3838,6 +3874,9 @@ xfs_bmapi_update_map(
 		   mval->br_startblock == mval[-1].br_startblock +
 					  mval[-1].br_blockcount &&
 		   mval[-1].br_state == mval->br_state) {
+	/*
+	 * 两个extent紧紧相连，且为常规extent，可以做合并
+	 */
 		ASSERT(mval->br_startoff ==
 		       mval[-1].br_startoff + mval[-1].br_blockcount);
 		mval[-1].br_blockcount += mval->br_blockcount;
@@ -3846,11 +3885,17 @@ xfs_bmapi_update_map(
 		   mval[-1].br_startblock == DELAYSTARTBLOCK &&
 		   mval->br_startoff ==
 		   mval[-1].br_startoff + mval[-1].br_blockcount) {
+	/*
+	 * 两个extent紧紧相连，且为非常规extent，可以做合并
+	 */
 		mval[-1].br_blockcount += mval->br_blockcount;
 		mval[-1].br_state = mval->br_state;
 	} else if (!((*n == 0) &&
 		     ((mval->br_startoff + mval->br_blockcount) <=
 		      obno))) {
+	/*
+	 * 没有做合并，后移mval指针；
+	 */
 		mval++;
 		(*n)++;
 	}
@@ -3911,6 +3956,9 @@ xfs_bmapi_read(
 		/* No CoW fork?  Return a hole. */
 		if (whichfork == XFS_COW_FORK) {
 			mval->br_startoff = bno;
+			/*
+			 * 表示这是一个hole extent
+			 */
 			mval->br_startblock = HOLESTARTBLOCK;
 			mval->br_blockcount = len;
 			mval->br_state = XFS_EXT_NORM;
@@ -3955,8 +4003,9 @@ xfs_bmapi_read(
 		if (eof)
 			got.br_startoff = end;
 		/*
-		 * 有这种情况是因为上面的xfs_iext_lookup_extent()有可能返回一个
-		 * br_startoff > bno的第一个extent，即bno位于hole中；
+		 * 有这种情况是因为上面的xfs_iext_lookup_extent()或下面的
+		 * xfs_iext_next_extent()有可能返回一个br_startoff > bno的extent，
+		 * 即bno位于hole中；
 		 */
 		if (got.br_startoff > bno) {
 			/* Reading in a hole.  */
@@ -3970,6 +4019,7 @@ xfs_bmapi_read(
 			/*
 			 * 也就是说，把[bno, bno+len]中属于hole的一部分先切出，
 			 * 放到要返回的mval数组中；
+			 * - 并且这部分是一个hole
 			 */
 			mval++;
 			n++;
@@ -4448,6 +4498,7 @@ xfs_bmapi_write(
 
 	/*
 	 * 为什么又要检查一次eof，上层函数的xfs_bmapi_read()中已经检查过了；
+	 * - 目的时获取eof，在后面要根据eof做不同处理；
 	 */
 	if (!xfs_iext_lookup_extent(ip, ifp, bno, &bma.icur, &bma.got))
 		eof = true;
@@ -4478,9 +4529,6 @@ xfs_bmapi_write(
 
 			need_alloc = true;
 		} else if (isnullstartblock(bma.got.br_startblock)) {
-		/*
-		 * 没有在hole中，在已有的extent中；
-		 */
 			wasdelay = true;
 		}
 

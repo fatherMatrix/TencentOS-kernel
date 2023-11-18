@@ -1005,6 +1005,10 @@ xfs_btree_ptr_to_daddr(
 	if (error)
 		return error;
 
+	/*
+	 * 对于fsblock，是可以跨AG的，所以使用64位的block number；
+	 * 对于agblock，不可以跨AG，使用32位的block number；
+	 */
 	if (cur->bc_flags & XFS_BTREE_LONG_PTRS) {
 		fsbno = be64_to_cpu(ptr->l);
 		*daddr = XFS_FSB_TO_DADDR(cur->bc_mp, fsbno);
@@ -1329,9 +1333,16 @@ xfs_btree_read_buf_block(
 	/* need to sort out how callers deal with failures first */
 	ASSERT(!(flags & XBF_TRYLOCK));
 
+	/*
+	 * 确定basic sector地址
+	 */
 	error = xfs_btree_ptr_to_daddr(cur, ptr, &d);
 	if (error)
 		return error;
+
+	/*
+	 * 读盘
+	 */
 	error = xfs_trans_read_buf(mp, cur->bc_tp, mp->m_ddev_targp, d,
 				   mp->m_bsize, flags, bpp,
 				   cur->bc_ops->buf_ops);
@@ -1339,6 +1350,10 @@ xfs_btree_read_buf_block(
 		return error;
 
 	xfs_btree_set_refs(cur, *bpp);
+	/*
+	 * 因为这个函数的本意就是读取xfs_btree_block，所以此时xfs_buf
+	 * 对应的内存中保存的是一个4K的xfs_btree_block数据；
+	 */
 	*block = XFS_BUF_TO_BLOCK(*bpp);
 	return 0;
 }
@@ -1793,6 +1808,11 @@ xfs_btree_lookup_get_block(
 	 * looking for re-use it.
 	 *
 	 * Otherwise throw it away and get a new one.
+	 *
+	 * 这一块代码主要是为了利用xfs_buf的缓存；
+	 * - 首先计算cur与pp共同表示的当前block的xfs_daddr_t
+	 * - 然后计算xfs_buf中数据的xfs_daddr_t
+	 * - 最后通过两者是否相等判断cache hit或cache miss
 	 */
 	bp = cur->bc_bufs[level];
 	error = xfs_btree_ptr_to_daddr(cur, pp, &daddr);
@@ -1803,6 +1823,9 @@ xfs_btree_lookup_get_block(
 		return 0;
 	}
 
+	/*
+	 * cache miss，重新读盘
+	 */
 	error = xfs_btree_read_buf_block(cur, pp, 0, blkp, &bp);
 	if (error)
 		return error;
@@ -1823,6 +1846,9 @@ xfs_btree_lookup_get_block(
 	if (level != 0 && be16_to_cpu((*blkp)->bb_numrecs) == 0)
 		goto out_bad;
 
+	/*
+	 * 将读到的xfs_buf放到xfs_btree_cur->bc_bufs数组中；
+	 */
 	xfs_btree_setbuf(cur, level, bp);
 	return 0;
 
@@ -1882,6 +1908,9 @@ xfs_btree_lookup(
 	keyno = 0;
 
 	/* initialise start pointer from cursor */
+	/*
+	 * 对于refcount btree，这里是： xfs_refcountbt_ops
+	 */
 	cur->bc_ops->init_ptr_from_cur(cur, &ptr);
 	pp = &ptr;
 
@@ -1890,6 +1919,10 @@ xfs_btree_lookup(
 	 * For each level above the leaves, find the key we need, based
 	 * on the lookup record, then follow the corresponding block
 	 * pointer down to the next level.
+	 *
+	 * cur->bc_nlevels是在xfs_btree_cur分配的时候初始化的；
+	 * - 这里的减一是什么意思？
+	 *   > 哦，nlevels表示的是有几个层级，然而leaf的层级是0不是1；
 	 */
 	for (level = cur->bc_nlevels - 1, diff = 1; level >= 0; level--) {
 		/* Get the block we need to do the lookup on. */
@@ -1910,6 +1943,9 @@ xfs_btree_lookup(
 			int	low;	/* low entry number */
 
 			/* Set low and high entry numbers, 1-based. */
+			/*
+			 * low为什么从1开始？
+			 */
 			low = 1;
 			high = xfs_btree_get_numrecs(block);
 			if (!high) {

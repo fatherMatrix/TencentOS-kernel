@@ -396,7 +396,14 @@ xfs_inode_item_format(
 
 	ASSERT(ip->i_d.di_version > 1);
 
+	/*
+	 * 实例化一个xfs_log_iovec，用于存储format后的内容
+	 */
 	ilf = xlog_prepare_iovec(lv, &vecp, XLOG_REG_TYPE_IFORMAT);
+	/*
+	 * 这起始就相当于format了
+	 * - 正如文档所说，log部分采用与cpu相同的端序，而不是强制大端；
+	 */
 	ilf->ilf_type = XFS_LI_INODE;
 	ilf->ilf_ino = ip->i_ino;
 	ilf->ilf_blkno = ip->i_imap.im_blkno;
@@ -413,7 +420,9 @@ xfs_inode_item_format(
 	ilf->ilf_asize = 0;
 	ilf->ilf_pad = 0;
 	memset(&ilf->ilf_u, 0, sizeof(ilf->ilf_u));
-
+	/*
+	 * 扣除lv_buf中已经使用的空间
+	 */
 	xlog_finish_iovec(lv, vecp, sizeof(*ilf));
 
 	xfs_inode_item_format_core(ip, lv, &vecp);

@@ -597,6 +597,9 @@ xfsaild(
 
 		__set_current_state(TASK_RUNNING);
 
+		/*
+		 * 内部会检查是否确实需要freeze，如果不需要，则直接返回；
+		 */
 		try_to_freeze();
 
 		tout = xfsaild_push(ailp);
@@ -627,6 +630,9 @@ xfs_ail_push(
 {
 	struct xfs_log_item	*lip;
 
+	/*
+	 * 取出AIL中当前的第一个xfs_log_item；
+	 */
 	lip = xfs_ail_min(ailp);
 	if (!lip || XFS_FORCED_SHUTDOWN(ailp->ail_mount) ||
 	    XFS_LSN_CMP(threshold_lsn, ailp->ail_target) <= 0)
@@ -640,6 +646,10 @@ xfs_ail_push(
 	xfs_trans_ail_copy_lsn(ailp, &ailp->ail_target, &threshold_lsn);
 	smp_wmb();
 
+	/*
+	 * xfsaild
+	 * - 参见 xfs_trans_ail_init()
+	 */
 	wake_up_process(ailp->ail_task);
 }
 

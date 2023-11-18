@@ -204,19 +204,37 @@ typedef struct xlog_in_core {
 	struct xlog_in_core	*ic_next;
 	struct xlog_in_core	*ic_prev;
 	struct xlog		*ic_log;
+	/*
+	 * log->l_iclog_size - log->l_iclog_hsize
+	 */
 	u32			ic_size;
 	u32			ic_io_size;
 	u32			ic_offset;
 	unsigned short		ic_state;
+	/*
+	 * log buffer负载区域中的数据区域：
+	 * - ic_datap = ic_data + xlog->l_iclog_hsize
+	 */
 	char			*ic_datap;	/* pointer to iclog data */
 
 	/* Callback structures need their own cacheline */
 	spinlock_t		ic_callback_lock ____cacheline_aligned_in_smp;
+	/*
+	 * 链表头，链表元素是xfs_cil_ctx->iclog_entry；
+	 * - xfs_cil_ctx被写入log buffer（iclog）后，需要将xfs_cil_ctx链接到
+	 *   iclog中，等iclog被写入disk后，依次调用相关回调；
+	 */
 	struct list_head	ic_callbacks;
 
 	/* reference counts need their own cacheline */
 	atomic_t		ic_refcnt ____cacheline_aligned_in_smp;
+	/*
+	 * log buffer的负载区域
+	 */
 	xlog_in_core_2_t	*ic_data;
+	/*
+	 * 每个log record（log buffer）都以xlog_rec_header开头
+	 */
 #define ic_header	ic_data->hic_header
 #ifdef DEBUG
 	bool			ic_fail_crc : 1;
@@ -229,7 +247,9 @@ typedef struct xlog_in_core {
 
 /*
  * The CIL context is used to aggregate per-transaction details as well be
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * passed to the iclog for checkpoint post-commit processing.  After being
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * passed to the iclog, another context needs to be allocated for tracking the
  * next set of transactions to be aggregated into a checkpoint.
  */
@@ -239,13 +259,27 @@ struct xfs_cil_ctx {
 	struct xfs_cil		*cil;
 	xfs_lsn_t		sequence;	/* chkpt sequence # */
 	xfs_lsn_t		start_lsn;	/* first LSN of chkpt commit */
+	/*
+	 * 最后那个commit record的lsn
+	 */
 	xfs_lsn_t		commit_lsn;	/* chkpt commit record lsn */
 	struct xlog_ticket	*ticket;	/* chkpt ticket */
 	int			nvecs;		/* number of regions */
 	int			space_used;	/* aggregate size of regions */
 	struct list_head	busy_extents;	/* busy extents in chkpt */
+	/*
+	 * CIL上取下来的xfs_log_item对应的xfs_log_vec会挂到这里，对应文档中
+	 * 3.3.3 Checkpoints
+	 */
 	struct xfs_log_vec	*lv_chain;	/* logvecs being pushed */
+	/*
+	 * 作为链表元素加入checkpoint context->
+	 */
 	struct list_head	iclog_entry;
+	/*
+	 * 一个CIL可能对应多个xfs_cil_ctx，committing用于将自己链接进xfs_cil的
+	 * xc_committing链表；
+	 */
 	struct list_head	committing;	/* ctx committing list */
 	struct work_struct	discard_endio_work;
 };
@@ -282,7 +316,15 @@ struct xfs_cil {
 	struct xfs_cil_ctx	*xc_ctx;
 
 	spinlock_t		xc_push_lock ____cacheline_aligned_in_smp;
+	/*
+	 * 要求CIL push到的最新的lsn
+	 */
 	xfs_lsn_t		xc_push_seq;
+	/*
+	 * 链表元素是xc_cil_ctx->committing
+	 * - checkpoint context在被push到log buffer之前，会先挂到CIL的这个链表
+	 *   上；
+	 */
 	struct list_head	xc_committing;
 	wait_queue_head_t	xc_commit_wait;
 	xfs_lsn_t		xc_current_sequence;
@@ -344,6 +386,9 @@ struct xfs_cil {
  */
 struct xlog_grant_head {
 	spinlock_t		lock ____cacheline_aligned_in_smp;
+	/*
+	 * 排队等待有空间的xlog_ticket->t_queue；
+	 */
 	struct list_head	waiters;
 	atomic64_t		grant;
 };
@@ -368,6 +413,9 @@ struct xlog {
 	int			l_iclog_hsize;  /* size of iclog header */
 	int			l_iclog_heads;  /* # of iclog header sectors */
 	uint			l_sectBBsize;   /* sector size in BBs (2^n) */
+	/*
+	 * xlog_in_core->ic_data的分配尺寸
+	 */
 	int			l_iclog_size;	/* size of log in bytes */
 	int			l_iclog_bufs;	/* number of iclog buffers */
 	xfs_daddr_t		l_logBBstart;   /* start block of log */
@@ -375,10 +423,17 @@ struct xlog {
 	int			l_logBBsize;    /* size of log in BB chunks */
 
 	/* The following block of fields are changed while holding icloglock */
+	/*
+	 * 当向log buffer中写log，但log buffer状态不为ACTIVE时，在此等待队列上
+	 * 睡眠；
+	 */
 	wait_queue_head_t	l_flush_wait ____cacheline_aligned_in_smp;
 						/* waiting for iclog flush */
 	int			l_covered_state;/* state of "covering disk
 						 * log entries" */
+	/*
+	 * l_iclog链表，是一个ring，循环使用；
+	 */
 	xlog_in_core_t		*l_iclog;       /* head log queue	*/
 	spinlock_t		l_icloglock;    /* grab to change iclog state */
 	int			l_curr_cycle;   /* Cycle number of log writes */

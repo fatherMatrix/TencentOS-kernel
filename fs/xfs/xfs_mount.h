@@ -99,6 +99,10 @@ typedef struct xfs_mount {
 	int			m_fsname_len;	/* strlen of fs name */
 	char			*m_rtname;	/* realtime device name */
 	char			*m_logname;	/* external log device name */
+	/*
+	 * 一个fs block中包含多少个basic block
+	 * - 参见xfs_sb_mount_common()
+	 */
 	int			m_bsize;	/* fs logical block size */
 	xfs_agnumber_t		m_agfrotor;	/* last ag where space found */
 	xfs_agnumber_t		m_agirotor;	/* last ag dir inode alloced */
@@ -116,6 +120,10 @@ typedef struct xfs_mount {
 	 */
 	struct xfs_ino_geometry	m_ino_geo;	/* inode geometry */
 	int			m_logbufs;	/* number of log buffers */
+	/*
+	 * log buffer的尺寸
+	 * - 在xlog_get_iclog_buffer_size()中赋值给了xlog->l_iclog_size
+	 */
 	int			m_logbsize;	/* size of each log buffer */
 	uint			m_rsumlevels;	/* rt summary levels */
 	uint			m_rsumsize;	/* size of rt summary, bytes */
@@ -134,6 +142,9 @@ typedef struct xfs_mount {
 	xfs_buftarg_t		*m_logdev_targp;/* ptr to log device */
 	xfs_buftarg_t		*m_rtdev_targp;	/* ptr to rt device */
 	uint8_t			m_blkbit_log;	/* blocklog + NBBY */
+	/*
+	 * 每个fsblock包含几个basic block（512 sector）的log2
+	 */
 	uint8_t			m_blkbb_log;	/* blocklog - BBSHIFT */
 	uint8_t			m_agno_log;	/* log #ag's */
 	/*
@@ -173,6 +184,18 @@ typedef struct xfs_mount {
 	uint64_t		m_resblks_save;	/* reserved blks @ remount,ro */
 	int			m_dalign;	/* stripe unit */
 	int			m_swidth;	/* stripe width */
+	/*
+	 * 该字段在xfs_sb_mount_common()中配置为sb_sectlog - BBSHIFT
+	 * - sb_sectlog是一个xfs block的尺寸幂数；
+	 * - BBSHIFT是一个传统sector的尺寸幂数，即9，对应512字节；
+	 * - m_sectbb_log表示一个xfs_block所包含的传统sector个数的幂数；即一个
+	 *   xfs block包含2 ** m_secbb_log个传统sector
+	 *
+	 * 对于传统磁盘，crash发现这个值是0；
+	 * - 因为传统磁盘上，sb_sectsize=512, sb_sectlog=9, 9-9=0
+	 * 对于nvme盘，crash发现这个值是3；
+	 * - 在nvme盘上，sb_sectsize=4096, sb_sectlog=12, 12-9=3
+	 */
 	uint8_t			m_sectbb_log;	/* sectlog - BBSHIFT */
 	const struct xfs_nameops *m_dirnameops;	/* vector of dir name ops */
 	const struct xfs_dir_ops *m_dir_inode_ops; /* vector of dir inode ops */

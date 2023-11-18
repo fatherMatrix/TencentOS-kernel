@@ -25,6 +25,10 @@
 
 #define XFS_MAX_CONTIG_EXTENTS_PER_BLOCK(mp)    \
 		(((mp)->m_alloc_mxr[0]) - ((mp)->m_alloc_mnr[0]))
+/*
+ * 不晓得为啥SI搜索不到这个定义：
+ * #define XFS_BM_MAXLEVELS(mp,w)		((mp)->m_bm_maxlevels[(w)])
+ */
 #define	XFS_EXTENTADD_SPACE_RES(mp,w)	(XFS_BM_MAXLEVELS(mp,w) - 1)
 #define XFS_NEXTENTADD_SPACE_RES(mp,b,w)\
 	(((b + XFS_MAX_CONTIG_EXTENTS_PER_BLOCK(mp) - 1) / \

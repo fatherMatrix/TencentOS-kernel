@@ -50,8 +50,11 @@
  * writable (write_begin or page_mkwrite).  If the offset is not mapped, we
  * create a delalloc mapping, which is a regular in-core extent, but without
  * a real startblock.  (For delalloc mappings, the startblock encodes both
+ *                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * a flag that this is a delalloc mapping, and a worst-case estimate of how
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * many blocks might be required to put the mapping into the BMBT.)  delalloc
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * mappings are a reservation against the free space in the filesystem;
  * adjacent mappings can also be combined into fewer larger mappings.
  *
@@ -111,7 +114,9 @@
  *
  * Since the remapping operation can be applied to an arbitrary file
  * range, we record the need for the remap step as a flag in the ioend
+ *        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * instead of declaring a new IO type.  This is required for direct io
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * because we only have ioend for the whole dio, and we have to be able to
  * remember the presence of unwritten blocks and CoW blocks with a single
  * ioend structure.  Better yet, the more ground we can cover with one
@@ -135,17 +140,28 @@ xfs_reflink_find_shared(
 	xfs_agblock_t		*fbno,
 	xfs_extlen_t		*flen,
 	bool			find_end_of_shared)
+	/*
+	 * 很多读操作传入的tp指针为NULL
+	 */
+
 {
 	struct xfs_buf		*agbp;
 	struct xfs_btree_cur	*cur;
 	int			error;
 
+	/*
+	 * 读取AGF
+	 */
 	error = xfs_alloc_read_agf(mp, tp, agno, 0, &agbp);
 	if (error)
 		return error;
 	if (!agbp)
 		return -ENOMEM;
 
+	/*
+	 * 初始化一个用于遍历refcount btree的xfs_btree_cur
+	 * - 这个cursor区别于xfs_iext_cursor（用于遍历内存xfs_inode->xfs_ifork->if_root)
+	 */
 	cur = xfs_refcountbt_init_cursor(mp, tp, agbp, agno);
 
 	error = xfs_refcount_find_shared(cur, agbno, aglen, fbno, flen,
@@ -162,10 +178,15 @@ xfs_reflink_find_shared(
  * shared/unshared status.  More specifically, this means that we
  * find the lowest-numbered extent of shared blocks that coincides with
  * the given block mapping.  If the shared extent overlaps the start of
+ *                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * the mapping, trim the mapping to the end of the shared extent.  If
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * the shared region intersects the mapping, trim the mapping to the
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * start of the shared extent.  If there are no shared regions that
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * overlap, just return the original extent.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  */
 int
 xfs_reflink_trim_around_shared(
@@ -323,12 +344,36 @@ xfs_find_trim_cow_extent(
 	 * allocate to fit the hole we found.
 	 */
 	if (!xfs_iext_lookup_extent(ip, ip->i_cowfp, offset_fsb, &icur, &got))
+	/*
+	 * 返回false说明offset_fsb处于eof之后
+	 * - 下面这一句操作应该只是为了可以方便地将 offset_fsb处于eof之后这种情
+	 *   况 与 offset_fsb处于eof之前的一个hole中 两种情况合并起来统一交给下
+	 *   面的xfs_trim_extent()处理；
+	 */
 		got.br_startoff = offset_fsb + count_fsb;
 	if (got.br_startoff > offset_fsb) {
+	/*
+	 * 两种情况：
+	 * - offset_fsb处于eof之前的一个hole中，got.br_startoff是该hole后的第一
+	 *   个extent的文件偏移；
+	 * - offset_fsb处于eof之后，got.br_startoff = offset_fsb + count_fsb;
+	 *
+	 * 入参[imap->br_startoff, got.br_startoff - imap->br_startoff]表示的是
+	 * 要查找的offset_fsb落于hole中的点开始到下一个extent起始点的hole段；
+	 *
+	 * 整个函数在这里的作用是将imap中包含的hole部分保留下来，其余部分切除；
+	 */
 		xfs_trim_extent(imap, imap->br_startoff,
 				got.br_startoff - imap->br_startoff);
+		/*
+		 * 查找refcount btree中是否有imap表示的extent；
+		 */
 		return xfs_inode_need_cow(ip, imap, shared);
 	}
+
+	/*
+	 * 走到这里，说明offset_fsb处在真实的extent中；
+	 */
 
 	*shared = true;
 	if (isnullstartblock(got.br_startblock)) {
@@ -336,7 +381,12 @@ xfs_find_trim_cow_extent(
 		return 0;
 	}
 
-	/* real extent found - no need to allocate */
+	/*
+	 * real extent found - no need to allocate
+	 *
+	 * 将找到的got进行trim，仅保留与[offset_fsb, offset_fsb + count_fsb]相
+	 * 交的部分；
+	 */
 	xfs_trim_extent(&got, offset_fsb, count_fsb);
 	*imap = got;
 	*found = true;
@@ -367,11 +417,25 @@ xfs_reflink_allocate_cow(
 		xfs_ifork_init_cow(ip);
 	}
 
+	/*
+	 * 先在当前的cow fork中查找一下包含offset_fsb的extent
+	 * - 是否找到，通过found字段返回
+	 *   > 如果找到了，则found返回true，imap更新为imap传入时所保存extent相交
+	 *     的cow extent；
+	 *   > 如果没有找到，则found返回false，imap更新为imap传入时所保存extent
+	 *     在cow中的hole；
+	 */
 	error = xfs_find_trim_cow_extent(ip, imap, shared, &found);
 	if (error || !*shared)
 		return error;
 	if (found)
 		goto convert;
+
+	/*
+	 * 在cow fork中没有找到目标extent
+	 * - 要注意这个时候imap中保存的时imap传入时所保存的extent在cow中为hole的
+	 *   那一段；
+	 */
 
 	resaligned = xfs_aligned_fsb_count(imap->br_startoff,
 		imap->br_blockcount, xfs_get_cowextsz_hint(ip));

@@ -103,6 +103,9 @@ typedef void (*xfs_buf_iodone_t)(struct xfs_buf *);
 #define XB_PAGES	2
 
 struct xfs_buf_map {
+	/*
+	 * 注意这里表示的都是basic block number
+	 */
 	xfs_daddr_t		bm_bn;	/* block number for I/O */
 	int			bm_len;	/* size of I/O */
 };

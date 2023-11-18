@@ -480,6 +480,10 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 	 * has reserved.  This is consistent with the existing behaviour
 	 * that multiple jbd2_journal_get_write_access() calls to the same
 	 * buffer are perfectly permissible.
+	 *
+	 * t_reserved_list链表上是被本transaction管理但并未修改的journal_buffer，
+	 * 既然没有被修改，则不必提交，将其从本transaction的t_reserved_list链表
+	 * 中移除；
 	 */
 	while (commit_transaction->t_reserved_list) {
 		jh = commit_transaction->t_reserved_list;
@@ -503,6 +507,8 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 	 * Now try to drop any written-back buffers from the journal's
 	 * checkpoint lists.  We do this *before* commit because it potentially
 	 * frees some memory
+	 *
+	 * 遍历journal中所有已经提交的事务，依次处理其中的checkpoint队列
 	 */
 	spin_lock(&journal->j_list_lock);
 	__jbd2_journal_clean_checkpoint_list(journal, false);
@@ -518,6 +524,8 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 
 	/*
 	 * Switch to a new revoke table.
+	 *
+	 * 避免发生一边提交，一边被修改的情况
 	 */
 	jbd2_journal_switch_revoke_table(journal);
 
@@ -533,6 +541,9 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 	stats.run.rs_locked = jbd2_time_diff(stats.run.rs_locked,
 					     stats.run.rs_flushing);
 
+	/*
+	 * 将transaction的状态设置为T_FLUSH
+	 */
 	commit_transaction->t_state = T_FLUSH;
 	journal->j_committing_transaction = commit_transaction;
 	journal->j_running_transaction = NULL;
@@ -554,6 +565,9 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 		jbd2_journal_abort(journal, err);
 
 	blk_start_plug(&plug);
+	/*
+	 * 将revoke块写入到磁盘日志中
+	 */
 	jbd2_journal_write_revoke_records(commit_transaction, &log_bufs);
 
 	jbd_debug(3, "JBD2: commit phase 2b\n");
@@ -615,6 +629,9 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 
 			jbd_debug(4, "JBD2: get descriptor\n");
 
+			/*
+			 * 从日志空间中新分配一个块，用作描述符块
+			 */
 			descriptor = jbd2_journal_get_descriptor_buffer(
 							commit_transaction,
 							JBD2_DESCRIPTOR_BLOCK);
@@ -669,12 +686,25 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 		 */
 		set_bit(BH_JWrite, &jh2bh(jh)->b_state);
 		JBUFFER_TRACE(jh, "ph3: write metadata");
+		/*
+		 * 这个函数的名字非常具有迷惑性，数据写入操作并不是这这个函数中做的，
+		 * 这个函数只是生成一个新的对应于jh的新的journal_head。jh此时会从
+		 * BJ_Metadata队列上移动到BJ_Shadow队列上。
+		 * - 为什么要这么做呢？
+		 */
 		flags = jbd2_journal_write_metadata_buffer(commit_transaction,
 						jh, &wbuf[bufs], blocknr);
 		if (flags < 0) {
 			jbd2_journal_abort(journal, flags);
 			continue;
 		}
+		/*
+		 * io_bufs是本函数定义的局部变量
+		 * - LIST_HEAD(io_bufs)
+		 *
+		 * jbd2_file_log_bh()很奇怪，SI解析不出定义；
+		 * - 参见jbd2.h：list_add_tail(&bh->b_assoc_buffers, head);
+		 */
 		jbd2_file_log_bh(&io_bufs, wbuf[bufs]);
 
 		/* Record the new block's tag in the current descriptor
@@ -734,6 +764,9 @@ start_journal_io:
 				lock_buffer(bh);
 				clear_buffer_dirty(bh);
 				set_buffer_uptodate(bh);
+				/*
+				 * 设置buffer_head完成后的回调
+				 */
 				bh->b_end_io = journal_end_buffer_io_sync;
 				submit_bh(REQ_OP_WRITE, REQ_SYNC, bh);
 			}
@@ -835,6 +868,11 @@ start_journal_io:
 		J_ASSERT_BH(bh, atomic_read(&bh->b_count) == 0);
 		free_buffer_head(bh);
 
+		/*
+		 * iobufs与BJ_Shadow队列上的journal_head一一对应，每当我们处理完一个
+		 * iobufs中的项，则将BJ_Shadow中的对应项放到BJ_Forget链表中；
+		 */
+
 		/* We also have to refile the corresponding shadowed buffer */
 		jh = commit_transaction->t_shadow_list->b_tprev;
 		bh = jh2bh(jh);
@@ -925,6 +963,13 @@ restart_loop:
 	/*
 	 * As there are other places (journal_unmap_buffer()) adding buffers
 	 * to this list we have to be careful and hold the j_list_lock.
+	 *
+	 * 这里是实现checkpoint机制的地方，对于元数据buffer_head而言：
+	 * - 若其已经被内核按照原有方式写入磁盘的user data区域（update状态），
+	 *   则直接从transaction删除即可；
+	 * - 若未被写入磁盘的user data区域（dirty状态），则将其加入到本transaction
+	 *   的checkpoint队列上，本函数上面的__journal_clean_checkpoint_list()
+	 *   函数会处理该队列；
 	 */
 	spin_lock(&journal->j_list_lock);
 	while (commit_transaction->t_forget) {
@@ -971,6 +1016,10 @@ restart_loop:
 		}
 
 		spin_lock(&journal->j_list_lock);
+		/*
+		 * 如果此jh还在旧transaction的checkpoint队列上，则将其取下来，
+		 * 因为后面会将其插入到本transaction的checkpoint队列上；
+		 */
 		cp_transaction = jh->b_cp_transaction;
 		if (cp_transaction) {
 			JBUFFER_TRACE(jh, "remove from old cp transaction");
@@ -1021,6 +1070,10 @@ restart_loop:
 		}
 
 		if (buffer_jbddirty(bh)) {
+		/*
+		 * 如果此buffer_head为脏，则将其插入到本transaction的checkpoint队列
+		 * 上；
+		 */
 			JBUFFER_TRACE(jh, "add to new checkpointing trans");
 			__jbd2_journal_insert_checkpoint(jh, commit_transaction);
 			if (is_journal_aborted(journal))

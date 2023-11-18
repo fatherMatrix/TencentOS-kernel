@@ -47,6 +47,8 @@ xfs_trans_ijoin(
 
 	/*
 	 * Get a log_item_desc to point at the new item.
+	 *
+	 * 将xfs_inode_log_item.xfs_log_item添加到xfs_trans->t_items链表中；
 	 */
 	xfs_trans_add_item(tp, &iip->ili_item);
 }

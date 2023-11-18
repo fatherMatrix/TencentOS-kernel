@@ -40,6 +40,10 @@ struct xfs_buf_log_item;
  */
 struct xfs_buf_log_item {
 	struct xfs_log_item	bli_item;	/* common item structure */
+	/*
+	 * 这个xfs_buf_log_item实际对应的xfs_buf；
+	 * xfs_buf中指向了包含磁盘数据的内存地址；
+	 */
 	struct xfs_buf		*bli_buf;	/* real buffer pointer */
 	unsigned int		bli_flags;	/* misc flags */
 	unsigned int		bli_recur;	/* lock recursion count */

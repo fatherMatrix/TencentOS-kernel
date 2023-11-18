@@ -789,6 +789,9 @@ xfs_mountfs(
 
 	/*
 	 * Initialize the precomputed transaction reservations values.
+	 *
+	 * 每次xfs_trans_alloc()时都需要分配、保留一些资源，那么每种操作需要
+	 * 保留多少资源？在这里计算一下；
 	 */
 	xfs_trans_init(mp);
 

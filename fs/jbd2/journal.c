@@ -180,6 +180,9 @@ static int kjournald2(void *arg)
 
 	/* Record that the journal thread is running */
 	journal->j_task = current;
+	/*
+	 * kthread_run(kjournald2)之后会wait(j_wait_done_commit)
+	 */
 	wake_up(&journal->j_wait_done_commit);
 
 	/*
@@ -206,6 +209,8 @@ loop:
 	 * j_commit_request表示申请进行提交的事务id；
 	 * j_commit_sequence表示已经提交的最新的事务id；
 	 * 如果两者不相等，则进行一次事务提交；
+	 *
+	 * 这两个之间有偏序关系吗？
 	 */
 	if (journal->j_commit_sequence != journal->j_commit_request) {
 		jbd_debug(1, "OK, requests differ\n");
@@ -286,6 +291,9 @@ static int jbd2_journal_start_thread(journal_t *journal)
 	if (IS_ERR(t))
 		return PTR_ERR(t);
 
+	/*
+	 * kjournal2()中会wakeup(j_wait_done_commit)
+	 */
 	wait_event(journal->j_wait_done_commit, journal->j_task != NULL);
 	return 0;
 }

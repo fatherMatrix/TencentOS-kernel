@@ -8,7 +8,21 @@
 
 struct xfs_cil_ctx;
 
+/*
+ * 整体状态如下图：
+ *  +---------+--------------+-----+------------------------+------+
+ *  | log_vec | log_iovec[0] | ... | log_iovec[niovecs - 1] | data |
+ *  +---------+--------------+-----+------------------------+------+
+ *  ^	     ^						   ^
+ *  |	     |						   |
+ *  lv	(struct xfs_log_iovec *)&lv[1]		       lv->lv_buf
+ */
 struct xfs_log_vec {
+	/*
+	 * 目前看到的使用点：
+	 * - 当CIL中的xfs_log_item被组织到xfs_cil_ctx->lv_chain上时，用
+	 *   lv_next将xfs_log_vec串联起来；
+	 */
 	struct xfs_log_vec	*lv_next;	/* next lv in build list */
 	int			lv_niovecs;	/* number of iovecs in lv */
 	struct xfs_log_iovec	*lv_iovecp;	/* iovec array */
@@ -16,6 +30,10 @@ struct xfs_log_vec {
 	char			*lv_buf;	/* formatted buffer */
 	int			lv_bytes;	/* accounted space in buffer */
 	int			lv_buf_len;	/* aligned size of buffer */
+	/*
+	 * 本结构分配的时候往往会分配一个更长的内存，将lv_iovecp数组和lv_buf
+	 * 依次紧跟着放到后面；lv_size用于标识整个大分配的整体尺寸；
+	 */
 	int			lv_size;	/* size of allocated lv */
 };
 
@@ -31,10 +49,19 @@ xlog_prepare_iovec(struct xfs_log_vec *lv, struct xfs_log_iovec **vecp,
 		ASSERT(vec - lv->lv_iovecp < lv->lv_niovecs);
 		vec++;
 	} else {
+	/*
+	 * 第一次进来时，*vecp往往为NULL，这里将其设置为xfs_log_vec->lv_iovecp
+	 * 数组中的第一个；
+	 */
 		vec = &lv->lv_iovecp[0];
 	}
 
 	vec->i_type = type;
+	/*
+	 * 这个lv_buf_len表示lv_buf中有多少空间已经被使用了，这里加上它表
+	 * 示vec->i_addr要使用没有用过的新空间
+	 * - 参见： xlog_finish_iovec()
+	 */
 	vec->i_addr = lv->lv_buf + lv->lv_buf_len;
 
 	ASSERT(IS_ALIGNED((unsigned long)vec->i_addr, sizeof(uint64_t)));
@@ -56,6 +83,10 @@ xlog_prepare_iovec(struct xfs_log_vec *lv, struct xfs_log_iovec **vecp,
 static inline void
 xlog_finish_iovec(struct xfs_log_vec *lv, struct xfs_log_iovec *vec, int len)
 {
+	/*
+	 * 在lv_buf中扣除已经使用的空间；下次再实例化新的xfs_log_iovec->i_addr时
+	 * 可以使用lv_buf + lv_buf_len得到新的未使用空间；
+	 */
 	lv->lv_buf_len += round_up(len, sizeof(uint64_t));
 	lv->lv_bytes += len;
 	vec->i_len = len;

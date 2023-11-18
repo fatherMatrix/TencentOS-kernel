@@ -68,6 +68,9 @@ xfs_iext_set(
 		rec->hi |= (1 << 21);
 }
 
+/*
+ * 将内存btree中的xfs_iext_rec元素格式化到xfs_bmbt_irec数据结构中；
+ */
 static void
 xfs_iext_get(
 	struct xfs_bmbt_irec	*irec,

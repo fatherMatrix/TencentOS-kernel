@@ -163,11 +163,15 @@ xfs_trans_reserve(
 	 * Attempt to reserve the needed disk blocks by decrementing
 	 * the number needed from the number available.  This will
 	 * fail if the count would go below zero.
+	 *
+	 * 这部分保留的是user data的空间，用于真正地存放user data；
 	 */
 	if (blocks > 0) {
 		/*
 		 * 这里只是检查并更新m_fdblocks或m_resblks_avail字段，并没有看到
 		 * 分配动作（位置信息）；
+		 * - data block可能要延迟分配，毕竟现在不着急写入user data，更着
+		 *   急的应该是下面那个if语句中log space的保留及log的写入；
 		 */
 		error = xfs_mod_fdblocks(tp->t_mountp, -((int64_t)blocks), rsvd);
 		if (error != 0) {
@@ -182,6 +186,8 @@ xfs_trans_reserve(
 
 	/*
 	 * Reserve the log space needed for this transaction.
+	 *
+	 * 这部分保留的是log space的空间，用于存放log；
 	 */
 	if (resp->tr_logres > 0) {
 		bool	permanent = false;
@@ -200,9 +206,16 @@ xfs_trans_reserve(
 		}
 
 		if (tp->t_ticket != NULL) {
+		/*
+		 * ticket不为NULL
+		 * - 此时只有XFS_TRANS_PERM_LOG_RES这一种可能
+		 */
 			ASSERT(resp->tr_logflags & XFS_TRANS_PERM_LOG_RES);
 			error = xfs_log_regrant(tp->t_mountp, tp->t_ticket);
 		} else {
+		/*
+		 * ticket为NULL，分配ticket，并在log buffer中为ticket保留空间
+		 */
 			error = xfs_log_reserve(tp->t_mountp,
 						resp->tr_logres,
 						resp->tr_logcount,
@@ -307,6 +320,12 @@ xfs_trans_alloc(
 	 */
 	tp->t_firstblock = NULLFSBLOCK;
 
+	/*
+	 * 给当前事务保留资源
+	 * - user data block
+	 * - log buffer block
+	 * - 似乎没看到对disk log space空间的管理？
+	 */
 	error = xfs_trans_reserve(tp, resp, blocks, rtextents);
 	if (error) {
 		xfs_trans_cancel(tp);
@@ -960,6 +979,10 @@ __xfs_trans_commit(
 	struct xfs_trans	*tp,
 	bool			regrant)
 {
+	/*
+	 * 对于xfs_trans_commit() -> __xfs_trans_commit()，regrant是false；
+	 * 对于xfs_trans_roll() -> __xfs_trans_commit()，regrant是true；
+	 */
 	struct xfs_mount	*mp = tp->t_mountp;
 	xfs_lsn_t		commit_lsn = -1;
 	int			error = 0;
@@ -1003,8 +1026,15 @@ __xfs_trans_commit(
 		xfs_trans_apply_sb_deltas(tp);
 	xfs_trans_apply_dquot_deltas(tp);
 
+	/*
+	 * 对应文档3.3.8 Life Cycle Chanages中delayed log部分6. Transaction Commit
+	 */
 	xfs_log_commit_cil(mp, tp, &commit_lsn, regrant);
 
+	/*
+	 * 将transaction中的xfs_log_item放到CIL中之后，就可以释放transaction
+	 * 了；
+	 */
 	current_restore_flags_nested(&tp->t_pflags, PF_MEMALLOC_NOFS);
 	xfs_trans_free(tp);
 

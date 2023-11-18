@@ -103,6 +103,8 @@ struct journal_head {
 	 * Pointer to the compound transaction against which this buffer
 	 * is checkpointed.  Only dirty buffers can be checkpointed.
 	 * [j_list_lock]
+	 *
+	 * 指向checkpoint本缓冲区的transaction
 	 */
 	transaction_t *b_cp_transaction;
 

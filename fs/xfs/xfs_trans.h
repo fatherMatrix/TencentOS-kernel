@@ -32,6 +32,9 @@ struct xfs_bud_log_item;
  * - 磁盘数据结构呢？
  */
 struct xfs_log_item {
+	/*
+	 * 链接进AIL
+	 */
 	struct list_head		li_ail;		/* AIL pointers */
 	/*
 	 * 作为链表元素加入xfs_trans->t_items
@@ -39,6 +42,13 @@ struct xfs_log_item {
 	struct list_head		li_trans;	/* transaction list */
 	xfs_lsn_t			li_lsn;		/* last on-disk lsn */
 	struct xfs_mount		*li_mountp;	/* ptr to fs mount */
+	/*
+	 * 直接拷贝的xfs_mount->m_ail
+	 * - 参见xfs_log_item_init()
+	 *
+	 * 这里保存一下的作用和必要性？
+	 * 为什么没有li_cilp？
+	 */
 	struct xfs_ail			*li_ailp;	/* ptr to AIL */
 	uint				li_type;	/* item type */
 	unsigned long			li_flags;	/* misc flags */
@@ -51,9 +61,19 @@ struct xfs_log_item {
 	const struct xfs_item_ops	*li_ops;	/* function list */
 
 	/* delayed logging */
+
+	/*
+	 * 链接进CIL
+	 */
 	struct list_head		li_cil;		/* CIL pointers */
+	/*
+	 * li_lv和li_lv_shadow的关系见xlog_cil_alloc_shadow_bufs()的注释；
+	 */
 	struct xfs_log_vec		*li_lv;		/* active log vector */
 	struct xfs_log_vec		*li_lv_shadow;	/* standby vector */
+	/*
+	 * 第一次提交到CIL checkpoint context时所对应的log->l_cilp->xc_ctx->sequence
+	 */
 	xfs_lsn_t			li_seq;		/* CIL commit seq */
 };
 
@@ -144,6 +164,9 @@ typedef struct xfs_trans {
 	int64_t			t_rblocks_delta;/* superblock rblocks change */
 	int64_t			t_rextents_delta;/* superblocks rextents chg */
 	int64_t			t_rextslog_delta;/* superblocks rextslog chg */
+	/*
+	 * 链表元素是xfs_log_item->li_trans
+	 */
 	struct list_head	t_items;	/* log item descriptors */
 	struct list_head	t_busy;		/* list of busy extents */
 	/*
@@ -220,6 +243,9 @@ xfs_trans_read_buf(
 	struct xfs_buf		**bpp,
 	const struct xfs_buf_ops *ops)
 {
+	/*
+	 * 这里的blkno和numblks都是basic block，512块
+	 */
 	DEFINE_SINGLE_BUF_MAP(map, blkno, numblks);
 	return xfs_trans_read_buf_map(mp, tp, target, &map, 1,
 				      flags, bpp, ops);

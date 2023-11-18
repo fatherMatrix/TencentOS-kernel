@@ -747,8 +747,14 @@ xfs_buf_item_init(
 		return 0;
 	}
 
+	/*
+	 * 分配全0内存；
+	 */
 	bip = kmem_zone_zalloc(xfs_buf_item_zone, 0);
 	xfs_log_item_init(mp, &bip->bli_item, XFS_LI_BUF, &xfs_buf_item_ops);
+	/*
+	 * 将xfs_buf_log_item关联到xfs_buf；
+	 */
 	bip->bli_buf = bp;
 
 	/*
@@ -779,6 +785,9 @@ xfs_buf_item_init(
 		bip->bli_formats[i].blf_map_size = map_size;
 	}
 
+	/*
+	 * 将xfs_buf关联到xfs_buf_log_item上；
+	 */
 	bp->b_log_item = bip;
 	xfs_buf_hold(bp);
 	return 0;

@@ -449,6 +449,7 @@ int jbd2_cleanup_journal_tail(journal_t *journal)
  *
  * Called with j_list_lock held.
  * Returns 1 if we freed the transaction, 0 otherwise.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  */
 static int journal_clean_one_cp_list(struct journal_head *jh, bool destroy)
 {

@@ -686,6 +686,8 @@ struct transaction_s
 	 * - 当一个缓冲区正在被checkpointed，但是后来由调用journal_forget()，
 	 *   此时以前的checkpointed项就没用了。因此需要在这里记录下这个缓冲区，
 	 *   然后un-checkpoint这个缓冲区。
+	 * - BJ_Shadow链表中的项在iobufs中的对应项写入磁盘后也会放到这里面；
+	 *   参见提交阶段3；
 	 */
 	struct journal_head	*t_forget;
 
@@ -710,6 +712,8 @@ struct transaction_s
 	 * Doubly-linked circular list of metadata buffers being shadowed by log
 	 * IO.  The IO buffers on the iobuf list and the shadow buffers on this
 	 * list match each other one for one at all times. [j_list_lock]
+	 *
+	 * iobuf list是哪个？
 	 */
 	struct journal_head	*t_shadow_list;
 

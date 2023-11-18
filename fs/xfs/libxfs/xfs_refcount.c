@@ -48,6 +48,9 @@ xfs_refcount_lookup_le(
 {
 	trace_xfs_refcount_lookup(cur->bc_mp, cur->bc_private.a.agno, bno,
 			XFS_LOOKUP_LE);
+	/*
+	 * 设置要查找的bno
+	 */
 	cur->bc_rec.rc.rc_startblock = bno;
 	cur->bc_rec.rc.rc_blockcount = 0;
 	return xfs_btree_lookup(cur, XFS_LOOKUP_LE, stat);
@@ -1230,7 +1233,9 @@ xfs_refcount_decrease_extent(
 
 /*
  * Given an AG extent, find the lowest-numbered run of shared blocks
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * within that range and return the range in fbno/flen.  If
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * find_end_of_shared is set, return the longest contiguous extent of
  * shared blocks; if not, just return the first extent we find.  If no
  * shared blocks are found, fbno and flen will be set to NULLAGBLOCK

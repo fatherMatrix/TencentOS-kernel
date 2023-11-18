@@ -173,6 +173,9 @@ xfs_refcountbt_init_ptr_from_cur(
 
 	ASSERT(cur->bc_private.a.agno == be32_to_cpu(agf->agf_seqno));
 
+	/*
+	 * 将refcount btree的root block的block号放到ptr->s中；
+	 */
 	ptr->s = agf->agf_refcount_root;
 }
 
@@ -334,6 +337,11 @@ xfs_refcountbt_init_cursor(
 	cur->bc_ops = &xfs_refcountbt_ops;
 	cur->bc_statoff = XFS_STATS_CALC_INDEX(xs_refcbt_2);
 
+	/*
+	 * refcount btree的层高在这里设置；
+	 * 根节点在xfs_refcountbt_ops.xfs_refcountbt_init_ptr_from_cur()中设置；
+	 * 真你妈奇怪，垃圾代码；
+	 */
 	cur->bc_nlevels = be32_to_cpu(agf->agf_refcount_level);
 
 	cur->bc_private.a.agbp = agbp;

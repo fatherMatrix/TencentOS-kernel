@@ -220,6 +220,9 @@ typedef struct xfs_trans_header {
 
 /*
  * The only type valid for th_type in CIL-enabled file system logs:
+ *
+ * 使用CIL后，这个transaction类型变成了唯一合法的，因为所有向log buffer的写入都
+ * 要通过CIL -> Checkpoint Context -> Log Buffer这个过程；
  */
 #define XFS_TRANS_CHECKPOINT	40
 

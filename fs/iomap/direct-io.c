@@ -498,6 +498,7 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		/*
 		 * 查找我们要做dio的范围内有没有page cache；如果有page cache，
 		 * 则退出（因为这里要求NOWAIT）
+		 * - 基于xarray的简单内存操作
 		 */
 		if (filemap_range_has_page(mapping, start, end)) {
 			ret = -EAGAIN;
@@ -539,6 +540,9 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 
 	blk_start_plug(&plug);
 	do {
+		/*
+		 * iomap机制的核心接口
+		 */
 		ret = iomap_apply(inode, pos, count, flags, ops, dio,
 				iomap_dio_actor);
 		if (ret <= 0) {
@@ -610,6 +614,11 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		__set_current_state(TASK_RUNNING);
 	}
 
+	/*
+	 * 调用dio->end_io()；
+	 * 唤醒在inode->i_state的__I_DIO_WAKEUP位上睡眠的进程
+	 * ... ...
+	 */
 	return iomap_dio_complete(dio);
 
 out_free_dio:

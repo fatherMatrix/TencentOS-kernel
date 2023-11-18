@@ -21,7 +21,9 @@ struct workqueue_struct *xfs_discard_wq;
 
 /*
  * Allocate a new ticket. Failing to get a new ticket makes it really hard to
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * recover, so we don't allow failure here. Also, we allocate in a context that
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * we don't want to be issuing transactions from, so we need to tell the
  * allocation code this as well.
  *
@@ -77,6 +79,8 @@ xlog_cil_iovec_space(
 
 /*
  * Allocate or pin log vector buffers for CIL insertion.
+ *             ^^^^^^^^^^^^^^^^^^^^^^
+ *            只看见了alloc，没看见pin
  *
  * The CIL currently uses disposable buffers for copying a snapshot of the
  * modified items into the log during a push. The biggest problem with this is
@@ -197,6 +201,13 @@ xlog_cil_alloc_shadow_bufs(
 			if (ordered)
 				lv->lv_buf_len = XFS_LOG_VEC_ORDERED;
 			else
+			/*
+			 * 上面通过kmem_alloc_large()分配了一个肯定足够大的内存，
+			 * 这个内存头部存放的是xfs_log_vec结构体，其lv_iovecp字段
+			 * 指向一个xfs_log_iovec数组，这个数组在这块内存中紧挨着
+			 * xfs_log_vec的尾部，这个(struct xfs_log_iovec *)&lv[1]
+			 * 就是为了求得xfs_log_vec结构体结束后的第一个字节；
+			 */
 				lv->lv_iovecp = (struct xfs_log_iovec *)&lv[1];
 			lip->li_lv_shadow = lv;
 		} else {
@@ -214,6 +225,13 @@ xlog_cil_alloc_shadow_bufs(
 		lv->lv_niovecs = niovecs;
 
 		/* The allocated data region lies beyond the iovec region */
+		/*
+		 * xfs_log_iovec本身也只是一个定位的结构体，真实的数据跟在
+		 * xfs_log_iovec数组后面；
+		 * - 详见xfs_log_vec结构体注释；
+		 *
+		 * 这个东西是不是文档中提到的memory buffer？
+		 */
 		lv->lv_buf = (char *)lv + xlog_cil_iovec_space(niovecs);
 	}
 
@@ -244,8 +262,13 @@ xfs_cil_prepare_item(
 	 * old_lv, then remove the space it accounts for and make it the shadow
 	 * buffer for later freeing. In both cases we are now switching to the
 	 * shadow buffer, so update the the pointer to it appropriately.
+	 *
+	 * 所以lv一开始没有分配，第一次总是会用lv_shadow；
 	 */
 	if (!old_lv) {
+		/*
+		 * pin log item，不同类型的log item有不同的方法
+		 */
 		if (lv->lv_item->li_ops->iop_pin)
 			lv->lv_item->li_ops->iop_pin(lv->lv_item);
 		lv->lv_item->li_lv_shadow = NULL;
@@ -258,6 +281,9 @@ xfs_cil_prepare_item(
 	}
 
 	/* attach new log vector to log item */
+	/*
+	 * 将xfs_log_vec关联到xfs_log_item;
+	 */
 	lv->lv_item->li_lv = lv;
 
 	/*
@@ -333,6 +359,9 @@ xlog_cil_insert_format_items(
 			ordered = true;
 
 		/* Skip items that do not have any vectors for writing */
+		/*
+		 * 这种情况意味着啥都不需要写
+		 */
 		if (!shadow->lv_niovecs && !ordered)
 			continue;
 
@@ -373,8 +402,17 @@ xlog_cil_insert_format_items(
 		}
 
 		ASSERT(IS_ALIGNED((unsigned long)lv->lv_buf, sizeof(uint64_t)));
+		/*
+		 * 这里也是定义了与xfs_log_item类型相关的format方法，用于将其格式化
+		 * 到memory buffer中去；
+		 * - 对于xfs_inode_log_item，是 xfs_inode_item_format()
+		 */
 		lip->li_ops->iop_format(lip, lv);
 insert:
+		/*
+		 * 里面调用了iop_pin()，所以是先format后pin
+		 * - 也不一定，要看old_lv是否已经分配了；
+		 */
 		xfs_cil_prepare_item(log, lv, old_lv, diff_len, diff_iovecs);
 	}
 }
@@ -404,6 +442,10 @@ xlog_cil_insert_items(
 	/*
 	 * We can do this safely because the context can't checkpoint until we
 	 * are done so it doesn't matter exactly how we update the CIL.
+	 *
+	 * 准备好一个可以插入到CIL中xfs_log_item
+	 * - 关联已经准备好的xfs_log_vec/xfs_log_iovec
+	 * - 将logical log format到xfs_log_vec->lv_buf中
 	 */
 	xlog_cil_insert_format_items(log, tp, &len, &diff_iovecs);
 
@@ -465,6 +507,9 @@ xlog_cil_insert_items(
 	 * Now (re-)position everything modified at the tail of the CIL.
 	 * We do this here so we only need to take the CIL lock once during
 	 * the transaction commit.
+	 *
+	 * 这里是将在tp->t_items链表上的元素在cil->xc_cil链表上后移，所以
+	 * 不需要使用safe版本；
 	 */
 	list_for_each_entry(lip, &tp->t_items, li_trans) {
 
@@ -476,6 +521,16 @@ xlog_cil_insert_items(
 		 * Only move the item if it isn't already at the tail. This is
 		 * to prevent a transient list_empty() state when reinserting
 		 * an item that is already the only item in the CIL.
+		 *
+		 * 其实并没有看到哪里调用了list_add(&lip->li_cil, &cil->xc_cil)，
+		 * 仅有的包含插入操作的代码就是这里。
+		 * - 如果lip->li_cil从来没有查如果cil->xc_cil链表中，下面的if语
+		 *   句也是会进入的；应该就是通过这种方法完成了插入的吧。
+		 *
+		 * 这个时候，CIL中直接挂xfs_log_item；
+		 * - 后面这个链表会直接从CIL中摘除，转换后放到Checkpoint Context
+		 *   的链表中，彼时链表元素是xfs_log_vec；
+		 *   > 参见：文档 3.3.3 Checkpoints
 		 */
 		if (!list_is_last(&lip->li_cil, &cil->xc_cil))
 			list_move_tail(&lip->li_cil, &cil->xc_cil);
@@ -663,6 +718,9 @@ xlog_cil_push(
 	if (!cil)
 		return 0;
 
+	/*
+	 * 每次push都要生成一个新的xfs_cil_ctx
+	 */
 	new_ctx = kmem_zalloc(sizeof(*new_ctx), KM_NOFS);
 	new_ctx->ticket = xlog_cil_ticket_alloc(log);
 
@@ -693,7 +751,9 @@ xlog_cil_push(
 
 	/*
 	 * We are now going to push this context, so add it to the committing
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * list before we do anything else. This ensures that anyone waiting on
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * this push can easily detect the difference between a "push in
 	 * progress" and "CIL is empty, nothing to do".
 	 *
@@ -714,6 +774,8 @@ xlog_cil_push(
 	 * committing list until it is found. In extreme cases of delay, the
 	 * sequence may fully commit between the attempts the wait makes to wait
 	 * on the commit sequence.
+	 *
+	 * 将要push的checkpoint context挂到CIL的xc_committing链表上；
 	 */
 	list_add(&ctx->committing, &cil->xc_committing);
 	spin_unlock(&cil->xc_push_lock);
@@ -726,17 +788,27 @@ xlog_cil_push(
 	 */
 	lv = NULL;
 	num_iovecs = 0;
+	/*
+	 * 将CIL整个取下来，将其中每一个xfs_log_item对应的xfs_log_vec挂到
+	 * xfs_cil_ctx->lv_chain上；
+	 */
 	while (!list_empty(&cil->xc_cil)) {
 		struct xfs_log_item	*item;
 
 		item = list_first_entry(&cil->xc_cil,
 					struct xfs_log_item, li_cil);
 		list_del_init(&item->li_cil);
+		/*
+		 * 第一次运行到这里时一定走第一个分支
+		 */
 		if (!ctx->lv_chain)
 			ctx->lv_chain = item->li_lv;
 		else
 			lv->lv_next = item->li_lv;
 		lv = item->li_lv;
+		/*
+		 * xfs_log_item不再关联向xfs_log_vec；
+		 */
 		item->li_lv = NULL;
 		num_iovecs += lv->lv_niovecs;
 	}
@@ -746,9 +818,14 @@ xlog_cil_push(
 	 * the current context to the CIL committing lsit so it can be found
 	 * during log forces to extract the commit lsn of the sequence that
 	 * needs to be forced.
+	 *
+	 * 将新的xfs_cli_ctx关联给CIL
 	 */
 	INIT_LIST_HEAD(&new_ctx->committing);
 	INIT_LIST_HEAD(&new_ctx->busy_extents);
+	/*
+	 * 新分配的checkpoint context->sequence设置为老context->sequence + 1；
+	 */
 	new_ctx->sequence = ctx->sequence + 1;
 	new_ctx->cil = cil;
 	cil->xc_ctx = new_ctx;
@@ -779,6 +856,9 @@ xlog_cil_push(
 	 * deferencing a freed context pointer.
 	 */
 	spin_lock(&cil->xc_push_lock);
+	/*
+	 * 将CIL的xc_current_sequence设置为新关联的checkpoint context的sequence
+	 */
 	cil->xc_current_sequence = new_ctx->sequence;
 	spin_unlock(&cil->xc_push_lock);
 	up_write(&cil->xc_ctx_lock);
@@ -797,15 +877,27 @@ xlog_cil_push(
 	thdr.th_type = XFS_TRANS_CHECKPOINT;
 	thdr.th_tid = tic->t_tid;
 	thdr.th_num_items = num_iovecs;
+	/*
+	 * 将这个xfs_trans_header放入xfs_log_iovec的数据区；
+	 */
 	lhdr.i_addr = &thdr;
 	lhdr.i_len = sizeof(xfs_trans_header_t);
 	lhdr.i_type = XLOG_REG_TYPE_TRANSHDR;
 	tic->t_curr_res -= lhdr.i_len + sizeof(xlog_op_header_t);
-
+	/*
+	 * 将上面组装的xfs_log_iovec关联到xfs_log_vec中；
+	 */
 	lvhdr.lv_niovecs = 1;
 	lvhdr.lv_iovecp = &lhdr;
+	/*
+	 * checkpoint本身的这个xfs_log_vec要串在ctx->lv_chain链表上所有的
+	 * xfs_log_vec之前
+	 */
 	lvhdr.lv_next = ctx->lv_chain;
 
+	/*
+	 * 将checkpoint context中的xfs_log_vec链表写入log buffer
+	 */
 	error = xlog_write(log, &lvhdr, tic, &ctx->start_lsn, NULL, 0);
 	if (error)
 		goto out_abort_free_ticket;
@@ -856,6 +948,9 @@ restart:
 	}
 	ASSERT_ALWAYS(commit_iclog->ic_state == XLOG_STATE_ACTIVE ||
 		      commit_iclog->ic_state == XLOG_STATE_WANT_SYNC);
+	/*
+	 * 将xfs_cil_ctx加入iclog，待iclog写入disk后，依次调用回调函数；
+	 */
 	list_add_tail(&ctx->iclog_entry, &commit_iclog->ic_callbacks);
 	spin_unlock(&commit_iclog->ic_callback_lock);
 
@@ -865,6 +960,9 @@ restart:
 	 * and wake up anyone who is waiting for the commit to complete.
 	 */
 	spin_lock(&cil->xc_push_lock);
+	/*
+	 * push完成之后，设置checkpoint context的commit_lsn，并唤醒xc_commit_wait
+	 */
 	ctx->commit_lsn = commit_lsn;
 	wake_up_all(&cil->xc_commit_wait);
 	spin_unlock(&cil->xc_push_lock);
@@ -916,6 +1014,9 @@ xlog_cil_push_background(
 	/*
 	 * don't do a background push if we haven't used up all the
 	 * space available yet.
+	 *
+	 * 如果CIL上已有的log size小于log buffer的一半，则返回，不继续做从CIL
+	 * 到log buffer的push操作；
 	 */
 	if (cil->xc_ctx->space_used < XLOG_CIL_SPACE_LIMIT(log))
 		return;
@@ -949,8 +1050,10 @@ xlog_cil_push_now(
 
 	/* start on any pending background push to minimise wait time on it */
 	/*
-	 * 这里对应xlog_cil_push_work
+	 * 这里对应 xlog_cil_push_work()
 	 * - 参见xlog_cil_init()
+	 *
+	 * 这里应该等待其他已经开始的xlog_cil_push_work()完成；
 	 */
 	flush_work(&cil->xc_push_work);
 
@@ -964,6 +1067,9 @@ xlog_cil_push_now(
 		return;
 	}
 
+	/*
+	 * 这里才是本次期望的CIL push
+	 */
 	cil->xc_push_seq = push_seq;
 	queue_work(log->l_mp->m_cil_workqueue, &cil->xc_push_work);
 	spin_unlock(&cil->xc_push_lock);
@@ -995,6 +1101,8 @@ xlog_cil_empty(
  * Called with the context lock already held in read mode to lock out
  * background commit, returns without it held once background commits are
  * allowed again.
+ *
+ * 对应文档3.3.8 Life Cycle Chanages中delayed log部分6. Transaction Commit
  */
 void
 xfs_log_commit_cil(
@@ -1012,12 +1120,17 @@ xfs_log_commit_cil(
 	 * Do all necessary memory allocation before we lock the CIL.
 	 * This ensures the allocation does not deadlock with a CIL
 	 * push in memory reclaim (e.g. from kswapd).
+	 *
+	 * 预分配xfs_log_vec/xfs_log_iovec，防止后面加锁状态的死锁
 	 */
 	xlog_cil_alloc_shadow_bufs(log, tp);
 
 	/* lock out background commit */
 	down_read(&cil->xc_ctx_lock);
 
+	/*
+	 * 将本transaction管理的xfs_log_item插入checkpoint的链表；
+	 */
 	xlog_cil_insert_items(log, tp);
 
 	xc_commit_lsn = cil->xc_ctx->sequence;
@@ -1042,6 +1155,9 @@ xfs_log_commit_cil(
 	trace_xfs_trans_commit_items(tp, _RET_IP_);
 	list_for_each_entry_safe(lip, next, &tp->t_items, li_trans) {
 		xfs_trans_del_item(lip);
+		/*
+		 * 解锁item（这个item指的是object本身，比如inode）
+		 */
 		if (lip->li_ops->iop_committing)
 			lip->li_ops->iop_committing(lip, xc_commit_lsn);
 	}

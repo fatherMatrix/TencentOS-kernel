@@ -99,8 +99,8 @@ typedef struct xfs_sb {
 	uint32_t	sb_magicnum;	/* magic number == XFS_SB_MAGIC */
 	/*
 	 * 空间分配的最小单位
-	 * - crash验证为4096，可能的取值[512, 65536]字节；
-	 * - 文件系统的逻辑块大小？
+	 * - 在磁盘和nvme盘上crash验证都为4096，可能的取值[512, 65536]字节；
+	 * - 文件系统的逻辑块大小
 	 */
 	uint32_t	sb_blocksize;	/* logical block size, bytes */
 	/*
@@ -136,7 +136,9 @@ typedef struct xfs_sb {
 	xfs_extlen_t	sb_logblocks;	/* number of log blocks */
 	uint16_t	sb_versionnum;	/* header version == XFS_SB_VERSION */
 	/*
-	 * 底层存储盘的sector大小，direct io的最小单位
+	 * 底层存储盘的sector大小，direct io的最小单位;
+	 * - 磁盘是512
+	 * - 固态盘是4096
 	 */
 	uint16_t	sb_sectsize;	/* volume sector size, bytes */
 	/*
@@ -151,10 +153,27 @@ typedef struct xfs_sb {
 	 */
 	uint16_t	sb_inopblock;	/* inodes per block */
 	char		sb_fname[XFSLABEL_MAX]; /* file system name */
+	/*
+	 * sb_blocksize = 2 ** sb_blocklog
+	 */
 	uint8_t		sb_blocklog;	/* log2 of sb_blocksize */
+	/*
+	 * sb_sectsize = 2 ** sb_sectlog
+	 */
 	uint8_t		sb_sectlog;	/* log2 of sb_sectsize */
+	/*
+	 * sb_inodesize = 2 ** sb_inodelog
+	 */
 	uint8_t		sb_inodelog;	/* log2 of sb_inodesize */
+	/*
+	 * sb_inopblock = 2 ** sb_inopblog
+	 */
 	uint8_t		sb_inopblog;	/* log2 of sb_inopblock */
+	/*
+	 * sb_agblocks ~ 2 ** sb_agblklog （向上取整）
+	 * - 其实这个数值表示的是sb_agblocks在fsblockno(agno|bno格式)中所占的
+	 *   比特数；
+	 */
 	uint8_t		sb_agblklog;	/* log2 of sb_agblocks (rounded up) */
 	uint8_t		sb_rextslog;	/* log2 of sb_rextents */
 	/*
@@ -628,11 +647,14 @@ xfs_is_quota_inode(struct xfs_sb *sbp, xfs_ino_t ino)
 
 /*
  * File system sector to basic block conversions.
+ * - 该宏表示的是sec个fs sector包含多少个512块
  */
 #define XFS_FSS_TO_BB(mp,sec)	((sec) << (mp)->m_sectbb_log)
 
 /*
  * File system block to basic block conversions.
+ * - basic block指的是512的块。
+ * - 该宏表示的是fsbno个fs block包含多少个512块
  */
 #define	XFS_FSB_TO_BB(mp,fsbno)	((fsbno) << (mp)->m_blkbb_log)
 #define	XFS_BB_TO_FSB(mp,bb)	\
@@ -795,6 +817,7 @@ typedef struct xfs_agf {
 	{ XFS_AGF_SPARE64,	"SPARE64" }
 
 /* disk block (xfs_daddr_t) in the AG */
+/* 这个daddr表示的是basic block number，XFS_AGF_DADDR()返回的是afg所在的512块的下标 */
 #define XFS_AGF_DADDR(mp)	((xfs_daddr_t)(1 << (mp)->m_sectbb_log))
 #define	XFS_AGF_BLOCK(mp)	XFS_HDR_BLOCK(mp, XFS_AGF_DADDR(mp))
 #define	XFS_BUF_TO_AGF(bp)	((xfs_agf_t *)((bp)->b_addr))
@@ -900,10 +923,22 @@ typedef struct xfs_agfl {
 	((xfs_agnumber_t)((fsbno) >> (mp)->m_sb.sb_agblklog))
 #define	XFS_FSB_TO_AGBNO(mp,fsbno)	\
 	((xfs_agblock_t)((fsbno) & xfs_mask32lo((mp)->m_sb.sb_agblklog)))
+/*
+ * - 首先使用agno乘以每个AG拥有的fs block数量(sb_agblocks)，得到agno表示的AG
+ *   的第一个fsblock的fsblock number；
+ * - 然后再加上agbno，获得目标fsblock的fsblock number；
+ * - 最后使用XFS_FSB_TO_BB()宏，将fsblock number转换为basic block number
+ */
 #define	XFS_AGB_TO_DADDR(mp,agno,agbno)	\
 	((xfs_daddr_t)XFS_FSB_TO_BB(mp, \
 		(xfs_fsblock_t)(agno) * (mp)->m_sb.sb_agblocks + (agbno)))
+/*
+ * 获取agno分配组中的第d个block的磁盘block number
+ */
 #define	XFS_AG_DADDR(mp,agno,d)		(XFS_AGB_TO_DADDR(mp, agno, 0) + (d))
+/*                                                                  ^
+ *                                                     要注意人家这里传的是0，不是d
+ */
 
 /*
  * For checking for bad ranges of xfs_daddr_t's, covering multiple
@@ -1706,6 +1741,9 @@ typedef xfs_bmbt_rec_t xfs_bmdr_rec_t;
 
 static inline int isnullstartblock(xfs_fsblock_t x)
 {
+	/*
+	 * 要求低17位全部为0？
+	 */
 	return ((x) & STARTBLOCKMASK) == STARTBLOCKMASK;
 }
 

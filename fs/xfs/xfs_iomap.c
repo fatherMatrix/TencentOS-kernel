@@ -243,6 +243,8 @@ xfs_iomap_write_direct(
 		resrtextents = 0;
 		/*
 		 * 计算需要保留的磁盘空间
+		 * - 这里面既包含了metadata region修改需要的新空间，也包含了
+		 *   user data需要的空间；
 		 */
 		resblks = qblocks = XFS_DIOSTRAT_SPACE_RES(mp, resaligned);
 		quota_flag = XFS_QMOPT_RES_REGBLKS;
@@ -1069,6 +1071,7 @@ xfs_file_iomap_begin(
 		length = mp->m_super->s_maxbytes - offset;
 	/*
 	 * 将字节为单位的offset转换成以block为单位
+	 * - 这个是xfs_fileoff_t，表示block在file中的index
 	 */
 	offset_fsb = XFS_B_TO_FSBT(mp, offset);
 	end_fsb = XFS_B_TO_FSB(mp, offset + length);
@@ -1079,10 +1082,11 @@ xfs_file_iomap_begin(
 	 *
 	 * 理论上说，这里只有一个xfs_bmbt_irec，如果[offset_fsb, end_fsb)跨了两
 	 * 个extent怎么办？
-	 * - [offset, end_fsb)肯定是连续的，两个连续的extent应该会被合并为一个
-	 *   extent的吧？
-	 * - 如果真的跨了多个extent，nimaps变量在xfs_bmapi_read()内部也可以通过
-	 *   指针修改的吧？
+	 * - 对于xfs_bmapi_read()来说，其传入参数为一个xfs_bmbt_irec指针数组，指
+	 *   针数组的长度由nimaps指定；返回时，真实查找到的xfs_bmbt_irec个数放到
+	 *   nimaps中返回出来，返回的nimaps不会大于传入进去的nimaps；
+	 * - 这里nimaps传入时即等于1，说明此时我们的预期就时查找一个xfs_bmbt_irec
+	 *   并返回出来；
 	 */
 	error = xfs_bmapi_read(ip, offset_fsb, end_fsb - offset_fsb, &imap,
 			       &nimaps, 0);
@@ -1098,7 +1102,7 @@ xfs_file_iomap_begin(
 
 	/*
 	 * 对于读操作来说，上面通过xfs_bmapi_read()找到映射后，就没有可做的了；
-	 * 直接退出本函数；
+	 * 则将上面read到的imap格式化到iomap中后退出本函数；
 	 */
 	/* Non-modifying mapping requested, so we are done */
 	if (!(flags & (IOMAP_WRITE | IOMAP_ZERO)))
@@ -1122,6 +1126,11 @@ xfs_file_iomap_begin(
 			goto out_found;
 
 		/* may drop and re-acquire the ilock */
+		/*
+		 * cmap保存了imap中的参数，即读到的xfs_bmbt_irec
+		 * - 注意上面调用xfs_bmapi_read()时，最后一个参数为0，即imap中保存
+		 *   的extent来自data fork；
+		 */
 		cmap = imap;
 		error = xfs_reflink_allocate_cow(ip, &cmap, &shared, &lockmode,
 				directio);
@@ -1202,6 +1211,9 @@ out_found:
 	ASSERT(nimaps);
 	xfs_iunlock(ip, lockmode);
 	trace_xfs_iomap_found(ip, offset, length, XFS_DATA_FORK, &imap);
+	/*
+	 * 将imap中的位置映射格式化为iomap，并返回；
+	 */
 	goto out_finish;
 
 out_unlock:

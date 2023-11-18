@@ -71,6 +71,10 @@ _xfs_trans_bjoin(
 	 * The xfs_buf_log_item pointer is stored in b_log_item.  If
 	 * it doesn't have one yet, then allocate one and initialize it.
 	 * The checks to see if one is there are in xfs_buf_item_init().
+	 *
+	 * 给xfs_buf分配一个xfs_buf_log_item，并进行初始化；
+	 * - 内部会增加xfs_buf->b_hold
+	 * - 分配的xfs_buf_log_item会被放入xfs_buf->b_log_item；
 	 */
 	xfs_buf_item_init(bp, tp->t_mountp);
 	bip = bp->b_log_item;
@@ -88,6 +92,9 @@ _xfs_trans_bjoin(
 	/*
 	 * Attach the item to the transaction so we can find it in
 	 * xfs_trans_get_buf() and friends.
+	 *
+	 * 将xfs_buf对应的xfs_buf_log_item关联到transaction，即间接地将
+	 * xfs_buf与transaction关联；
 	 */
 	xfs_trans_add_item(tp, &bip->bli_item);
 	bp->b_transp = tp;
@@ -242,9 +249,15 @@ xfs_trans_read_buf_map(
 	 * the lock recursion count and return the buffer to the caller.
 	 * If the buffer is not yet read in, then we read it in, increment
 	 * the lock recursion count, and return it to the caller.
+	 *
+	 * 在当前的transaction的log items中查找是否已经包含了这个xfs_buf；
+	 * - 如果该xfs_buf现在正被其他transaction关联会怎么样？
 	 */
 	if (tp)
 		bp = xfs_trans_buf_item_match(tp, target, map, nmaps);
+	/*
+	 * 如果当前transaction中已经包含了该xfs_buf
+	 */
 	if (bp) {
 		ASSERT(xfs_buf_islocked(bp));
 		ASSERT(bp->b_transp == tp);
@@ -288,6 +301,9 @@ xfs_trans_read_buf_map(
 			return error;
 		}
 
+		/*
+		 * 增加对应xfs_buf_log_item的lock count
+		 */
 		bip = bp->b_log_item;
 		bip->bli_recur++;
 
@@ -298,6 +314,10 @@ xfs_trans_read_buf_map(
 		return 0;
 	}
 
+	/*
+	 * 如果当前操作不对应transaction，或者在当前transaction中没有发现该
+	 * xfs_buf_log_item，则要重新读盘；
+	 */
 	bp = xfs_buf_read_map(target, map, nmaps, flags, ops);
 	if (!bp) {
 		if (!(flags & XBF_TRYLOCK))
@@ -337,6 +357,10 @@ xfs_trans_read_buf_map(
 		return -EIO;
 	}
 
+	/*
+	 * 重新读盘后，如果当前操作对应transaction，则将该xfs_buf与transaction
+	 * 进行连接；
+	 */
 	if (tp) {
 		_xfs_trans_bjoin(tp, bp, 1);
 		trace_xfs_trans_read_buf(bp->b_log_item);

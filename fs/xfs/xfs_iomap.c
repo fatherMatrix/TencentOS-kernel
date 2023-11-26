@@ -589,6 +589,9 @@ xfs_file_iomap_begin_delay(
 	int			error = 0;
 
 	ASSERT(!XFS_IS_REALTIME_INODE(ip));
+	/*
+	 * 这个要求是用来保证什么？
+	 */
 	ASSERT(!xfs_get_extsz_hint(ip));
 
 	/*
@@ -641,7 +644,6 @@ xfs_file_iomap_begin_delay(
 		/*
 		 * 进入到这里时，说明xfs_iext_lookup_extent()返回了false，此时
 		 * imap内的信息时非法的，要在这里给他一个值；
-		 * - 这个值的意义是什么呢？
 		 */
 		imap.br_startoff = end_fsb; /* fake hole until the end */
 
@@ -655,7 +657,7 @@ xfs_file_iomap_begin_delay(
 	 * imap.br_startoff > offset_fsb，说明找到的extent在offset_fsb的后面；
 	 */
 		/*
-		 * 构建一个从[offset_fsb, end_fsb)的hole的iomap
+		 * 构建一个从offset_fsb到后面的extent开始的hole的iomap
 		 */
 		xfs_hole_to_iomap(ip, iomap, offset_fsb, imap.br_startoff);
 		goto out_unlock;
@@ -684,6 +686,11 @@ xfs_file_iomap_begin_delay(
 			/*
 			 * 进入到这里，说明cow_eof是false，即xfs_iext_lookup_extent()
 			 * 返回了true，即offset_fsb在cow的eof之内；
+			 *
+			 * xfs_iext_lookup_extent()返回true有两种可能：
+			 * - offset_fsb位于eof之前的一个hole中；
+			 * - offset_fsb位于eof之前的一个extent中；
+			 * 进入这里，说明满足cmap.br_startoff <= offset_fsb，即第2种情况
 			 */
 			trace_xfs_reflink_cow_found(ip, &cmap);
 			whichfork = XFS_COW_FORK;
@@ -692,7 +699,11 @@ xfs_file_iomap_begin_delay(
 	}
 
 	/*
-	 * imap.br_startoff <= offset_fsb，表明offset刚好落到了一个extent中；
+	 * 走到这里，说明没有在cow fork中找到对应的extent，或者offset_fsb处于cow_eof后面
+	 */
+
+	/*
+	 * imap.br_startoff <= offset_fsb，表明offset刚好落到了data fork中的一个extent中；
 	 */
 	if (imap.br_startoff <= offset_fsb) {
 		/*
@@ -713,6 +724,15 @@ xfs_file_iomap_begin_delay(
 		xfs_trim_extent(&imap, offset_fsb, end_fsb - offset_fsb);
 
 		/* Trim the mapping to the nearest shared extent boundary. */
+		/*
+		 * 查看refcount tree中是否存在重叠的区域
+		 * - 如果存在重叠，shared返回true，imap返回重叠区域
+		 * - 如果完全不存在重叠，shared返回false，imap.br_startoff = 
+		 * - 如果进入时imap.br_offset在找到的重叠区间前，则imap返回找到的
+		 *   重叠区间前的hole，shared返回false；
+		 *
+		 * Note：返回前后imap.br_startblock是不会变化的；
+		 */
 		error = xfs_inode_need_cow(ip, &imap, &shared);
 		if (error)
 			goto out_unlock;
@@ -723,7 +743,10 @@ xfs_file_iomap_begin_delay(
 					&imap);
 			goto done;
 		}
-
+		/*
+		 * 到这里说明是有shared的，所以将我们本次要处理的extent限制在与data fork
+		 * 中找到的extent对齐；
+		 */
 		/*
 		 * Fork all the shared blocks from our write offset until the
 		 * end of the extent.
@@ -732,7 +755,7 @@ xfs_file_iomap_begin_delay(
 		end_fsb = imap.br_startoff + imap.br_blockcount;
 	} else {
 	/*
-	 * 进到这里，说明offset_fsb不落于任何现有的extent中；
+	 * 进到这里，说明offset_fsb不落于data fork中任何现有的extent中；
 	 * - 也包含offset超出eof的情况
 	 */
 		/*
@@ -756,6 +779,12 @@ xfs_file_iomap_begin_delay(
 		goto out_unlock;
 
 	if (eof) {
+		/*
+		 * 计算一下prealloc的长度
+		 *
+		 * eof是超出了data fork的尾巴，但是这里的whichfork已经有可能是
+		 * cow fork了；没问题吗？
+		 */
 		prealloc_blocks = xfs_iomap_prealloc_size(ip, whichfork, offset,
 				count, &icur);
 		if (prealloc_blocks) {
@@ -778,6 +807,12 @@ xfs_file_iomap_begin_delay(
 	}
 
 retry:
+	/*
+	 * cmap在xfs_iext_lookup_extent()返回false后其实有可能非法，所以往里面追了
+	 * 一下，里面凡是用到cmap时，都通过eof/cow_eof判断了合法；
+	 *
+	 * 返回时，got这个参数内容发生了变化；
+	 */
 	error = xfs_bmapi_reserve_delalloc(ip, whichfork, offset_fsb,
 			end_fsb - offset_fsb, prealloc_blocks,
 			whichfork == XFS_DATA_FORK ? &imap : &cmap,
@@ -808,12 +843,21 @@ retry:
 			whichfork == XFS_DATA_FORK ? &imap : &cmap);
 done:
 	if (whichfork == XFS_COW_FORK) {
+		/*
+		 * offset_fsb位于data fork中eof前的hole中；
+		 */
 		if (imap.br_startoff > offset_fsb) {
+			/*
+			 * 将在cow fork中找到的cmap切到与data fork中的hole相交
+			 */
 			xfs_trim_extent(&cmap, offset_fsb,
 					imap.br_startoff - offset_fsb);
 			error = xfs_bmbt_to_iomap(ip, iomap, &cmap, true);
 			goto out_unlock;
 		}
+		/*
+		 * offset_fsb位于data fork中的extent内
+		 */
 		/* ensure we only report blocks we have a reservation for */
 		xfs_trim_extent(&imap, cmap.br_startoff, cmap.br_blockcount);
 		shared = true;
@@ -1039,6 +1083,7 @@ xfs_file_iomap_begin(
 
 	/*
 	 * 写操作，但非directio和dax
+	 * - !xfs_get_extsz_hint()这个条件是做什么的？
 	 */
 	if ((flags & (IOMAP_WRITE | IOMAP_ZERO)) && !(flags & IOMAP_DIRECT) &&
 			!IS_DAX(inode) && !xfs_get_extsz_hint(ip)) {

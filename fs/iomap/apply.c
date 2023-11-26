@@ -74,7 +74,7 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	 * we can do the copy-in page by page without having to worry about
 	 * failures exposing transient data.
 	 *
-	 * xfs中buffer io对应iomap_write_actor()
+	 * xfs中buffer io对应 iomap_write_actor()
 	 * - 
 	 * xfs中direct io对应 iomap_dio_actor()
 	 * - 该函数内部调用iomap_dio_bio_actor()，对iomap中的数据创建bio并调用

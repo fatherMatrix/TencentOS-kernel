@@ -199,7 +199,16 @@ typedef struct xlog_ticket {
  * and move everything else out to subsequent cachelines.
  */
 typedef struct xlog_in_core {
+	/*
+	 * __xfs_log_force_lsn()中等待写iclog到disk log space完成；
+	 * wake该队列的点在： xlog_state_clean_iclog()
+	 */
 	wait_queue_head_t	ic_force_wait;
+	/*
+	 * __xfs_log_force_lsn()中写iclog到disk log space之前等待，用于等待
+	 * 上一个iclog（ic_prev）写完；
+	 * wake该队列的点在： xlog_state_done_syncing()
+	 */
 	wait_queue_head_t	ic_write_wait;
 	struct xlog_in_core	*ic_next;
 	struct xlog_in_core	*ic_prev;
@@ -240,7 +249,13 @@ typedef struct xlog_in_core {
 	bool			ic_fail_crc : 1;
 #endif
 	struct semaphore	ic_sema;
+	/*
+	 * iclog写到disk log space完成的回调；
+	 */
 	struct work_struct	ic_end_io_work;
+	/*
+	 * 用于将iclog写到disk log space的bio
+	 */
 	struct bio		ic_bio;
 	struct bio_vec		ic_bvec[];
 } xlog_in_core_t;
@@ -327,6 +342,9 @@ struct xfs_cil {
 	 */
 	struct list_head	xc_committing;
 	wait_queue_head_t	xc_commit_wait;
+	/*
+	 * 来源是CIL目前关联的xfs_cil_ctx->sequence
+	 */
 	xfs_lsn_t		xc_current_sequence;
 	struct work_struct	xc_push_work;
 } ____cacheline_aligned_in_smp;
@@ -419,13 +437,18 @@ struct xlog {
 	int			l_iclog_size;	/* size of log in bytes */
 	int			l_iclog_bufs;	/* number of iclog buffers */
 	xfs_daddr_t		l_logBBstart;   /* start block of log */
+	/*
+	 * xlog的字节长度和basic block长度
+	 * - 这里指的是log space的长度吧？
+	 */
 	int			l_logsize;      /* size of log in bytes */
 	int			l_logBBsize;    /* size of log in BB chunks */
 
 	/* The following block of fields are changed while holding icloglock */
 	/*
 	 * 当向log buffer中写log，但log buffer状态不为ACTIVE时，在此等待队列上
-	 * 睡眠；
+	 * 睡眠；等待点在： xlog_state_get_iclog_space()
+	 * wake该队列的点在： xlog_state_do_callback()
 	 */
 	wait_queue_head_t	l_flush_wait ____cacheline_aligned_in_smp;
 						/* waiting for iclog flush */
@@ -448,11 +471,20 @@ struct xlog {
 	 * contending with other hot objects, place each of them on a separate
 	 * cacheline.
 	 */
-	/* lsn of last LR on disk */
+	/* lsn of last LR on disk */ /* 已经写到disk上的log space的最大lsn */
 	atomic64_t		l_last_sync_lsn ____cacheline_aligned_in_smp;
-	/* lsn of 1st LR with unflushed * buffers */
+	/* lsn of 1st LR with unflushed * buffers */ /* 在iclog中等待写到磁盘metadata region上的最小的lsn */
 	atomic64_t		l_tail_lsn ____cacheline_aligned_in_smp;
 
+	/*
+	 * 上面的lsn和xlog_grant_head都编码了位置信息，但编码格式不同；
+	 * - 对lsn，参见： xlog_assign_atomic_lsn()
+	 * - 对xlog_grant_head，参见： xlog_assign_grant_head()
+	 *
+	 * l_reserve_head表示log space on disk上已保留的日志尾巴；
+	 *
+	 * 这个两个head的区别？
+	 */
 	struct xlog_grant_head	l_reserve_head;
 	struct xlog_grant_head	l_write_head;
 

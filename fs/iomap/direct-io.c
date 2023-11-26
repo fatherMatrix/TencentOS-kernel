@@ -418,7 +418,7 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		const struct iomap_ops *ops, const struct iomap_dio_ops *dops)
 {
 	/*
-	 * 对于direct io，dops是xfs_dio_write_ops
+	 * 对于direct io，dops是 xfs_dio_write_ops
 	 */
 	struct address_space *mapping = iocb->ki_filp->f_mapping;
 	struct inode *inode = file_inode(iocb->ki_filp);
@@ -529,6 +529,10 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		dio_warn_stale_pagecache(iocb->ki_filp);
 	ret = 0;
 
+	/*
+	 * 如果是异步写，初始化超级块工作队列；
+	 * - 这里是不是可以加一个unlikely()哇；
+	 */
 	if (iov_iter_rw(iter) == WRITE && !wait_for_completion &&
 	    !inode->i_sb->s_dio_done_wq) {
 		ret = sb_init_dio_done_wq(inode->i_sb);

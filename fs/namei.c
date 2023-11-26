@@ -1925,6 +1925,8 @@ again:
 		 * ext4_lookup中通过调用d_splice_alias -> __d_add将dentry放到了
 		 * dentry_hashtable中
 		 *
+		 * xfs中是： xfs_vn_lookup()
+		 *
 		 * 会有多个内核路径同时走到这里，这个函数是可以并发的吗？
 		 * - 猜测：该函数内使用了bh cache和inode cache，这两个cache会保
 		 *   整真正的读盘操作只会由一个内核路径执行，其他的同目标的内核
@@ -1938,10 +1940,8 @@ again:
 		 */
 		old = inode->i_op->lookup(inode, dentry, flags);
 		/*
-		 * 如果dentry还在inlookup_hashtable中（dentry是由其他
-		 * d_alloc_parallel创建的），则将dentry从inlookup_hashtable中摘
-		 * 下来。只有在这里被摘下来，其他内核路径的d_alloc_parallel才会
-		 * 返回。
+		 * 将处于inlookup_hashtable中的dentry摘下来，并唤醒前面在函数
+		 * d_alloc_parallel()中等待这一事实的其他内核路径；
 		 *
 		 * 但其实在->lookup中的d_splice_alias -> __d_add中就调用过一次
 		 * __d_lookup_done了呀？
@@ -3850,6 +3850,9 @@ no_open:
 		 * 创建新的inode
 		 *
 		 * 其中会调用d_instantiate_new将dentry和inode联系起来
+		 *
+		 * 对于xfs: xfs_vn_create()
+		 * 对于ext4： ext4_create() -> ext4_new_inode() -> super_block.sops.alloc_inode()
 		 */
 		error = dir_inode->i_op->create(dir_inode, dentry, mode,
 						open_flag & O_EXCL);

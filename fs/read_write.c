@@ -631,6 +631,12 @@ SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 
 ssize_t ksys_write(unsigned int fd, const char __user *buf, size_t count)
 {
+	/*
+	 * 内部会对pos这个字段加锁
+	 * - 也就是说对于共享file的父子进程间或者线程间，其pos在write时总是一致的，
+	 *   不会交叉（同时并发write(aaa, 3)和write(bbb, 3)，结果一定都是三个一组）；
+	 * - 对于不共享file的进程或者线程，就不一定了；有可能出现(aabbbabbaaba)；
+	 */
 	struct fd f = fdget_pos(fd);
 	ssize_t ret = -EBADF;
 
@@ -645,6 +651,9 @@ ssize_t ksys_write(unsigned int fd, const char __user *buf, size_t count)
 		ret = vfs_write(f.file, buf, count, ppos);
 		if (ret >= 0 && ppos)
 			f.file->f_pos = pos;
+		/*
+		 * 会解锁关于pos的锁
+		 */
 		fdput_pos(f);
 	}
 

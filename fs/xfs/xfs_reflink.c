@@ -150,7 +150,7 @@ xfs_reflink_find_shared(
 	int			error;
 
 	/*
-	 * 读取AGF
+	 * 读取AGF，读完的xfs_buf放到agbp中；
 	 */
 	error = xfs_alloc_read_agf(mp, tp, agno, 0, &agbp);
 	if (error)
@@ -213,6 +213,15 @@ xfs_reflink_trim_around_shared(
 	agbno = XFS_FSB_TO_AGBNO(ip->i_mount, irec->br_startblock);
 	aglen = irec->br_blockcount;
 
+	/*
+	 * 最后一个参数true表示在找到第一个与[agbno, agbno+aglen]相交的
+	 * extent后，还要继续找到最后一个与[agbno, agbno+aglen]相交的
+	 * extent并将其blockcount持续加入到flen中；
+	 *
+	 * fbno返回第一个与其相交的extent的开始；
+	 *
+	 * Note：所有的extent都是与[agbno, agbno+aglen]进行trim对齐后的；
+	 */
 	error = xfs_reflink_find_shared(ip->i_mount, NULL, agno, agbno,
 			aglen, &fbno, &flen, true);
 	if (error)
@@ -228,11 +237,17 @@ xfs_reflink_trim_around_shared(
 		 * mapping at the end of the shared region so that a
 		 * subsequent iteration starts at the start of the
 		 * unshared region.
+		 *
+		 * 这个flen是包含了几个extents间的hole的；
 		 */
 		irec->br_blockcount = flen;
 		*shared = true;
 		return 0;
 	} else {
+		/*
+		 * 这种情况对应于没有找到startblock小于agbno的extent，返
+		 * 回的是一个startblock（fbno）在agbno后的extent；
+		 */
 		/*
 		 * There's a shared extent midway through this extent.
 		 * Truncate the mapping at the start of the shared

@@ -110,9 +110,16 @@ xfs_trans_dup(
 		       (tp->t_flags & XFS_TRANS_NO_WRITECOUNT);
 	/* We gave our writer reference to the new transaction */
 	tp->t_flags |= XFS_TRANS_NO_WRITECOUNT;
+	/*
+	 * 增加ticket的引用计数
+	 */
 	ntp->t_ticket = xfs_log_ticket_get(tp->t_ticket);
 
 	ASSERT(tp->t_blk_res >= tp->t_blk_res_used);
+	/*
+	 * 新transaction的t_blk_res是老transaction剩下的；
+	 * 老transaction的t_blk_res设置为其真实使用的；
+	 */
 	ntp->t_blk_res = tp->t_blk_res - tp->t_blk_res_used;
 	tp->t_blk_res = tp->t_blk_res_used;
 
@@ -182,6 +189,9 @@ xfs_trans_reserve(
 		 * 计数转移到xfs_trans中
 		 */
 		tp->t_blk_res += blocks;
+		/*
+		 * tp->t_blk_res_used此时是0；
+		 */
 	}
 
 	/*
@@ -209,6 +219,7 @@ xfs_trans_reserve(
 		/*
 		 * ticket不为NULL
 		 * - 此时只有XFS_TRANS_PERM_LOG_RES这一种可能
+		 * - xfs_trans_roll()进来的话走这里；
 		 */
 			ASSERT(resp->tr_logflags & XFS_TRANS_PERM_LOG_RES);
 			error = xfs_log_regrant(tp->t_mountp, tp->t_ticket);
@@ -298,6 +309,9 @@ xfs_trans_alloc(
 	 * xfs_trans分配出来后全是0；
 	 */
 	tp = kmem_zone_zalloc(xfs_trans_zone, 0);
+	/*
+	 * 相关操作： freeze_super()
+	 */
 	if (!(flags & XFS_TRANS_NO_WRITECOUNT))
 		sb_start_intwrite(mp->m_super);
 
@@ -317,14 +331,15 @@ xfs_trans_alloc(
 	INIT_LIST_HEAD(&tp->t_dfops);
 	/*
 	 * 这是啥意思？
+	 * - 延迟分配相关吗？
 	 */
 	tp->t_firstblock = NULLFSBLOCK;
 
 	/*
 	 * 给当前事务保留资源
 	 * - user data block
-	 * - log buffer block
-	 * - 似乎没看到对disk log space空间的管理？
+	 * - log space block
+	 * - iclog的空间是循环使用的，不需要申请，这个写满了用下一个；
 	 */
 	error = xfs_trans_reserve(tp, resp, blocks, rtextents);
 	if (error) {

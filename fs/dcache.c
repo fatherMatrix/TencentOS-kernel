@@ -2752,8 +2752,9 @@ retry:
 			goto mismatch;
 		/*
 		 * 如果dentry没有加入dentry_hashtable则重试
-		 * - dentry在被从inlookup_hashtable中摘下之前，就已经放入了
-		 *   dentry_hashtable中
+		 * - dentry在被其他内核路径从inlookup_hashtable中摘下之后，其他内
+		 *   核路径释放dentry->d_lock之前，就已经通过__d_add()将该dentry
+		 *   放入了dentry_hashtable中
 		 *
 		 * waoh，那岂不是说明，从d_alloc_parallel返回的其他内核路径创建
 		 * 的dentry都是已经存在于dentry_hashtable中的？

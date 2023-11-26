@@ -176,7 +176,8 @@ typedef struct xfs_mount {
 	bool			m_finobt_nores; /* no per-AG finobt resv. */
 	uint			m_qflags;	/* quota status flags */
 	/*
-	 * transaction的预留空间数量？
+	 * transaction的预留空间数量
+	 * 参见：xfs_trans_init() -> xfs_trans_resv_calc()
 	 */
 	struct xfs_trans_resv	m_resv;		/* precomputed res values */
 	uint64_t		m_resblks;	/* total reserved blocks */

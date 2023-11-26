@@ -231,6 +231,7 @@ xlog_cil_alloc_shadow_bufs(
 		 * - 详见xfs_log_vec结构体注释；
 		 *
 		 * 这个东西是不是文档中提到的memory buffer？
+		 * - 是的！
 		 */
 		lv->lv_buf = (char *)lv + xlog_cil_iovec_space(niovecs);
 	}
@@ -550,6 +551,10 @@ xlog_cil_free_logvec(
 
 	for (lv = log_vector; lv; ) {
 		struct xfs_log_vec *next = lv->lv_next;
+		/*
+		 * xfs_log_iovec是紧跟在xfs_log_vec后，两者一起分配内存的；所以
+		 * 这里也是一起释放掉；
+		 */
 		kmem_free(lv);
 		lv = next;
 	}
@@ -650,6 +655,9 @@ xlog_cil_committed(
 		spin_unlock(&ctx->cil->xc_push_lock);
 	}
 
+	/*
+	 * 将ctx中xfs_log_item插入到AIL中；
+	 */
 	xfs_trans_committed_bulk(ctx->cil->xc_log->l_ailp, ctx->lv_chain,
 					ctx->start_lsn, abort);
 
@@ -661,6 +669,9 @@ xlog_cil_committed(
 	list_del(&ctx->committing);
 	spin_unlock(&ctx->cil->xc_push_lock);
 
+	/*
+	 * 此时可以释放掉xfs_log_item关联的xfs_log_vec/xfs_log_iovec了
+	 */
 	xlog_cil_free_logvec(ctx->lv_chain);
 
 	if (!list_empty(&ctx->busy_extents))
@@ -808,6 +819,9 @@ xlog_cil_push(
 		lv = item->li_lv;
 		/*
 		 * xfs_log_item不再关联向xfs_log_vec；
+		 * - 如此一来，xfs_log_item起始就是空的了；
+		 * - 但问题是后面又把该xfs_log_item挂到AIL上了，这时log item中
+		 *   还有什么呢？挂到AIL上后又是怎么互斥的？
 		 */
 		item->li_lv = NULL;
 		num_iovecs += lv->lv_niovecs;
@@ -1024,6 +1038,9 @@ xlog_cil_push_background(
 	spin_lock(&cil->xc_push_lock);
 	if (cil->xc_push_seq < cil->xc_current_sequence) {
 		cil->xc_push_seq = cil->xc_current_sequence;
+		/*
+		 * 调用的是xlog_cil_push_work() -> xlog_cil_push()
+		 */
 		queue_work(log->l_mp->m_cil_workqueue, &cil->xc_push_work);
 	}
 	spin_unlock(&cil->xc_push_lock);
@@ -1129,7 +1146,7 @@ xfs_log_commit_cil(
 	down_read(&cil->xc_ctx_lock);
 
 	/*
-	 * 将本transaction管理的xfs_log_item插入checkpoint的链表；
+	 * 将本transaction管理的xfs_log_item插入CIL的链表；
 	 */
 	xlog_cil_insert_items(log, tp);
 
@@ -1143,7 +1160,9 @@ xfs_log_commit_cil(
 
 	/*
 	 * Once all the items of the transaction have been copied to the CIL,
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * the items can be unlocked and possibly freed.
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 *
 	 * This needs to be done before we drop the CIL context lock because we
 	 * have to update state in the log items and unlock them before they go
@@ -1154,6 +1173,9 @@ xfs_log_commit_cil(
 	 */
 	trace_xfs_trans_commit_items(tp, _RET_IP_);
 	list_for_each_entry_safe(lip, next, &tp->t_items, li_trans) {
+		/*
+		 * 将xfs_log_item从xfs_trans->t_items链表上摘除；
+		 */
 		xfs_trans_del_item(lip);
 		/*
 		 * 解锁item（这个item指的是object本身，比如inode）

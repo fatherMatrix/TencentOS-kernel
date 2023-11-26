@@ -1945,6 +1945,7 @@ xfs_btree_lookup(
 			/* Set low and high entry numbers, 1-based. */
 			/*
 			 * low为什么从1开始？
+			 * - 二分的边界条件处理本身就五花八门；
 			 */
 			low = 1;
 			high = xfs_btree_get_numrecs(block);
@@ -1974,6 +1975,11 @@ xfs_btree_lookup(
 				keyno = (low + high) >> 1;
 
 				/* Get current search key */
+				/*
+				 * 获取第keyno个key
+				 * - 对于internal block，可以直接查key表第keyno个；
+				 * - 对于leaf block，只能根据不同tree的类型定义不同的方法自己组装；
+				 */
 				kp = xfs_lookup_get_search_key(cur, level,
 						keyno, block, &key);
 
@@ -1982,11 +1988,13 @@ xfs_btree_lookup(
 				 *  - less than, move right
 				 *  - greater than, move left
 				 *  - equal, we're done
+				 *
+				 * 逆天啊，这里是kp - cur，这尼玛真反人类啊！
 				 */
 				diff = cur->bc_ops->key_diff(cur, kp);
-				if (diff < 0)
+				if (diff < 0)		/* kp - cur < 0 => cur > kp，在右边找； */
 					low = keyno + 1;
-				else if (diff > 0)
+				else if (diff > 0)	/* kp - cur > 0 => cur < kp，在左边找 */
 					high = keyno - 1;
 				else
 					break;

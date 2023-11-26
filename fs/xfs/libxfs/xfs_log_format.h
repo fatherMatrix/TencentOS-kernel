@@ -164,6 +164,9 @@ typedef struct xlog_rec_header {
 	__be32	  h_cycle;	/* write cycle of log			:  4 */
 	__be32	  h_version;	/* LR version				:  4 */
 	__be32	  h_len;	/* len in bytes; should be 64-bit aligned: 4 */
+	/*
+	 * 这个log buffer中第一个transaction的lsn？
+	 */
 	__be64	  h_lsn;	/* lsn of this LR			:  8 */
 	__be64	  h_tail_lsn;	/* lsn of 1st LR w/ buffers not committed: 8 */
 	__le32	  h_crc;	/* crc of log record                    :  4 */

@@ -170,6 +170,9 @@ xfs_trans_ail_cursor_next(
 {
 	struct xfs_log_item	*lip = cur->item;
 
+	/*
+	 * 参见xfs_trans_ail_cursor_clear()
+	 */
 	if ((uintptr_t)lip & 1)
 		lip = xfs_ail_min(ailp);
 	if (lip)
@@ -225,9 +228,15 @@ xfs_trans_ail_cursor_first(
 {
 	struct xfs_log_item	*lip;
 
+	/*
+	 * 将xfs_ail_cursor挂到xfs_ail->ail_cursors链表上
+	 */
 	xfs_trans_ail_cursor_init(ailp, cur);
 
 	if (lsn == 0) {
+		/*
+		 * 找到xfs_ail->ail_head链表上的第一个xfs_log_item
+		 */
 		lip = xfs_ail_min(ailp);
 		goto out;
 	}
@@ -239,6 +248,10 @@ xfs_trans_ail_cursor_first(
 	return NULL;
 
 out:
+	/*
+	 * 找到了lsn标识的最小的xfs_log_item；
+	 * - xfs_ail_cursor->item指向下一个xfs_log_item；
+	 */
 	if (lip)
 		cur->item = xfs_ail_next(ailp, lip);
 	return lip;
@@ -350,7 +363,9 @@ xfsaild_push_item(
 
 	/*
 	 * Consider the item pinned if a push callback is not defined so the
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * caller will force the log. This should only happen for intent items
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * as they are unpinned once the associated done item is committed to
 	 * the on-disk log.
 	 */
@@ -400,6 +415,9 @@ xfsaild_push(
 		 * If the AIL is empty or our push has reached the end we are
 		 * done now.
 		 */
+		/*
+		 * 将xfs_ail_cursor从xfs_ail->ail_cursors链表上摘除；
+		 */
 		xfs_trans_ail_cursor_done(&cur);
 		spin_unlock(&ailp->ail_lock);
 		goto out_done;
@@ -407,12 +425,19 @@ xfsaild_push(
 
 	XFS_STATS_INC(mp, xs_push_ail);
 
+	/*
+	 * xfs_log_item->li_lsn是在磁盘上的last lsn；
+	 * target是我们本次要写的最大lsn，即只要xfs_log_item->li_lsn小于target，就继续写；
+	 */
 	lsn = lip->li_lsn;
 	while ((XFS_LSN_CMP(lip->li_lsn, target) <= 0)) {
 		int	lock_result;
 
 		/*
 		 * Note that iop_push may unlock and reacquire the AIL lock.  We
+		 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+		 *    其实xfs_ail->ail_lock这把自旋锁的临界区内没有耗时操作，
+		 *    只是在操作链表而已；需要write out时都放了锁的；
 		 * rely on the AIL cursor implementation to be able to deal with
 		 * the dropped lock.
 		 */
@@ -730,6 +755,9 @@ xfs_trans_ail_update_bulk(
 
 	for (i = 0; i < nr_items; i++) {
 		struct xfs_log_item *lip = log_items[i];
+		/*
+		 * 设置XFS_LI_IN_AIL，并返回原来的值；
+		 */
 		if (test_and_set_bit(XFS_LI_IN_AIL, &lip->li_flags)) {
 			/* check if we really need to move the item */
 			if (XFS_LSN_CMP(lsn, lip->li_lsn) <= 0)

@@ -38,6 +38,8 @@ STATIC int __xfs_refcount_cow_free(struct xfs_btree_cur *rcur,
 
 /*
  * Look up the first record less than or equal to [bno, len] in the btree
+ *         ^^^^^^^^^^^^^^^^
+ *           最靠近的角度
  * given by cur.
  */
 int
@@ -1292,20 +1294,57 @@ xfs_refcount_find_shared(
 		XFS_WANT_CORRUPTED_GOTO(cur->bc_mp, i == 1, out_error);
 	}
 
+	/*
+	 * 能到这里，说明error还是0
+	 */
+	 
 	/* If the extent starts after the range we want, bail out */
+	/*
+	 * 没找到和agbno相交的
+	 */
 	if (tmp.rc_startblock >= agbno + aglen)
 		goto done;
 
 	/* We found the start of a shared extent! */
+	/*
+	 * 这种情况是：
+	 * rc_startblock           rc_startblock + rc_blockcount
+	 *  |--------------------------|
+	 *
+	 * type 1:
+	 *        |------------------------------|
+	 *      agbno                        agbno + aglen
+	 *        |oooooooooooooooooooo|
+	 *      *fbno               *fbno + *flen
+	 *
+	 * type 2:
+	 *        |-----------------|
+	 *      agbno          agbno + aglen
+	 *        |ooooooooooooooooo|
+	 *      *fbno             *fbno + *flen
+	 */
 	if (tmp.rc_startblock < agbno) {
 		tmp.rc_blockcount -= (agbno - tmp.rc_startblock);
 		tmp.rc_startblock = agbno;
 	}
 
+	/*
+	 * 其实还有另一种情况：agbno < rc_startblock
+	 */
 	*fbno = tmp.rc_startblock;
+	/*
+	 * 针对agbno + aglen < rc_startblock + rcblockcount的情况
+	 */
 	*flen = min(tmp.rc_blockcount, agbno + aglen - *fbno);
 	if (!find_end_of_shared)
 		goto done;
+
+	/*
+	 * - 如果find_end_of_shared是false，则找到第一个相交的extent就返回了；
+	 * - 如果find_end_of_shared是true，则一致找到最后一个相交的extent，并持续
+	 *   增加*flen（包括了几个extents中间的hole的），*fbno保持第一个extent的
+	 *   结果不变；
+	 */
 
 	/* Otherwise, find the end of this shared extent */
 	while (*fbno + *flen < agbno + aglen) {

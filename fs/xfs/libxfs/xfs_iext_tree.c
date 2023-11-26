@@ -988,6 +988,7 @@ xfs_iext_lookup_extent(
 		/*
 		 * 这里找到的可能是the extent after it，参见
 		 * xfs_iext_lookup_extent()关于hole的注释；
+		 * - 只有在rec的尾巴小于offset时才会返回-1；
 		 */
 		if (xfs_iext_rec_cmp(rec, offset) >= 0)
 			goto found;

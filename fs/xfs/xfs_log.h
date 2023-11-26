@@ -13,8 +13,8 @@ struct xfs_cil_ctx;
  *  +---------+--------------+-----+------------------------+------+
  *  | log_vec | log_iovec[0] | ... | log_iovec[niovecs - 1] | data |
  *  +---------+--------------+-----+------------------------+------+
- *  ^	     ^						   ^
- *  |	     |						   |
+ *  ^	      ^	       					    ^
+ *  |	      |						    |
  *  lv	(struct xfs_log_iovec *)&lv[1]		       lv->lv_buf
  */
 struct xfs_log_vec {

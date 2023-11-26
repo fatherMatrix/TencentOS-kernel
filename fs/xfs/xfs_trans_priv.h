@@ -40,6 +40,9 @@ void	xfs_trans_committed_bulk(struct xfs_ail *ailp, struct xfs_log_vec *lv,
  * of the list to trigger traversal restarts.
  */
 struct xfs_ail_cursor {
+	/*
+	 * 链表头是xfs_ail->ail_cursors
+	 */
 	struct list_head	list;
 	struct xfs_log_item	*item;
 };
@@ -60,13 +63,18 @@ struct xfs_ail {
 	struct task_struct	*ail_task;
 	/*
 	 * 链表元素是xfs_log_item->li_ail；
+	 * - 将本AIL上的所有xfs_log_item串联起来
 	 */
 	struct list_head	ail_head;
 	/*
-	 * 应该是ali_task写盘的最高lsn
+	 * ail_task向磁盘metadata region刷数据的最高lsn
 	 */
 	xfs_lsn_t		ail_target;
 	xfs_lsn_t		ail_target_prev;
+	/*
+	 * 链表元素是xfs_ail_cursor->list
+	 * - 将本AIL上的所有cursor串联起来
+	 */
 	struct list_head	ail_cursors;
 	spinlock_t		ail_lock;
 	xfs_lsn_t		ail_last_pushed_lsn;

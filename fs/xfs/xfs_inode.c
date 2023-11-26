@@ -3691,6 +3691,9 @@ xfs_iflush(
 
 	*bpp = NULL;
 
+	/*
+	 * 只有将所有log全部落盘之后，才会unpin
+	 */
 	xfs_iunpin_wait(ip);
 
 	/*

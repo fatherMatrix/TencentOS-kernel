@@ -4044,11 +4044,16 @@ xfs_bmapi_read(
 
 /*
  * Add a delayed allocation extent to an inode. Blocks are reserved from the
+ *                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * global pool and the extent inserted into the inode in-core extent tree.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  *
  * On entry, got refers to the first extent beyond the offset of the extent to
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * allocate or eof is specified if no such extent exists. On return, got refers
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ ^^^^^^^^^^^^^^^^^^^^^
  * to the extent record that was inserted to the inode fork.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  *
  * Note that the allocated extent may have been merged with contiguous extents
  * during insertion into the inode fork. Thus, got does not reflect the current
@@ -4078,6 +4083,18 @@ xfs_bmapi_reserve_delalloc(
 	 * tag the inode before we return.
 	 */
 	alen = XFS_FILBLKS_MIN(len + prealloc, MAXEXTLEN);
+	/*
+	 * eof = !xfs_iext_lookup_extent()
+	 * 所以：!eof为真表示xfs_iext_lookup_extent()为真，即got是合法的；
+	 * - br_startoff < aoff怎么办？即off处于extent中的情况；
+	 *   - 这种情况不会出现，因为调用前对这种情况做了trim，使得br_startoff >= off
+	 *
+	 * 这里和调用函数中的trim操作配合得到了如下事实：
+	 * - 如果br_startoff < off，则通过trim操作减小br_blockcount，使got反应
+	 *   extent与[off, off+len]交叉的部分
+	 * - 如果br_startoff > off，则在这里减小br_blockcount，使got反应off到
+	 *   extent开头的hole；
+	 */
 	if (!eof)
 		alen = XFS_FILBLKS_MIN(alen, got->br_startoff - aoff);
 	if (prealloc && alen >= len)

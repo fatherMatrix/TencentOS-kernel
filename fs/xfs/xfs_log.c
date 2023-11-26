@@ -496,8 +496,9 @@ xfs_log_reserve(
 	*ticp = tic;
 
 	/*
-	 * 检查log buffer的空闲空间，必要时将log buffer已经落盘的log对应的
-	 * item写入metadata region中；
+	 * 检查log space的空闲空间，必要时将log buffer已经落盘的log对应的
+	 * item写入metadata region中以释放log space的空间；
+	 * - 因为一旦写入metadata region，log space中的日志就再无作用了；
 	 */
 	xlog_grant_push_ail(log, tic->t_cnt ? tic->t_unit_res * tic->t_cnt
 					    : tic->t_unit_res);
@@ -505,7 +506,8 @@ xfs_log_reserve(
 	trace_xfs_log_reserve(log, tic);
 
 	/*
-	 * 等待log buffer中有至少need bytes给我们用
+	 * 等待log space中有至少need bytes给我们用
+	 * - 上面的xlog_grant_push_ail()已经触发了异步的操作
 	 */
 	error = xlog_grant_head_check(log, &log->l_reserve_head, tic,
 				      &need_bytes);
@@ -1233,7 +1235,9 @@ xlog_assign_tail_lsn(
 
 /*
  * Return the space in the log between the tail and the head.  The head
+ *                                                             ^^^^^^^^
  * is passed in the cycle/bytes formal parms.  In the special case where
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * the reserve head has wrapped passed the tail, this calculation is no
  * longer valid.  In this case, just return 0 which means there is no space
  * in the log.  This works for all places where this function is called
@@ -1257,7 +1261,7 @@ xlog_space_left(
 	int		head_bytes;
 
 	/*
-	 * 高32位是cycle，低32位是byte
+	 * 高32位是cycle，低32位是byte？
 	 */
 	xlog_crack_grant_head(head, &head_cycle, &head_bytes);
 	xlog_crack_atomic_lsn(&log->l_tail_lsn, &tail_cycle, &tail_bytes);
@@ -1330,7 +1334,13 @@ xlog_ioend_work(
 		aborted = true;
 	}
 
+	/*
+	 * 同步iclog的落盘状态
+	 */
 	xlog_state_done_syncing(iclog, aborted);
+	/*
+	 * 析构与iclog关联的bio
+	 */
 	bio_uninit(&iclog->ic_bio);
 
 	/*
@@ -1541,6 +1551,9 @@ xlog_alloc_log(
 
 		init_waitqueue_head(&iclog->ic_force_wait);
 		init_waitqueue_head(&iclog->ic_write_wait);
+		/*
+		 * iclog写disk log space完成的回调；
+		 */
 		INIT_WORK(&iclog->ic_end_io_work, xlog_ioend_work);
 		sema_init(&iclog->ic_sema, 1);
 
@@ -1610,10 +1623,14 @@ xlog_commit_record(
 
 /*
  * Push on the buffer cache code if we ever use more than 75% of the on-disk
+ *                                                                   ^^^^^^^
  * log space.  This code pushes on the lsn which would supposedly free up
+ * ^^^^^^^^^
  * the 25% which we want to leave free.  We may need to adopt a policy which
  * pushes on an lsn which is further along in the log once we reach the high
  * water mark.  In this manner, we would be creating a low water mark.
+ *
+ * 这里写的是metadata region，log space应该已经写好了；
  */
 STATIC void
 xlog_grant_push_ail(
@@ -1642,7 +1659,7 @@ xlog_grant_push_ail(
 	 * log, and 256 blocks.
 	 *
 	 * 如果log space的空闲空间大于阈值，则返回；
-	 * - 感觉这里指的是log buffer？
+	 * - 这里指的是log space on disk！
 	 */
 	free_threshold = BTOBB(need_bytes);
 	/*
@@ -1657,8 +1674,10 @@ xlog_grant_push_ail(
 		return;
 
 	/*
-	 * 走到这里，说明log space的空闲空间小于阈值了，需要进行写盘操作；
-	 * - 感觉这里指的是log buffer？
+	 * 走到这里，说明log space on disk的空闲空间小于阈值了，需要进行写盘操作；
+	 * - 写盘指的是将那些日志已经在log space中，但xfs_buf未写入metadata
+	 *   region的xfs_log_item on AIL写入到metadata region。这样xlog->l_tail_lsn
+	 *   就可以增大，即释放了log space on disk的空间；
 	 */
 
 	/*
@@ -1694,7 +1713,8 @@ xlog_grant_push_ail(
 	 * 将AIL中的log写出到盘上
 	 * - 因为看上面的意思，要写的是[current, l_last_sync_lsn]的log，其中
 	 *   小于l_last_sync_lsn的log已经在disk上了，那这里的写应该是指将
-	 *   [current, l_last_sync_lsn]中的log写入到metadata region中；
+	 *   [current, l_last_sync_lsn]中的log对应的metadata写入到真实的
+	 *   metadata region中；
 	 */
 	if (!XLOG_FORCED_SHUTDOWN(log))
 		xfs_ail_push(log->l_ailp, threshold_lsn);
@@ -2787,8 +2807,11 @@ xlog_get_lowest_lsn(
  * tail of the log half way through a transaction as this may be the only
  * transaction in the log and moving the tail to point to the middle of it
  * will prevent recovery from finding the start of the transaction. Hence we
+ *                                                                  ^^^^^^^^
  * should only update the last_sync_lsn if this iclog contains transaction
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * completion callbacks on it.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^
  *
  * We have to do this before we drop the icloglock to ensure we are the only one
  * that can update it.
@@ -2799,9 +2822,13 @@ xlog_get_lowest_lsn(
  * amount of log space bound up in this committing transaction then the
  * last_sync_lsn value may be the limiting factor preventing tail pushing from
  * freeing space in the log. Hence once we've updated the last_sync_lsn we
+ *                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * should push the AIL to ensure the push target (and hence the grant head) is
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * no longer bound by the old log head location and can move forwards and make
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * progress again.
+ * ^^^^^^^^^^^^^^^
  */
 static void
 xlog_state_set_callback(
@@ -2814,10 +2841,23 @@ xlog_state_set_callback(
 	ASSERT(XFS_LSN_CMP(atomic64_read(&log->l_last_sync_lsn),
 			   header_lsn) <= 0);
 
+	/*
+	 * 有ic_callbacks说明这个iclog包含了一个transaction的结尾，此时才能更新
+	 * xlog->l_last_sync_lsn，否则直接返回；
+	 */
 	if (list_empty_careful(&iclog->ic_callbacks))
 		return;
 
+	/*
+	 * 现在可以确认一次log buffer io完成了，更新l_last_sync_lsn
+	 */
 	atomic64_set(&log->l_last_sync_lsn, header_lsn);
+	/*
+	 * 这里之所以插一句这个东西，是因为xlog_grant_push_ail()中会限制其向disk
+	 * metadata region中flush的transaction lsn不超过l_last_sync_lsn，那么这
+	 * 里既然更新了l_last_sync_lsn，需要kick一下，参数为0，没有真的要收集空闲
+	 * 空间，只是为了触发xfs_ail_push()
+	 */
 	xlog_grant_push_ail(log, 0);
 }
 
@@ -2882,6 +2922,10 @@ xlog_state_iodone_process_iclog(
 	if (lowest_lsn && XFS_LSN_CMP(lowest_lsn, header_lsn) < 0)
 		return false;
 
+	/*
+	 * 更新l_last_sync_lsn
+	 * - 名字和作用并无关系
+	 */
 	xlog_state_set_callback(log, iclog, header_lsn);
 	return false;
 
@@ -2910,6 +2954,9 @@ xlog_state_do_iclog_callbacks(
 		list_splice_init(&iclog->ic_callbacks, &tmp);
 
 		spin_unlock(&iclog->ic_callback_lock);
+		/*
+		 * 将iclog中已经写入disk的xfs_log_item挂到AIL中；
+		 */
 		xlog_cil_process_committed(&tmp, aborted);
 		spin_lock(&iclog->ic_callback_lock);
 	}
@@ -2996,6 +3043,9 @@ xlog_state_do_callback(
 		repeats++;
 
 		do {
+			/*
+			 * 返回true表示需要停止
+			 */
 			if (xlog_state_iodone_process_iclog(log, iclog,
 							ciclog, &ioerror))
 				break;
@@ -3011,8 +3061,14 @@ xlog_state_do_callback(
 			 * we'll have to run at least one more complete loop.
 			 */
 			cycled_icloglock = true;
+			/*
+			 * - 将xfs_log_item挂入AIL链表
+			 * - unpin xfs_log_item
+			 */
 			xlog_state_do_iclog_callbacks(log, iclog, aborted);
-
+			/*
+			 * 推动xlog的状态
+			 */
 			xlog_state_clean_iclog(log, iclog);
 			iclog = iclog->ic_next;
 		} while (first_iclog != iclog);
@@ -3077,6 +3133,8 @@ xlog_state_done_syncing(
 	 * Someone could be sleeping prior to writing out the next
 	 * iclog buffer, we wake them all, one will get to do the
 	 * I/O, the others get to wait for the result.
+	 *
+	 * 睡眠的地方在 __xfs_log_force_lsn()
 	 */
 	wake_up_all(&iclog->ic_write_wait);
 	spin_unlock(&log->l_icloglock);
@@ -3609,6 +3667,9 @@ __xfs_log_force_lsn(
 		atomic_inc(&iclog->ic_refcnt);
 		xlog_state_switch_iclogs(log, iclog, 0);
 		spin_unlock(&log->l_icloglock);
+		/*
+		 * iclog写入log space的实际工作函数；
+		 */
 		if (xlog_state_release_iclog(log, iclog))
 			return -EIO;
 		if (log_flushed)
@@ -3671,6 +3732,9 @@ xfs_log_force_lsn(
 	if (lsn == NULLCOMMITLSN)
 		return 0;
 
+	/*
+	 * 将iclog的日志push到disk上
+	 */
 	ret = __xfs_log_force_lsn(mp, lsn, flags, log_flushed, false);
 	if (ret == -EAGAIN)
 		ret = __xfs_log_force_lsn(mp, lsn, flags, log_flushed, true);
@@ -3810,6 +3874,9 @@ xfs_log_calc_unit_res(
 	unit_bytes += sizeof(xlog_op_header_t) * num_headers;
 
 	/* add extra header reservations if we overrun */
+	/*
+	 * 增加XLOG_CONTINUE_TRANS op headers后可能又要split一下
+	 */
 	while (!num_headers ||
 	       howmany(unit_bytes, iclog_space) > num_headers) {
 		unit_bytes += sizeof(xlog_op_header_t);

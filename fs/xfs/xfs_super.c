@@ -938,6 +938,9 @@ xfs_fs_destroy_inode(
 	XFS_STATS_INC(ip->i_mount, vn_rele);
 	XFS_STATS_INC(ip->i_mount, vn_remove);
 
+	/*
+	 * 组织事务，删除磁盘上的xfs_inode
+	 */
 	xfs_inactive(ip);
 
 	if (!XFS_FORCED_SHUTDOWN(ip->i_mount) && ip->i_delayed_blks) {
@@ -956,10 +959,19 @@ xfs_fs_destroy_inode(
 
 	/*
 	 * We always use background reclaim here because even if the
+	 *                                               ^^^^^^^^^^^
 	 * inode is clean, it still may be under IO and hence we have
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * to take the flush lock. The background reclaim path handles
+	 * ^^^^^^^^^^^^^^^^^^^^^^^
+	 * 为什么？
+	 * - xfs_inactive()中分配的transaction不是同步的，而是异步的；此时commit
+	 *   可能还未完成；
+	 *
 	 * this more efficiently than we can here, so simply let background
 	 * reclaim tear down all inodes.
+	 *
+	 * 后续的处理要看xfs_mount.m_reclaim_work: xfs_reclaim_worker()
 	 */
 	xfs_inode_set_reclaim_tag(ip);
 }

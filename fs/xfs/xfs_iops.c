@@ -179,6 +179,9 @@ xfs_generic_create(
 	}
 #endif
 
+	/*
+	 * 设置xfs_inode的各种回调函数
+	 */
 	xfs_setup_iops(ip);
 
 	if (tmpfile) {

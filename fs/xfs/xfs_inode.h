@@ -50,6 +50,9 @@ typedef struct xfs_inode {
 	struct xfs_inode_log_item *i_itemp;	/* logging information */
 	mrlock_t		i_lock;		/* inode lock */
 	mrlock_t		i_mmaplock;	/* inode mmap IO lock */
+	/*
+	 * xfs日志中inode相关的pin/unpin操作用的是这个字段；
+	 */
 	atomic_t		i_pincount;	/* inode pin count */
 
 	/*

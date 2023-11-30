@@ -204,6 +204,10 @@ typedef struct xfs_mount {
 	uint			m_chsize;	/* size of next field */
 	atomic_t		m_active_trans;	/* number trans frozen */
 	struct xfs_mru_cache	*m_filestream;  /* per-mount filestream data */
+	/*
+	 * 工作函数： xfs_reclaim_worker()
+	 * 工作队列： m_reclaim_workqueue字段
+	 */
 	struct delayed_work	m_reclaim_work;	/* background inode reclaim */
 	struct delayed_work	m_eofblocks_work; /* background eof blocks
 						     trimming */

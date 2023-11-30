@@ -152,6 +152,9 @@ xfs_reclaim_work_queue(
 
 	rcu_read_lock();
 	if (radix_tree_tagged(&mp->m_perag_tree, XFS_ICI_RECLAIM_TAG)) {
+		/*
+		 * 工作函数是： xfs_reclaim_worker()
+		 */
 		queue_delayed_work(mp->m_reclaim_workqueue, &mp->m_reclaim_work,
 			msecs_to_jiffies(xfs_syncd_centisecs / 6 * 10));
 	}
@@ -391,6 +394,9 @@ xfs_iget_cache_hit(
 	/*
 	 * Check the inode free state is valid. This also detects lookup
 	 * racing with unlinks.
+	 *
+	 * lookup中调用xfs_iget()时，flags中无XFS_IGET_CREATE
+	 * ialloc中调用xfs_iget()时，flags中有XFS_IGET_CREATE
 	 */
 	error = xfs_iget_check_free_state(ip, flags);
 	if (error)
@@ -417,6 +423,9 @@ xfs_iget_cache_hit(
 		ip->i_flags |= XFS_IRECLAIM;
 
 		spin_unlock(&ip->i_flags_lock);
+		/*
+		 * 离开rcu临界区
+		 */
 		rcu_read_unlock();
 
 		error = xfs_reinit_inode(mp, inode);
@@ -445,8 +454,8 @@ xfs_iget_cache_hit(
 		 * effectively a new inode and need to return to the initial
 		 * state before reuse occurs.
 		 */
-		ip->i_flags &= ~XFS_IRECLAIM_RESET_FLAGS;
-		ip->i_flags |= XFS_INEW;
+		ip->i_flags &= ~XFS_IRECLAIM_RESET_FLAGS;	/* 清除RECLAIM、RECLAIMABLE等标志 */
+		ip->i_flags |= XFS_INEW;			/* 设置NEW标志                        */
 		xfs_inode_clear_reclaim_tag(pag, ip->i_ino);
 		inode->i_state = I_NEW;
 		ip->i_sick = 0;
@@ -646,10 +655,16 @@ xfs_iget(
 
 again:
 	error = 0;
+	/*
+	 * 进入rcu临界区
+	 */
 	rcu_read_lock();
 	ip = radix_tree_lookup(&pag->pag_ici_root, agino);
 
 	if (ip) {
+		/*
+		 * 内部会离开rcu临界区
+		 */
 		error = xfs_iget_cache_hit(pag, ip, ino, flags, lock_flags);
 		if (error)
 			goto out_error_or_again;
@@ -673,6 +688,13 @@ again:
 	/*
 	 * If we have a real type for an on-disk inode, we can setup the inode
 	 * now.	 If it's a new inode being created, xfs_ialloc will handle it.
+	 *
+	 * 这里是在rcu临界区之外的；
+	 *
+	 * xfs_iget_cache_hit()和xfs_iget_cache_miss()中都会设置ip的xfs_INEW标志，
+	 * 但只有后者将i_mode设置为0；因此，只有在cache中取出的ip才会进入下面的
+	 * 分支；
+	 * - 而且，只有在lookup路径中，从cache中取出的ip才会mode不为0；
 	 */
 	if (xfs_iflags_test(ip, XFS_INEW) && VFS_I(ip)->i_mode != 0)
 		xfs_setup_existing_inode(ip);
@@ -1115,9 +1137,19 @@ xfs_reclaim_inode(
 restart:
 	error = 0;
 	xfs_ilock(ip, XFS_ILOCK_EXCL);
+	/*
+	 * 如果其他内核路径已经抢先持有了XFS_IFLOCK位锁
+	 */
 	if (!xfs_iflock_nowait(ip)) {
+	 	/*
+	 	 * 调用者要求ASYNC，则需要requeue
+	 	 * - requeue指返回到调用者的循环里，会再次进到本函数的；
+	 	 */
 		if (!(sync_mode & SYNC_WAIT))
 			goto out;
+		/*
+		 * 调用者要求SYNC，这里必须等待XFS_IFLOCK位锁
+		 */
 		xfs_iflock(ip);
 	}
 
@@ -1127,6 +1159,10 @@ restart:
 		xfs_iflush_abort(ip, false);
 		goto reclaim;
 	}
+	/*
+	 * 如果该inode还是被pin在内存中的
+	 * - pin在内存中表示日志已经提交到CIL，但iclog还没有全部写到log space中；
+	 */
 	if (xfs_ipincount(ip)) {
 		if (!(sync_mode & SYNC_WAIT))
 			goto out_ifunlock;
@@ -1202,9 +1238,16 @@ reclaim:
 	 * problems with the inode life time early on.
 	 */
 	spin_lock(&pag->pag_ici_lock);
+	/*
+	 * 从xarray中删除该inode
+	 */
 	if (!radix_tree_delete(&pag->pag_ici_root,
 				XFS_INO_TO_AGINO(ip->i_mount, ino)))
 		ASSERT(0);
+	/*
+	 * 如果所有需回收的inode都回收完了（xfs_perag->pag_ici_reclaimable为0），
+	 * 则清除xarray（xfs_mount->m_perag_tree）的RECLAIM标志
+	 */
 	xfs_perag_clear_reclaim_tag(pag);
 	spin_unlock(&pag->pag_ici_lock);
 
@@ -1221,6 +1264,9 @@ reclaim:
 	xfs_iunlock(ip, XFS_ILOCK_EXCL);
 	ASSERT(xfs_inode_clean(ip));
 
+	/*
+	 * 在rcu中调用xfs_inode_free_callback()
+	 */
 	__xfs_inode_free(ip);
 	return error;
 
@@ -1282,6 +1328,9 @@ restart:
 			struct xfs_inode *batch[XFS_LOOKUP_BATCH];
 			int	i;
 
+			/*
+			 * 进入rcu临界区
+			 */
 			rcu_read_lock();
 			nr_found = radix_tree_gang_lookup_tag(
 					&pag->pag_ici_root,
@@ -1327,6 +1376,9 @@ restart:
 			}
 
 			/* unlock now we've grabbed the inodes. */
+			/*
+			 * 离开rcu临界区
+			 */
 			rcu_read_unlock();
 
 			for (i = 0; i < nr_found; i++) {

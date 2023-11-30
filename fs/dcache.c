@@ -656,6 +656,10 @@ static inline bool retain_dentry(struct dentry *dentry)
 		return false;
 
 	if (unlikely(dentry->d_flags & DCACHE_OP_DELETE)) {
+		/*
+		 * d_delete()接口返回0表示cache该dentry；
+		 * 返回1表示立即删除；
+		 */
 		if (dentry->d_op->d_delete(dentry))
 			return false;
 	}
@@ -735,6 +739,9 @@ static inline bool fast_dput(struct dentry *dentry)
 	/*
 	 * If we have a d_op->d_delete() operation, we sould not
 	 * let the dentry count go to zero, so use "put_or_lock".
+	 *
+	 * 如果dentry->d_lockref > 1，则对齐减1并返回1；
+	 * 如果dentry->d_lockref <= 1，则加锁并返回0；
 	 */
 	if (unlikely(dentry->d_flags & DCACHE_OP_DELETE))
 		return lockref_put_or_lock(&dentry->d_lockref);
@@ -855,19 +862,35 @@ void dput(struct dentry *dentry)
 		might_sleep();
 
 		rcu_read_lock();
+		/*
+		 * - 返回1说明dentry->lockref > 1，此时返回前减小了该值；
+		 * - 返回0说明dentry->lockref <= 1，此时没有做减小操作，但获取
+		 *   了dentry->lockref->lock自旋锁；
+		 */
 		if (likely(fast_dput(dentry))) {
 			rcu_read_unlock();
 			return;
 		}
 
+		/*
+		 * 走到这里，说明dentry->lockref == 1，减1后应该删除了；
+		 */
+
 		/* Slow case: now with the dentry lock held */
 		rcu_read_unlock();
 
+		/*
+		 * 返回true表示缓存该dentry；
+		 * 返回false表示立即删除该dentry；
+		 */
 		if (likely(retain_dentry(dentry))) {
 			spin_unlock(&dentry->d_lock);
 			return;
 		}
 
+		/*
+		 * 立即删除该dentry
+		 */
 		dentry = dentry_kill(dentry);
 	}
 }
@@ -2444,6 +2467,11 @@ struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 		spin_lock(&dentry->d_lock);
 		if (dentry->d_parent != parent)
 			goto next;
+		/*
+		 * 这里刚从dentry_hashtable中拿出来，还能是unhashed状态？
+		 * - 上面的rcu只是保护hash list，其中每个元素本身还是要靠dentry
+		 *   的d_lock来做互斥；
+		 */
 		if (d_unhashed(dentry))
 			goto next;
 
@@ -2837,6 +2865,9 @@ static inline void __d_add(struct dentry *dentry, struct inode *inode)
 	if (unlikely(d_in_lookup(dentry))) {
 		dir = dentry->d_parent->d_inode;
 		n = start_dir_add(dir);
+		/*
+		 * 将该dentry从inlookup_hashtable中取下来
+		 */
 		__d_lookup_done(dentry);
 	}
 	if (inode) {
@@ -3222,6 +3253,7 @@ struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry)
 
 	/*
 	 * 如果dentry已经在dentry_hashtable中了，BUG！
+	 * - 此时dentry应该处于inlookup_hashtable中才对；
 	 */
 	BUG_ON(!d_unhashed(dentry));
 

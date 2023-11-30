@@ -100,6 +100,7 @@ Renames
 Back to the rename case. In usual RCU protected lists, the only operations that
 will happen to an object is insertion, and then eventually removal from the
 list. The object will not be reused until an RCU grace period is complete.
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 This ensures the RCU list traversal primitives can run over the object without
 problems (see RCU documentation for how this works).
 

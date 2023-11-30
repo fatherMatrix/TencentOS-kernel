@@ -690,6 +690,10 @@ xfs_lookup(
 	if (XFS_FORCED_SHUTDOWN(dp->i_mount))
 		return -EIO;
 
+	/*
+	 * 如果error为0，则inum中包含一个合法的inode number
+	 * 否则，说明dir中不包含名称为name的元素；
+	 */
 	error = xfs_dir_lookup(NULL, dp, name, &inum, ci_name);
 	if (error)
 		goto out_unlock;
@@ -1749,6 +1753,8 @@ xfs_inactive_ifree(
 	 * Send a warning if the reservation does happen to fail, as the inode
 	 * now remains allocated and sits on the unlinked list until the fs is
 	 * repaired.
+	 *
+	 * 分配的这个transaction不是同步的；
 	 */
 	if (unlikely(mp->m_finobt_nores)) {
 		error = xfs_trans_alloc(mp, &M_RES(mp)->tr_ifree,
@@ -1832,6 +1838,8 @@ xfs_inactive_ifree(
  * goes to zero.  If the file has been unlinked, then it must
  * now be truncated.  Also, we clear all of the read-ahead state
  * kept for the inode here since the file is now closed.
+ *
+ * 删除磁盘上的xfs_inode
  */
 void
 xfs_inactive(
@@ -1877,6 +1885,10 @@ xfs_inactive(
 		return;
 	}
 
+	/*
+	 * 走到这里，说明inode->i_nlink == 0，需要在磁盘上删除
+	 */
+
 	if (S_ISREG(VFS_I(ip)->i_mode) &&
 	    (ip->i_d.di_size != 0 || XFS_ISIZE(ip) != 0 ||
 	     ip->i_d.di_nextents > 0 || ip->i_delayed_blks > 0))
@@ -1910,6 +1922,8 @@ xfs_inactive(
 
 	/*
 	 * Free the inode.
+	 *
+	 * 提交事务以删除磁盘上的该xfs_inode；
 	 */
 	error = xfs_inactive_ifree(ip);
 	if (error)
@@ -3579,6 +3593,10 @@ xfs_iflush_cluster(
 
 		if (!xfs_ilock_nowait(cip, XFS_ILOCK_SHARED))
 			continue;
+		/*
+		 * 获取XFS_IFLOCK（the flush lock）位锁；
+		 * - 理论上，位锁性能是不如自旋锁的
+		 */
 		if (!xfs_iflock_nowait(cip)) {
 			xfs_iunlock(cip, XFS_ILOCK_SHARED);
 			continue;

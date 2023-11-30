@@ -559,22 +559,22 @@ struct nameidata {
 	struct inode	*inode; 		/* path.dentry.d_inode */
 	unsigned int	flags;
 	unsigned	seq, m_seq; 		/* 顺序锁
-						 * seq保护path.dentry
+						 * seq保护path.dentry，即保护last的parent
 						 * m_seq保护mount_lock
 						 */
 	int		last_type; 		/* 下一个要解析的路径单元类型 */
 	unsigned	depth; 			/* 符号连接深度 */
-	int		total_link_count;
+	int		total_link_count;	/* ？*/
 	struct saved {
-		struct path link;
+		struct path link;		/* 表示一个符号链接的path */
 		struct delayed_call done;
-		const char *name;
+		const char *name;		/* 跳转到path的目标前，要把当前待解析的路径存到这里 */
 		unsigned seq;
 	} *stack, internal[EMBEDDED_LEVELS];
 	struct filename	*name; 			/* 指向文件路径名 */
 	struct nameidata *saved;
 	struct inode	*link_inode;
-	unsigned	root_seq;
+	unsigned	root_seq;		/* 根目录对应的dentry的d_sep字段，在set_root()中设置 */
 	int		dfd; 			/* 基准目录对应的文件描述符 */
 } __randomize_layout;
 
@@ -949,11 +949,18 @@ static inline void path_to_nameidata(const struct path *path,
 	if (!(nd->flags & LOOKUP_RCU)) {
 		/*
 		 * 在这里释放了原来所站目录的引用计数
+		 * - 相当于除了父dentry的临界区
+		 * - 对于rcu模式：
+		 *   > “不被删除”控制在一个巨大的rcu临界区中
+		 *   > “不被更改”控制在父dentry的d_seq中
 		 */
 		dput(nd->path.dentry);
 		if (nd->path.mnt != path->mnt)
 			mntput(nd->path.mnt);
 	}
+	/*
+	 * 迈入新的挂载点
+	 */
 	nd->path.mnt = path->mnt;
 	/*
 	 * 迈入新的目录
@@ -997,6 +1004,10 @@ void nd_jump_link(struct path *path)
 
 static inline void put_link(struct nameidata *nd)
 {
+	/*
+	 * depth指向的是第一个未使用的格子，这里的last得到的是当前的
+	 * 符号链接；
+	 */
 	struct saved *last = nd->stack + --nd->depth;
 	do_delayed_call(&last->done);
 	if (!(nd->flags & LOOKUP_RCU))
@@ -1747,7 +1758,7 @@ static struct dentry *__lookup_hash(const struct qstr *name,
 /*
  * 返回值：
  * ret >  0	表示成功找到
- * ret == 0	表示内存中没有
+ * ret == 0	表示内存中没有，且成功切换到ref-walk模式
  * ret <  0	表示错误
  */
 static int lookup_fast(struct nameidata *nd,
@@ -1780,6 +1791,8 @@ static int lookup_fast(struct nameidata *nd,
 		if (unlikely(!dentry)) {
 			/*
 			 * 如果哈希表查找失败了，则要切换到ref-walk模式
+			 * - 哈希表查找失败了，后面的slow path可能要面临内存分配，
+			 *   而rcu临界区内是没办法睡眠的；
 			 *
 			 * 内部对当前已经解析好的dentry加了引用计数（因为正站在
 			 * 的dentry的引用计数+1是ref-walk的要求）
@@ -1795,6 +1808,10 @@ static int lookup_fast(struct nameidata *nd,
 		 */
 		*inode = d_backing_inode(dentry);
 		negative = d_is_negative(dentry);
+		/*
+		 * seq来源于上面__d_lookup_rcu()中找到该子dentry时刻的dentry->d_seq；
+		 * 此时要检查dentry是否有变化；
+		 */
 		if (unlikely(read_seqcount_retry(&dentry->d_seq, seq)))
 			return -ECHILD;
 
@@ -1804,10 +1821,15 @@ static int lookup_fast(struct nameidata *nd,
 		 *
 		 * The memory barrier in read_seqcount_begin of child is
 		 *  enough, we can use __read_seqcount_retry here.
+		 *
+		 * 保证在查找子dentry时，父dentry没有发生变化；
 		 */
 		if (unlikely(__read_seqcount_retry(&parent->d_seq, nd->seq)))
 			return -ECHILD;
 
+		/*
+		 * seq是查找到的子dentry的d_seq字段
+		 */
 		*seqp = seq;
 		status = d_revalidate(dentry, nd->flags);
 		if (likely(status > 0)) {
@@ -1821,6 +1843,9 @@ static int lookup_fast(struct nameidata *nd,
 			path->dentry = dentry;
 			if (likely(__follow_mount_rcu(nd, path, inode, seqp)))
 				return 1;
+			/*
+			 * rcu-walk成功的话，会在上面返回
+			 */
 		}
 		/* 
 		 * 上面的快速查找出问题了，要切换到ref-walk模式再尝试了。
@@ -1926,6 +1951,7 @@ again:
 		 * dentry_hashtable中
 		 *
 		 * xfs中是： xfs_vn_lookup()
+		 * ext4: ext4_lookup()
 		 *
 		 * 会有多个内核路径同时走到这里，这个函数是可以并发的吗？
 		 * - 猜测：该函数内使用了bh cache和inode cache，这两个cache会保
@@ -2044,6 +2070,9 @@ static int pick_link(struct nameidata *nd, struct path *link,
 		if (link->mnt == nd->path.mnt)
 			mntget(link->mnt);
 	}
+	/*
+	 * 如果embedded stack不够用了，则分配一个新的
+	 */
 	error = nd_alloc_stack(nd);
 	if (unlikely(error)) {
 		if (error == -ECHILD) {
@@ -2085,24 +2114,45 @@ enum {WALK_FOLLOW = 1, WALK_MORE = 2};
 static inline int step_into(struct nameidata *nd, struct path *path,
 			    int flags, struct inode *inode, unsigned seq)
 {
+	/*
+	 * 非do_last()，lookup_last()，xxx_last()时都会设置WALK_MORE标志
+	 */
 	if (!(flags & WALK_MORE) && nd->depth)
 		put_link(nd);
+
+	/*
+	 * 走到这里说明需要继续向下一个路径分量迈进
+	 */
 	if (likely(!d_is_symlink(path->dentry)) ||
 	   !(flags & WALK_FOLLOW || nd->flags & LOOKUP_FOLLOW)) {
 		/* not a symlink or should not follow */
 		/*
-		 * 移进
+		 * 不是符号链接或者不需要follow符号链接，则直接将path移进
+		 * 到nd中，完成一次分量跨越；
 		 */
 		path_to_nameidata(path, nd);
 		nd->inode = inode;
+		/*
+		 * 此时已经移进了一步，子dentry变成了新的父dentry，更新
+		 * nd->seq表示后面查找时，父dentry的seq的新值；
+		 */
 		nd->seq = seq;
 		return 0;
 	}
+
+	/*
+	 * 走到这里，说明path表示一个符号链接，且需要follow该符号链接
+	 */
+
 	/* make sure that d_is_symlink above matches inode */
 	if (nd->flags & LOOKUP_RCU) {
 		if (read_seqcount_retry(&path->dentry->d_seq, seq))
 			return -ECHILD;
 	}
+	/*
+	 * 将path这个符号链接放到nd->stack中；
+	 * - 成功放入的话，返回1
+	 */
 	return pick_link(nd, path, inode, seq);
 }
 
@@ -2133,11 +2183,9 @@ static int walk_component(struct nameidata *nd, int flags)
 	}
 	/*
 	 * 快速查找————依赖于缓存。根据「父目录、名称」查找
-	 * 疑问：为什么不直接通过parent dentry的d_child链表来查找呢？
-	 * - 首先，这个问题应该是为什么不通过parent dentry的d_subdirs链表来查找
-	 *   孩子dentry。因为d_child字段是做为链表元素链入作为链表头的d_subdirs
-	 *   字段的。
-	 * - 其次，那么到底是为什么呢？
+	 * 疑问：为什么不直接通过parent dentry的d_subdirs链表来查找呢？
+	 * - 这样的话需要给每个dentry都建立一个hash表才能保证O(1)的时间复杂度；
+	 *   但每个dentry一个哈希表的话，尺寸不好定，不容易平衡；
 	 *
  	 * 进行路径名的查找，目标存放在nd->last中，查找结果存放在inode和path中
  	 * 返回出来
@@ -2146,8 +2194,18 @@ static int walk_component(struct nameidata *nd, int flags)
  	 */ 
 	err = lookup_fast(nd, &path, &inode, &seq);
 	if (unlikely(err <= 0)) {
+		/*
+		 * 小于0的话表示从rcu-walk到ref-walk的切换出了问题，需要回到上
+		 * 层来解决；
+		 * - ENOENT会返回
+		 */
 		if (err < 0)
 			return err;
+
+		/*
+		 * 走到这里，说明err为0，即成功切换到了ref-walk模式
+		 */
+		
 		/* 
  		 * nd->last是将要检索的路径分量
  		 * nd->path.dentry是当前目录
@@ -2205,6 +2263,10 @@ static int walk_component(struct nameidata *nd, int flags)
 		seq = 0;	/* we are already out of RCU mode */
 		inode = d_backing_inode(path.dentry);
 	}
+
+	/*
+	 * 走到这里，说明找到了dentry，且不为负状态
+	 */
 
 	/*
 	 * 如果目录是符号链接，那么调用step_into()来加以处理：如果符号链接的嵌
@@ -2572,6 +2634,12 @@ OK:
 			/* trailing symlink, done */
 			if (!name)
 				return 0;
+			/*
+			 * 走到这里，说明nd->last还是一个符号链接的结尾，此时继续
+			 * 解析；
+			 * 如果在上面返回了，表示nd->last是真正路径的最后，此时本
+			 * 函数返回，将最后一个路径分量交给xxx_last()处理；
+			 */
 			/* last component of nested symlink */
 			err = walk_component(nd, WALK_FOLLOW);
 		} else {
@@ -2585,12 +2653,15 @@ OK:
 		 * 是符号连接
 		 *
 		 * walk_component返回0说明不是符号链接或者不应该被follow
+		 * 返回1表示是符号链接且需要follow，并已经将表示符号链接的path放
+		 * 入了nd->stack中；
 		 */
 		if (err) {
 			/* 
 			 * 读取符号连接的目标路径，因为在walk_component -> 
 			 * step_into -> pick_link中只存放了符号连接的dentry字段
-			 * 而没有解析其具体的name字段
+			 * 而没有解析其具体的name字段；
+			 * 这里通过get_link()方法得到该符号链接inode的目标路径；
 			 */
 			const char *s = get_link(nd);
 
@@ -2598,7 +2669,7 @@ OK:
 				return PTR_ERR(s);
 			err = 0;
 			if (unlikely(!s)) {
-				/* 如果符号连接的目标是空的 */
+				/* 如果符号连接的目标是空的，则弹出这个符号链接丢掉 */
 				/* jumped */
 				put_link(nd);
 			} else {
@@ -2653,7 +2724,9 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		struct inode *inode = root->d_inode;
 		if (*s && unlikely(!d_can_lookup(root)))
 			return ERR_PTR(-ENOTDIR);
-		/* nd->path和nd->root都是struct path, 内部只有两个指针 */
+		/*
+		 * nd->path和nd->root都是struct path, 内部只有两个指针，所以可以直接赋值；
+		 */
 		nd->path = nd->root;
 		/* 当前所站在dentry的inode */
 		nd->inode = inode;
@@ -2716,6 +2789,9 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 				 */
 				nd->path = fs->pwd;
 				nd->inode = nd->path.dentry->d_inode;
+				/*
+				 * 开启父节点的顺序锁临界区
+				 */
 				nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
 			} while (read_seqcount_retry(&fs->seq, seq));
 		} else {
@@ -2873,6 +2949,8 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 		nd->path.dentry = NULL;
 	}
 	/*
+	 * 如果是rcu-walk模式，内部会调用rcu_read_unlock()；
+	 *
 	 * 内部调用了path_put()，对应path_init()中的path_get()
 	 *
 	 * 但此时nd->path中的值都已经被赋值为NULL了， 所以这里是没有真正减小引
@@ -3695,6 +3773,9 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 {
 	/*
 	 * dir是父目录的dentry
+	 * - dir_inode是上了锁的；
+	 *   - 如果有O_CREAT，则上了写锁
+	 *   - 如果没有，则上了写锁
 	 */
 	struct dentry *dir = nd->path.dentry;
 	struct inode *dir_inode = dir->d_inode;
@@ -3736,9 +3817,17 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 		if (d_in_lookup(dentry))
 			break;
 
+		/*
+		 * 其他内核路径分配了dentry，本内核路径才会走到这里
+		 * - 返回值大于0表示dentry依旧合法
+		 */
 		error = d_revalidate(dentry, nd->flags);
 		if (likely(error > 0))
 			break;
+		/*
+		 * 走到这里，说明dentry经d_revalidate()判断后发现不合法了，
+		 * 则做好收尾工作后重新循环一遍
+		 */
 		if (error)
 			goto out_dput;
 		d_invalidate(dentry);
@@ -3750,8 +3839,11 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 		 *
 		 * 说明已经有对应的inode了，发生在返回的dentry为非本内核路径创
 		 * 建的情况中。
+		 *
 		 * 因为如果返回的是其他内核路径创建的dentry，那么这个dentry在返
-		 * 回之前，dentry和对应inode已经成熟。
+		 * 回之前，dentry和对应inode已经成熟(成熟包括在磁盘上查了一圈后
+		 * 发现确实没有对应的inode，此时会将一个负状态的dentry进行插入
+		 * 到dentry_hashtable中)
 		 */
 		goto out_no_open;
 	}
@@ -3805,6 +3897,11 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 no_open:
 	if (d_in_lookup(dentry)) {
 		/*
+		 * 同时搜索一个目标dentry的并发线程中，只有一个内核路径可以进入到这里
+		 * - 此时其他的内核路径应该正在d_alloc_parallel()中睡眠
+		 */
+
+		/*
 		 * 文件系统的查找inode操作
 		 *
 		 * dentry是返回的最重要的东西。相反，返回值res并没有那么重要，
@@ -3812,6 +3909,9 @@ no_open:
 		 * NULL
 		 *
 		 * 返回的dentry有可能是负状态的，即dentry不对应inode
+		 *
+		 * 里面的d_splice_alias()会唤醒d_alloc_parallel()中的睡眠，并使其通过
+		 * unhash()等检查并返回；
 		 */
 		struct dentry *res = dir_inode->i_op->lookup(dir_inode, dentry,
 							     nd->flags);
@@ -3837,6 +3937,10 @@ no_open:
 	/*
 	 * 如果current_fsuid()在当前父目录没有创建文件的权限，那么O_CREAT在上面
 	 * 被清除掉了，这个分支就会被跳过；
+	 *
+	 * 如果有O_CREAT标志，那么本函数的调用者需要首先获取dir_inode的写锁，那么
+	 * 肯定只有一个内核路径可以进入到本函数，进而只有一个内核路径可以进入到下
+	 * 面的分支；
 	 */
 	if (!dentry->d_inode && (open_flag & O_CREAT)) {
 		file->f_mode |= FMODE_CREATED;
@@ -3958,6 +4062,9 @@ static int do_last(struct nameidata *nd,
 		 * dropping this one anyway.
 		 */
 	}
+	/*
+	 * 如果确定要创建新的inode，需要对父inode加锁
+	 */
 	if (open_flag & O_CREAT)
 		inode_lock(dir->d_inode);
 	else
@@ -3965,8 +4072,8 @@ static int do_last(struct nameidata *nd,
 	/*
 	 * 查找对应的inode，如果没有就创建一个新的
 	 *
-	 * 如果确实没有这个文件，这里会将一个NULL inode和对应的dentry连接，即返
-	 * 回之后dentry是个负状态的
+	 * 如果确实没有这个文件，且没有O_CREAT标志，那么这里会将一个NULL
+	 * inode和对应的dentry连接，即返回之后dentry是个负状态的
 	 */
 	error = lookup_open(nd, &path, file, op, got_write);
 	if (open_flag & O_CREAT)
@@ -4741,6 +4848,9 @@ int vfs_unlink(struct inode *dir, struct dentry *dentry, struct inode **delegate
 			error = try_break_deleg(target, delegated_inode);
 			if (error)
 				goto out;
+			/*
+			 * xfs: xfs_vn_unlink()
+			 */
 			error = dir->i_op->unlink(dir, dentry);
 			if (!error) {
 				dont_mount(dentry);
@@ -4827,6 +4937,9 @@ retry_deleg:
 exit2:
 		/*
 		 * 减少待删除文件的dentry引用计数
+		 * - 进入里面后不考虑释放关联的inode，因为上面的ihold()保
+		 *   证inode的引用计数肯定不为0；
+		 * - 在后面的iput()中对inode做操作；
 		 */
 		dput(dentry);
 	}

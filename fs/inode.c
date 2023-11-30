@@ -150,7 +150,7 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	 * 是不可用的（但不会导致内核crash，只是返回给调用者失败）。
 	 *
 	 * 真正赋值可用的操作结构体是在各文件系统拿到init inode后，再进行相应的
-	 * 设置。比如：ext4_iget、kernfs_init_inode等
+	 * 设置。比如：ext4_iget()、kernfs_init_inode()、xfs_setup_iops()等
 	 */
 	inode->i_op = &empty_iops;
 	inode->i_fop = &no_open_fops;
@@ -259,8 +259,8 @@ static struct inode *alloc_inode(struct super_block *sb)
 
 	if (ops->alloc_inode)
 		/*
-		 * 对于ext4文件系统来说，这里调用的是ext4_alloc_inode，其中分配
-		 * 的是ext4_inode_info，并指定了部分初始值，返回的是其中的
+		 * 对于ext4文件系统来说，这里调用的是 ext4_alloc_inode()，其中
+		 * 分配的是ext4_inode_info，并指定了部分初始值，返回的是其中的
 		 * vfs inode部分。
 		 *
 		 * 对于sockfs，这里调用的是sock_alloc_inode()，其中分配的结构体
@@ -334,7 +334,15 @@ static void destroy_inode(struct inode *inode)
 	BUG_ON(!list_empty(&inode->i_lru));
 	__destroy_inode(inode);
 	if (ops->destroy_inode) {
+		/*
+		 * xfs: xfs_fs_destroy_inode()
+		 * ext4: ext4_destroy_inode()
+		 */
 		ops->destroy_inode(inode);
+		/*
+		 * xfs: NULL
+		 * ext4: ext4_free_in_core_inode()
+		 */
 		if (!ops->free_inode)
 			return;
 	}
@@ -631,8 +639,15 @@ static void evict(struct inode *inode)
 	inode_wait_for_writeback(inode);
 
 	if (op->evict_inode) {
+		/*
+		 * xfs: NULL
+		 * ext4: ext4_evict_inode()
+		 */
 		op->evict_inode(inode);
 	} else {
+		/*
+		 * xfs走这里
+		 */
 		truncate_inode_pages_final(&inode->i_data);
 		clear_inode(inode);
 	}
@@ -644,10 +659,16 @@ static void evict(struct inode *inode)
 	remove_inode_hash(inode);
 
 	spin_lock(&inode->i_lock);
+	/*
+	 * 这个wakeup的作用？
+	 */
 	wake_up_bit(&inode->i_state, __I_NEW);
 	BUG_ON(inode->i_state != (I_FREEING | I_CLEAR));
 	spin_unlock(&inode->i_lock);
 
+	/*
+	 * 调用.destory_inode()和.free_inode()
+	 */
 	destroy_inode(inode);
 }
 
@@ -1656,6 +1677,7 @@ static void iput_final(struct inode *inode)
 
 	/*
 	 * 调用文件系统超级块的drop_inode()方法。
+	 * - xfs: xfs_fs_drop_inode()
 	 *
 	 * drop_inode()主要是用来判断是否应该evict本inode
 	 */
@@ -1668,6 +1690,9 @@ static void iput_final(struct inode *inode)
 		drop = generic_drop_inode(inode);
 
 	if (!drop && (sb->s_flags & SB_ACTIVE)) {
+	/*
+	 * 进到这里，说明drop是0，即inode->i_nlink不是0且inode本身是hashed状态
+	 */
 		inode_add_lru(inode);
 		spin_unlock(&inode->i_lock);
 		return;
@@ -1675,6 +1700,7 @@ static void iput_final(struct inode *inode)
 
 	/*
 	 * 如果不需要drop，则进行回写
+	 * - inode->i_nlink不是0且inode本身是hashed状态
 	 */
 	if (!drop) {
 		inode->i_state |= I_WILL_FREE;
@@ -1698,8 +1724,14 @@ static void iput_final(struct inode *inode)
 	 */
 	if (!list_empty(&inode->i_lru))
 		inode_lru_list_del(inode);
+	/*
+	 * 释放掉inode->i_lock自旋锁
+	 */
 	spin_unlock(&inode->i_lock);
 
+	/*
+	 * 真正对inode进行释放
+	 */
 	evict(inode);
 }
 
@@ -1720,7 +1752,7 @@ void iput(struct inode *inode)
 retry:
 	/*
 	 * 只有当inode->i_count减为0时，才会进入if内部
-	 * - 里面会获取inode->i_lock
+	 * - 如果i_count减为0，则会获取inode->i_lock
 	 */
 	if (atomic_dec_and_lock(&inode->i_count, &inode->i_lock)) {
 		/*
@@ -1740,6 +1772,9 @@ retry:
 			mark_inode_dirty_sync(inode);
 			goto retry;
 		}
+		/*
+		 * 走到这里的话，inode->i_lock是保持着的
+		 */
 		iput_final(inode);
 	}
 }

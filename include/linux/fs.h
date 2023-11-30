@@ -1738,11 +1738,16 @@ struct super_block {
 	 * The list_lru structure is essentially just a pointer to a table
 	 * of per-node lru lists, each of which has its own spinlock.
 	 * There is no need to put them into separate cachelines.
+	 *
+	 * dentry->lockref减小到0的dentry链表；
+	 * - 链表元素是dentry->d_lru
+	 * - 参见 dput() -> retain_dentry() -> d_lru_add()
 	 */
 	struct list_lru		s_dentry_lru;
 	/*
 	 * i_count == 0且干净的inode链表
 	 * - iput_final()后的inode会通过inode_add_lru()添加到这里；
+	 * - 这也是一个缓存；
 	 */
 	struct list_lru		s_inode_lru;
 	struct rcu_head		rcu;
@@ -2356,8 +2361,11 @@ static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)
  *			is zero.  I_FREEING must be set when I_WILL_FREE is
  *			cleared.
  * I_FREEING		Set when inode is about to be freed but still has dirty
+ *                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  *			pages or buffers attached or the inode itself is still
+ *                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  *			dirty.
+ *                      ^^^^^^
  * I_CLEAR		Added by clear_inode().  In this state the inode is
  *			clean and can be destroyed.  Inode keeps I_FREEING.
  *

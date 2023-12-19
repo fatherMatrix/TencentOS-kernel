@@ -177,6 +177,7 @@ struct xfs_ino_geometry {
 	/*
 	 * ino中的高位表示agno
 	 * - 也就是说每个AG中的inode数量固定？
+	 *   > 最大数量固定！
 	 */
 	unsigned int	agino_log;	/* #bits for agino in inum */
 };

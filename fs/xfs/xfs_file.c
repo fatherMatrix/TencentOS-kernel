@@ -287,11 +287,17 @@ xfs_file_aio_write_checks(
 	struct inode		*inode = file->f_mapping->host;
 	struct xfs_inode	*ip = XFS_I(inode);
 	ssize_t			error = 0;
+	/*
+	 * count在这里暂存调用者期望读写的字节数
+	 */
 	size_t			count = iov_iter_count(from);
 	bool			drained_dio = false;
 	loff_t			isize;
 
 restart:
+	/*
+	 * 检查待写数据长度是否超过最大限制；
+	 */
 	error = generic_write_checks(iocb, from);
 	if (error <= 0)
 		return error;
@@ -303,6 +309,8 @@ restart:
 	/*
 	 * For changing security info in file_remove_privs() we need i_rwsem
 	 * exclusively.
+	 *
+	 * 写操作还能以XFS_IOLOCK_SHARED进来？
 	 */
 	if (*iolock == XFS_IOLOCK_SHARED && !IS_NOSEC(inode)) {
 		xfs_iunlock(ip, *iolock);
@@ -312,8 +320,11 @@ restart:
 	}
 	/*
 	 * If the offset is beyond the size of the file, we need to zero any
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * blocks that fall between the existing EOF and the start of this
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * write.  If zeroing is needed and we are currently holding the
+	 * ^^^^^^
 	 * iolock shared, we need to update it to exclusive which implies
 	 * having to redo all checks before.
 	 *
@@ -326,6 +337,9 @@ restart:
 	 * and hence be able to correctly determine if we need to run zeroing.
 	 */
 	spin_lock(&ip->i_flags_lock);
+	/*
+	 * 读取当前文件的尺寸；
+	 */
 	isize = i_size_read(inode);
 	if (iocb->ki_pos > isize) {
 		spin_unlock(&ip->i_flags_lock);
@@ -334,6 +348,12 @@ restart:
 				xfs_iunlock(ip, *iolock);
 				*iolock = XFS_IOLOCK_EXCL;
 				xfs_ilock(ip, *iolock);
+				/*
+				 * generic_write_checks()中对调用者期望读写的count
+				 * 进行了调整，这里因为要goto restart了，需要将其
+				 * 恢复到初始状态；
+				 * - 有必要吗？
+				 */
 				iov_iter_reexpand(from, count);
 			}
 			/*
@@ -343,13 +363,25 @@ restart:
 			 * DIO will have drained before we are given the
 			 * XFS_IOLOCK_EXCL, and so for most cases this wait is a
 			 * no-op.
+			 *
+			 * 等待所有的dio完成，因为此时我们需要一个确定的、不会变动
+			 * 的EOF；
+			 * - 不需要等buffered io或者dax io吗？
 			 */
 			inode_dio_wait(inode);
 			drained_dio = true;
+			/*
+			 * 这个restart主要作用是保证我们有一个确定的、不会变动的EOF；
+			 */
 			goto restart;
 		}
 	
 		trace_xfs_zero_eof(ip, isize, iocb->ki_pos - isize);
+		/*
+		 * 如果我们要写的位置在EOF后，且隔了一段空间，那么我们需要将这段空间
+		 * 全部置为0；
+		 * - 这是hole吧？
+		 */
 		error = iomap_zero_range(inode, isize, iocb->ki_pos - isize,
 				NULL, &xfs_iomap_ops);
 		if (error)

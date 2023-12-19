@@ -891,10 +891,24 @@ xfs_writepage_map(
 	 * one.
 	 *
 	 * 一个page有可能要拆分成多个block;
+	 * - 比如arm上一个page有可能是64K
 	 */
 	for (i = 0, file_offset = page_offset(page);
 	     i < (PAGE_SIZE >> inode->i_blkbits) && file_offset < end_offset;
 	     i++, file_offset += len) {
+		/*
+		 * 如果有iop，且其uptodate位为0，则跳过；
+		 * - 这个版本的内核有个bug，应该在iomap_page_create()中添加如下
+		 *   判断及动作：
+		 *   > 如果PageUptodate(page)为真，则bitmap_fill(iop->update)
+		 *
+		 * PG_uptodate表示内存中的数据与磁盘上的一样新，如果没有这个标志
+		 * 则说明磁盘上的更新。
+		 *
+		 * 如果iomap_page_create()中没有添加这个动作，那么这里的iop->uptodate
+		 * 标志位就全是0了，即这里会跳过，导致该写的数据没有写，最终导致数据
+		 * 丢失；
+		 */
 		if (iop && !test_bit(i, iop->uptodate))
 			continue;
 

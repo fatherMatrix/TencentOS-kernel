@@ -376,6 +376,9 @@ void __init pgtable_cache_init(void)
 				      SLAB_PANIC, NULL);
 }
 
+/*
+ * 这个是PAE用的；
+ */
 static inline pgd_t *_pgd_alloc(void)
 {
 	/*
@@ -402,6 +405,9 @@ static inline void _pgd_free(pgd_t *pgd)
 }
 #else
 
+/*
+ * 这个是非PAE用的；
+ */
 static inline pgd_t *_pgd_alloc(void)
 {
 	return (pgd_t *)__get_free_pages(GFP_PGTABLE_USER,

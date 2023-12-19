@@ -184,6 +184,7 @@ As explained above, we would like to do path walking without taking locks or
 reference counts on intermediate dentries along the path. To do this, a per
 dentry seqlock (d_seq) is used to take a "coherent snapshot" of what the dentry
 looks like (its name, parent, and inode). That snapshot is then used to start
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 the next part of the path walk. When loading the coherent snapshot under d_seq,
 care must be taken to load the members up-front, and use those pointers rather
 than reloading from the dentry later on (otherwise we'd have interesting things

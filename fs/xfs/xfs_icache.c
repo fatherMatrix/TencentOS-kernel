@@ -151,6 +151,10 @@ xfs_reclaim_work_queue(
 {
 
 	rcu_read_lock();
+	/*
+	 * xfs_inode_set_reclaim_tag()中在释放xfs_inode的过程中设置了这个
+	 * XFS_ICI_RECLAIM_TAG标签；
+	 */
 	if (radix_tree_tagged(&mp->m_perag_tree, XFS_ICI_RECLAIM_TAG)) {
 		/*
 		 * 工作函数是： xfs_reclaim_worker()
@@ -236,9 +240,20 @@ xfs_inode_set_reclaim_tag(
 	spin_lock(&pag->pag_ici_lock);
 	spin_lock(&ip->i_flags_lock);
 
+	/*
+	 * 设置xarray中ino的标签
+	 */
 	radix_tree_tag_set(&pag->pag_ici_root, XFS_INO_TO_AGINO(mp, ip->i_ino),
 			   XFS_ICI_RECLAIM_TAG);
+	/*
+	 * 设置xarray树的tag
+	 * - 其中会唤醒reclaim_worker
+	 */
 	xfs_perag_set_reclaim_tag(pag);
+	/*
+	 * 设置xfs_inode的flag
+	 * - 只有设置了这个标签，才能设置XFS_IRECLAIM
+	 */
 	__xfs_iflags_set(ip, XFS_IRECLAIMABLE);
 
 	spin_unlock(&ip->i_flags_lock);
@@ -366,6 +381,10 @@ xfs_iget_cache_hit(
 	 * will not match, so check for that, too.
 	 */
 	spin_lock(&ip->i_flags_lock);
+	/*
+	 * xfs_reclaim_inode()中，在xarray delete之前，会将i_ino设置为0；
+	 * 如果已经被reallocated，xfs_inode->i_ino也会改变；
+	 */
 	if (ip->i_ino != ino) {
 		trace_xfs_iget_skip(ip);
 		XFS_STATS_INC(mp, xs_ig_frecycle);
@@ -383,6 +402,12 @@ xfs_iget_cache_hit(
 	 * XXX(hch): eventually we should do something equivalent to
 	 *	     wait_on_inode to wait for these flags to be cleared
 	 *	     instead of polling for it.
+	 *
+	 * 如果被标记了XFS_INEW（另一个xfs_ialloc）或者被标记了
+	 * XFS_IRECLAIN（unlink路径），则返回重试；
+	 * - recycle和unlink谁设置了这个XFS_RECLAIM标识，谁就获取了对该
+	 *   xfs_inode的最终处理权。并且，两个路径中，只要看到xfs_inode
+	 *   已经有这个标志了，就会放弃，把该xfs_inode让给对方。
 	 */
 	if (ip->i_flags & (XFS_INEW|XFS_IRECLAIM)) {
 		trace_xfs_iget_skip(ip);
@@ -419,6 +444,10 @@ xfs_iget_cache_hit(
 		 * from stomping over us while we recycle the inode.  We can't
 		 * clear the radix tree reclaimable tag yet as it requires
 		 * pag_ici_lock to be held exclusive.
+		 *
+		 * unlink那边会设置XFS_IRECLAIM
+		 * - recycle和unlink谁设置了这个标志，谁就获取了这个xfs_inode的
+		 *   最终处理权！
 		 */
 		ip->i_flags |= XFS_IRECLAIM;
 
@@ -1051,6 +1080,7 @@ xfs_reclaim_inode_grab(
 	ASSERT(rcu_read_lock_held());
 
 	/* quick check for stale RCU freed inode */
+	/* xfs_reclaim_inode()中会将xfs_inode->i_ino设置为0 */
 	if (!ip->i_ino)
 		return 1;
 
@@ -1236,6 +1266,8 @@ reclaim:
 	 * Because radix_tree_delete won't complain even if the item was never
 	 * added to the tree assert that it's been there before to catch
 	 * problems with the inode life time early on.
+	 *
+	 * 获取xarray的锁
 	 */
 	spin_lock(&pag->pag_ici_lock);
 	/*
@@ -1249,6 +1281,9 @@ reclaim:
 	 * 则清除xarray（xfs_mount->m_perag_tree）的RECLAIM标志
 	 */
 	xfs_perag_clear_reclaim_tag(pag);
+	/*
+	 * 释放锁
+	 */
 	spin_unlock(&pag->pag_ici_lock);
 
 	/*
@@ -1265,7 +1300,7 @@ reclaim:
 	ASSERT(xfs_inode_clean(ip));
 
 	/*
-	 * 在rcu中调用xfs_inode_free_callback()
+	 * 在rcu中调用 xfs_inode_free_callback()
 	 */
 	__xfs_inode_free(ip);
 	return error;
@@ -1314,6 +1349,9 @@ restart:
 
 		ag = pag->pag_agno + 1;
 
+		/*
+		 * 获取锁
+		 */
 		if (trylock) {
 			if (!mutex_trylock(&pag->pag_ici_reclaim_lock)) {
 				skipped++;
@@ -1349,7 +1387,9 @@ restart:
 			 */
 			for (i = 0; i < nr_found; i++) {
 				struct xfs_inode *ip = batch[i];
-
+				/*
+				 * 设置xfs_inode的XFS_IRECLAIM标志
+				 */
 				if (done || xfs_reclaim_inode_grab(ip, flags))
 					batch[i] = NULL;
 
@@ -1380,6 +1420,11 @@ restart:
 			 * 离开rcu临界区
 			 */
 			rcu_read_unlock();
+			/*
+			 * 离开后会不会被RCU free掉？
+			 * - 不会啊，要我们调用xfs_reclaim_inode()才会call_rcu进行
+			 *   内存释放的呀
+			 */
 
 			for (i = 0; i < nr_found; i++) {
 				if (!batch[i])

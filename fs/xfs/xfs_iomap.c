@@ -1084,6 +1084,7 @@ xfs_file_iomap_begin(
 	/*
 	 * 写操作，但非directio和dax
 	 * - !xfs_get_extsz_hint()这个条件是做什么的？
+	 *   > extent size hint
 	 */
 	if ((flags & (IOMAP_WRITE | IOMAP_ZERO)) && !(flags & IOMAP_DIRECT) &&
 			!IS_DAX(inode) && !xfs_get_extsz_hint(ip)) {

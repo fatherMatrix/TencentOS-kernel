@@ -231,6 +231,23 @@ static inline int read_seqcount_retry(const seqcount_t *s, unsigned start)
 static inline void raw_write_seqcount_begin(seqcount_t *s)
 {
 	s->sequence++;
+	/*
+	 * 写屏障使得之前的写操作对其他核可见；
+	 * - 原因在于：如果target处于Share状态，需要先向其他核发送Invalid消息，
+	 *   等得到Ack之后才能写入缓存并对其他核可见，在此之前，需要将target的
+	 *   新值写入Store Buffer。若此时有另一写操作在target之后的target B，
+	 *   且其状态为Executive，则会直接写入缓存并对其他核可见。
+	 * - 写屏障的意义在于等Store Buffer中已有的新值写入缓存中后再执行下一
+	 *   条指令。
+	 *
+	 * 相对的，读屏障的意义在于将Invalid Queue中的数据都Apply到本地缓存中
+	 * 的Share状态数据；
+	 * - 假设： Load A  (A is Shared)
+	 *          Load B  (B is I)
+	 *
+	 *   此时A会直接读取本地缓存中的老数据（新数据在Invalid Queue中还没来得
+	 *   及处理）；B会通过缓存一致性协议去其他核上读，拿到的自然是新数据。
+	 */
 	smp_wmb();
 }
 

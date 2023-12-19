@@ -73,8 +73,14 @@ struct rcu_cblist {
 #define RCU_CBLIST_NSEGS	4
 
 struct rcu_segcblist {
+	/*
+	 * 将所有的call rcu回调串联成一个链表；
+	 */
 	struct rcu_head *head;
 	/*
+ 	 * 每个元素是一个指向rcu_head->next的指针，用于将rcu_segcblist->head字
+ 	 * 段指向的链表进行分段；
+ 	 *
  	 * tails[*_TAIL]保存了rcu_head->next的地址，右开区间指的是 
  	 * *tails[*_TAIL]，因此，tails[*_TAIL]指向的next所在的rcu_head还是要被
  	 * 包含在区间内的

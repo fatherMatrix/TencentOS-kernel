@@ -172,6 +172,10 @@ do { \
 	barrier(); \
 } while (0)
 
+/*
+ * 如果打开了CONFIG_PREEMPT，那么普通的preempt_enable()会触发调度；
+ * 这个函数用在不希望调度的preempt_enable()处；
+ */
 #define sched_preempt_enable_no_resched() \
 do { \
 	barrier(); \

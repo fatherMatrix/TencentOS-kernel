@@ -2581,6 +2581,9 @@ __call_rcu(struct rcu_head *head, rcu_callback_t func, bool lazy)
 	}
 	head->func = func;
 	head->next = NULL;
+	/*
+	 * 关中断
+	 */
 	local_irq_save(flags);
 	rdp = this_cpu_ptr(&rcu_data);
 
@@ -2611,9 +2614,15 @@ __call_rcu(struct rcu_head *head, rcu_callback_t func, bool lazy)
 	/* Go handle any RCU core processing required. */
 	if (IS_ENABLED(CONFIG_RCU_NOCB_CPU) &&
 	    unlikely(rcu_segcblist_is_offloaded(&rdp->cblist))) {
+		/*
+		 * 内部会开中断
+		 */
 		__call_rcu_nocb_wake(rdp, was_alldone, flags); /* unlocks */
 	} else {
 		__call_rcu_core(rdp, head, flags);
+		/*
+		 * 开中断
+		 */
 		local_irq_restore(flags);
 	}
 }
@@ -2739,6 +2748,9 @@ void synchronize_rcu(void)
 	if (rcu_blocking_is_gp())
 		return;
 	if (rcu_gp_is_expedited())
+	/*
+	 * 加速宽限期
+	 */
 		synchronize_rcu_expedited();
 	else
 		wait_rcu_gp(call_rcu);

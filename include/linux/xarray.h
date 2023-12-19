@@ -36,7 +36,9 @@
  * 257: Retry entry
  *
  * Errors are also represented as internal entries, but use the negative
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * space (-4094 to -2).  They're never stored in the slots array; only
+ * ^^^^^^^^^^^^^^^^^^^^
  * returned by the normal API.
  */
 
@@ -1235,6 +1237,10 @@ static inline struct xa_node *xa_to_node(const void *entry)
 /* Private */
 static inline bool xa_is_node(const void *entry)
 {
+	/*
+	 * 错误码也是以internal node表示的，只不过错误码处于[-4094, -2]
+	 * 之间；
+	 */
 	return xa_is_internal(entry) && (unsigned long)entry > 4096;
 }
 
@@ -1423,6 +1429,9 @@ static inline void xas_set_err(struct xa_state *xas, long err)
  */
 static inline bool xas_invalid(const struct xa_state *xas)
 {
+	/*
+	 *
+	 */
 	return (unsigned long)xas->xa_node & 3;
 }
 

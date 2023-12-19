@@ -19,6 +19,9 @@
 
 #include "../internal.h"
 
+/*
+ * 引进folio之后，该函数对应ifs_alloc()
+ */
 static struct iomap_page *
 iomap_page_create(struct inode *inode, struct page *page)
 {
@@ -31,6 +34,11 @@ iomap_page_create(struct inode *inode, struct page *page)
 	atomic_set(&iop->read_count, 0);
 	atomic_set(&iop->write_count, 0);
 	bitmap_zero(iop->uptodate, PAGE_SIZE / SECTOR_SIZE);
+
+	/*
+	 * 当前版本的这里有可能会造成使用iomap机制的文件系统丢失写数据；
+	 * - 参见 xfs_writepage_map()
+	 */
 
 	/*
 	 * migrate_page_move_mapping() assumes that pages with private data have
@@ -816,9 +824,6 @@ again:
 	return written ? written : status;
 }
 
-/*
- * 对xfs，参数ops是xfs_iomap_ops
- */
 ssize_t
 iomap_file_buffered_write(struct kiocb *iocb, struct iov_iter *iter,
 		const struct iomap_ops *ops)
@@ -830,6 +835,11 @@ iomap_file_buffered_write(struct kiocb *iocb, struct iov_iter *iter,
 	loff_t pos = iocb->ki_pos, ret = 0, written = 0;
 
 	while (iov_iter_count(iter)) {
+		/*
+		 * 对xfs，参数ops是 xfs_iomap_ops
+		 * iomap_write_actor()用于buffered io
+		 * iomap_dio_actor()用于direct io
+		 */
 		ret = iomap_apply(inode, pos, iov_iter_count(iter),
 				IOMAP_WRITE, ops, iter, iomap_write_actor);
 		if (ret <= 0)
@@ -989,6 +999,9 @@ iomap_zero_range(struct inode *inode, loff_t pos, loff_t len, bool *did_zero,
 	loff_t ret;
 
 	while (len > 0) {
+		/*
+		 * iomap_apply()正常情况下返回成功执行的读写字节数；
+		 */
 		ret = iomap_apply(inode, pos, len, IOMAP_ZERO,
 				ops, did_zero, iomap_zero_range_actor);
 		if (ret <= 0)

@@ -781,6 +781,9 @@ struct inode {
 	struct timespec64	i_ctime;
 	spinlock_t		i_lock;	/* i_blocks, i_bytes, maybe i_size */
 	unsigned short          i_bytes;
+	/*
+	 * 参见inode_init_always()及对应来源的注释
+	 */
 	u8			i_blkbits;
 	u8			i_write_hint;
 	blkcnt_t		i_blocks;
@@ -864,6 +867,9 @@ struct inode {
 		const struct file_operations	*i_fop;	/* former ->i_op->default_file_ops */
 		void (*free_inode)(struct inode *);
 	};
+	/*
+	 * flock()相关
+	 */
 	struct file_lock_context	*i_flctx;
 	/* 文件的address_space对象 */
 	struct address_space	i_data;
@@ -1010,6 +1016,9 @@ void unlock_two_nondirectories(struct inode *, struct inode*);
 static inline loff_t i_size_read(const struct inode *inode)
 {
 #if BITS_PER_LONG==32 && defined(CONFIG_SMP)
+	/*
+	 * CONFIG_SMP，多核上要互斥；
+	 */
 	loff_t i_size;
 	unsigned int seq;
 
@@ -1019,6 +1028,9 @@ static inline loff_t i_size_read(const struct inode *inode)
 	} while (read_seqcount_retry(&inode->i_size_seqcount, seq));
 	return i_size;
 #elif BITS_PER_LONG==32 && defined(CONFIG_PREEMPT)
+	/*
+	 * 单核且内核可抢占，关抢占即可
+	 */
 	loff_t i_size;
 
 	preempt_disable();
@@ -1026,6 +1038,11 @@ static inline loff_t i_size_read(const struct inode *inode)
 	preempt_enable();
 	return i_size;
 #else
+	/*
+	 * 两种情况：
+	 * - 单核，不可抢占，那直接读就行了；
+	 * - 多核，但cpu为64位，也是直接读即可；
+	 */
 	return inode->i_size;
 #endif
 }
@@ -1600,7 +1617,10 @@ struct super_block {
 	struct list_head	s_list;		/* Keep this first */
 	/* 设备标识符 */
 	dev_t			s_dev;		/* search index; _not_ kdev_t */
-	/* 以bit阶数为单位的块大小 */
+	/*
+	 * 以bit阶数为单位的块大小（傻逼才会写这种难理解的注释，以后注意！）
+	 * - 2 ** s_blocksize_bits = s_blocksize
+	 */
 	unsigned char		s_blocksize_bits;
 	/* 以byte为单位的块大小 */
 	unsigned long		s_blocksize;

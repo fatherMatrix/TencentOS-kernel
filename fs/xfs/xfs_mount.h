@@ -104,9 +104,13 @@ typedef struct xfs_mount {
 	 * - 参见xfs_sb_mount_common()
 	 */
 	int			m_bsize;	/* fs logical block size */
+	/*
+	 * 下面这三个字段似乎是用作cache
+	 */
 	xfs_agnumber_t		m_agfrotor;	/* last ag where space found */
 	xfs_agnumber_t		m_agirotor;	/* last ag dir inode alloced */
 	spinlock_t		m_agirotor_lock;/* .. and lock protecting it */
+
 	xfs_agnumber_t		m_maxagi;	/* highest inode alloc group */
 	uint			m_readio_log;	/* min read size log bytes */
 	uint			m_readio_blocks; /* min read size blocks */
@@ -117,6 +121,7 @@ typedef struct xfs_mount {
 	struct xlog		*m_log;		/* log specific stuff */
 	/*
 	 * inode结构地图
+	 * - 参见： xfs_ialloc_setup_geometry()
 	 */
 	struct xfs_ino_geometry	m_ino_geo;	/* inode geometry */
 	int			m_logbufs;	/* number of log buffers */
@@ -390,6 +395,9 @@ typedef struct xfs_perag {
 	char		pagf_init;	/* this agf's entry is initialized */
 	char		pagi_init;	/* this agi's entry is initialized */
 	char		pagf_metadata;	/* the agf is preferred to be metadata */
+	/*
+	 * 似乎是：如果文件系统对inode数量有了限制，有些AG不能用于分配inode
+	 */
 	char		pagi_inodeok;	/* The agi is ok for inodes */
 	uint8_t		pagf_levels[XFS_BTNUM_AGF];
 					/* # of levels in bno & cnt btree */

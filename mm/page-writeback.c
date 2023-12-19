@@ -2366,8 +2366,8 @@ int do_writepages(struct address_space *mapping, struct writeback_control *wbc)
 		return 0;
 	while (1) {
 		/*
-		 * 对xfs，mapping->a_ops == xfs_address_space_operations；
-		 * 对nvm上的xfs，mapping->a_ops == xfs_dax_aops;
+		 * 对xfs，mapping->a_ops == xfs_address_space_operations
+		 * 对nvm上的xfs，mapping->a_ops == xfs_dax_aops
 		 *
 		 * 对xfs，writepages == xfs_vm_writepages()
 		 */

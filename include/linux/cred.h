@@ -131,9 +131,9 @@ struct cred {
 	 * 对于非root用户，可以在未来使用setuid()来将euid设置成为real uid和suid
 	 * 中的任何一个。但是非root用户是不允许用setuid()把euid设置成为其他值；
 	 * - 这个特性支持了文件的set uid位，比如passwd；当用户态进程执行passwd程
-	 *   序时，euid首先由于passwd的set-root-id标志被设置为root，然后后续的
-	 *   setuid()会使的suid会被设置为euid(此时是root)，这样一来，后续便可以
-	 *   通过seteuid()等再次将euid设置为root，从而再次获取root权限；
+	 *   序时，euid首先由于passwd的suid标志被设置为root，然后后续的setuid()会
+	 *   使suid被设置为euid(此时是root)，这样一来，后续便可以通过seteuid()等
+	 *   再次将euid设置为root，从而再次获取root权限；
 	 *
 	 * 对于root来说，就没有那么大的意义了。因为root调用setuid()的时候，将会
 	 * 同时设置uid/suid/euid三个值；

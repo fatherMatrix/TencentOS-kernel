@@ -332,6 +332,10 @@ static void destroy_inode(struct inode *inode)
 	const struct super_operations *ops = inode->i_sb->s_op;
 
 	BUG_ON(!list_empty(&inode->i_lru));
+	/*
+	 * 释放inode的其他资源
+	 * - 包括writeback等
+	 */
 	__destroy_inode(inode);
 	if (ops->destroy_inode) {
 		/*
@@ -649,6 +653,9 @@ static void evict(struct inode *inode)
 		 * xfs走这里
 		 */
 		truncate_inode_pages_final(&inode->i_data);
+		/*
+		 * 设置inode的I_FREEZING | I_CLEAR标志
+		 */
 		clear_inode(inode);
 	}
 	if (S_ISBLK(inode->i_mode) && inode->i_bdev)
@@ -1666,6 +1673,8 @@ EXPORT_SYMBOL(generic_delete_inode);
  * us to evict inode, do so.  Otherwise, retain inode
  * in cache if fs is alive, sync and evict if fs is
  * shutting down.
+ *
+ * 进来之前，是持有inode->i_lock的；
  */
 static void iput_final(struct inode *inode)
 {
@@ -1730,6 +1739,8 @@ static void iput_final(struct inode *inode)
 	spin_unlock(&inode->i_lock);
 
 	/*
+	 * 取下来后其他人就不可见了？所以释放了inode->i_lock？
+	 *
 	 * 真正对inode进行释放
 	 */
 	evict(inode);

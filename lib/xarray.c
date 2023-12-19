@@ -1317,6 +1317,10 @@ void *xa_load(struct xarray *xa, unsigned long index)
 	XA_STATE(xas, xa, index);
 	void *entry;
 
+	/*
+	 * 这个rcu临界区保护的是xarray结构本身在遍历过程中的无锁访问。
+	 * 返回的entry后面如果要使用的话，肯定要用更大的rcu临界区保护；
+	 */
 	rcu_read_lock();
 	do {
 		entry = xas_load(&xas);
@@ -1436,6 +1440,9 @@ EXPORT_SYMBOL(__xa_store);
  * Return: The old entry at this index on success, xa_err(-EINVAL) if @entry
  * cannot be stored in an XArray, or xa_err(-ENOMEM) if memory allocation
  * failed.
+ *
+ * 如果插入成功，则返回index对应的原entry；
+ * 如果插入失败，返回xa_err(-Exxx)；
  */
 void *xa_store(struct xarray *xa, unsigned long index, void *entry, gfp_t gfp)
 {
@@ -1443,6 +1450,8 @@ void *xa_store(struct xarray *xa, unsigned long index, void *entry, gfp_t gfp)
 
 	/*
 	 * 写者要用自旋锁互斥
+	 * - 内部要是需要分配内存怎么办？
+	 *   > 分配内存前释放自旋锁，分配内存后重新获取自旋锁；
 	 */
 	xa_lock(xa);
 	curr = __xa_store(xa, index, entry, gfp);

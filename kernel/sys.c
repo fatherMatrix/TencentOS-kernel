@@ -592,6 +592,9 @@ long __sys_setuid(uid_t uid)
 	 * 不是所有用户都可以setuid()的，这个CAP应该也可以放给secadm和auditadm；
 	 */
 	if (ns_capable_setid(old->user_ns, CAP_SETUID)) {
+		/*
+		 * 对于特权用户，setuid时uid、euid、suid都会被设置；
+		 */
 		new->suid = new->uid = kuid;
 		if (!uid_eq(kuid, old->uid)) {
 			retval = set_user(new);
@@ -599,9 +602,20 @@ long __sys_setuid(uid_t uid)
 				goto error;
 		}
 	} else if (!uid_eq(kuid, old->uid) && !uid_eq(kuid, new->suid)) {
+	/*
+	 * 除非uid_eq(kuid, old->uid) || uid_eq(kuid, new->suid)
+	 * - uid_eq(kuid, old->uid)表示setuid的期望目标与原来一致；
+	 * - uid_eq(kuid, new->suid)表示setuid的期望目标与原来的suid一致；
+	 *   > 之所以是与原来的suid一致，是因为prepare_creds()返回的大部分字段
+	 *     都是old_cred中的字段；
+	 */
 		goto error;
 	}
 
+	/*
+	 * 对于非特权用户，setuid时仅会设置euid；
+	 * - 此时，后面可以再次用setuid将其euid设置为原用户；
+	 */
 	new->fsuid = new->euid = kuid;
 
 	/*

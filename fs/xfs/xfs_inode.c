@@ -55,6 +55,14 @@ xfs_extlen_t
 xfs_get_extsz_hint(
 	struct xfs_inode	*ip)
 {
+	/*
+	 * XFS_DIFLAG_EXTSIZE与XFS_DIFLAG_EXTSZINHERIT有关，如果parent inode
+	 * 设置了后者标志，则:
+	 * - regular file设置XFS_DIFLAG_EXTSIZE；dir设置XFS_DIFLAG_EXTSZINHERIT；
+	 * - 继承parent inode的di_extsize；
+	 *
+	 * crash发现：典型情况下di_extsize和di_cowextsize都是0；
+	 */
 	if ((ip->i_d.di_flags & XFS_DIFLAG_EXTSIZE) && ip->i_d.di_extsize)
 		return ip->i_d.di_extsize;
 	if (XFS_IS_REALTIME_INODE(ip))
@@ -74,6 +82,9 @@ xfs_get_cowextsz_hint(
 {
 	xfs_extlen_t		a, b;
 
+	/*
+	 * crash发现：典型情况下di_extsize和di_cowextsize都是0；
+	 */
 	a = 0;
 	if (ip->i_d.di_flags2 & XFS_DIFLAG2_COWEXTSIZE)
 		a = ip->i_d.di_cowextsize;
@@ -1135,11 +1146,11 @@ xfs_bumplink(
 
 int
 xfs_create(
-	xfs_inode_t		*dp,
+	xfs_inode_t		*dp,	/* 指向dir的inode		*/
 	struct xfs_name		*name,
 	umode_t			mode,
 	dev_t			rdev,
-	xfs_inode_t		**ipp)
+	xfs_inode_t		**ipp)	/* 新分配的inode		*/
 {
 	int			is_dir = S_ISDIR(mode);
 	struct xfs_mount	*mp = dp->i_mount;
@@ -1184,6 +1195,8 @@ xfs_create(
 	 * reserve the resources for that case.  If that is not
 	 * the case we'll drop the one we have and get a more
 	 * appropriate transaction later.
+	 *
+	 * 分配一个新transaction
 	 */
 	error = xfs_trans_alloc(mp, tres, resblks, 0, 0, &tp);
 	if (error == -ENOSPC) {

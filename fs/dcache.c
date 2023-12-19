@@ -366,12 +366,27 @@ static void dentry_unlink_inode(struct dentry * dentry)
 {
 	struct inode *inode = dentry->d_inode;
 
+	/*
+	 * dentry中关于inode的修改需要使用dentry->d_seq来保护
+	 */
 	raw_write_seqcount_begin(&dentry->d_seq);
 	__d_clear_type_and_inode(dentry);
+	/*
+	 * 一个inode对应多个dentry（每个硬链接对应一个dentry），将dentry
+	 * 从inode的dentry链表中取下；
+	 */
 	hlist_del_init(&dentry->d_u.d_alias);
 	raw_write_seqcount_end(&dentry->d_seq);
 	spin_unlock(&dentry->d_lock);
 	spin_unlock(&inode->i_lock);
+	/*
+	 * 放掉inode的锁后再操作inode会不会不安全？
+	 * - 首先，不会出现内存越界，因为此时本dentry对inode的引用还是在
+	 *   的，inode不会被释放；
+	 * - 其次，i_nlink会不会从0变1？
+	 *   > i_nlink会是0吗？
+	 *     > 感觉i_nlink变为0是由条件的；要看unlink的代码了；
+	 */
 	if (!inode->i_nlink)
 		fsnotify_inoderemove(inode);
 	/*
@@ -579,14 +594,24 @@ static void __dentry_kill(struct dentry *dentry)
 		if (!(dentry->d_flags & DCACHE_SHRINK_LIST))
 			d_lru_del(dentry);
 	}
-	/* if it was on the hash then remove it */
+	/*
+	 * if it was on the hash then remove it
+	 *
+	 * 从dentry_hashtable中摘除此dentry
+	 */
 	__d_drop(dentry);
 	/*
 	 * 将dentry从parent dentry中的children list中摘下来
 	 */ 
 	dentry_unlist(dentry, parent);
+	/*
+	 * 后面的操作就和parent无关了，可以放掉parent的锁；
+	 */
 	if (parent)
 		spin_unlock(&parent->d_lock);
+	/*
+	 * 脱离dentry和inode
+	 */
 	if (dentry->d_inode)
 		dentry_unlink_inode(dentry);
 	else
@@ -618,9 +643,13 @@ again:
 	 * We can't blindly lock dentry until we are sure
 	 * that we won't violate the locking order.
 	 * Any changes of dentry->d_parent must have
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * been done with parent->d_lock held, so
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * spin_lock() above is enough of a barrier
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * for checking if it's still our child.
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 */
 	if (unlikely(parent != dentry->d_parent)) {
 		spin_unlock(&parent->d_lock);
@@ -675,6 +704,7 @@ static inline bool retain_dentry(struct dentry *dentry)
 /*
  * Finish off a dentry we've decided to kill.
  * dentry->d_lock must be held, returns with it unlocked.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * Returns dentry requiring refcount drop, or NULL if we're done.
  */
 static struct dentry *dentry_kill(struct dentry *dentry)
@@ -686,12 +716,35 @@ static struct dentry *dentry_kill(struct dentry *dentry)
 	if (inode && unlikely(!spin_trylock(&inode->i_lock)))
 		goto slow_positive;
 
+	/*
+	 * 走到这里，有两种可能:
+	 * - dentry是negative
+	 * - dentry是positive，且成功获取了inode->i_lock
+	 */
+	 
 	if (!IS_ROOT(dentry)) {
 		parent = dentry->d_parent;
+		/*
+		 * !IS_ROOT()确保了parent不为NULL
+		 */
 		if (unlikely(!spin_trylock(&parent->d_lock))) {
+		/*
+		 * 走到这里说明获取dentry->d_parent的锁失败了
+		 */
+		 	/*
+		 	 * 强制获取父dentry的锁
+		 	 * - parent有可能更新
+		 	 * - 里面会暂时放掉dentry的锁（死锁避免），但锁定
+		 	 *   parent后又取回来了
+		 	 */
 			parent = __lock_parent(dentry);
 			if (likely(inode || !dentry->d_inode))
 				goto got_locks;
+			/*
+			 * 走到这里，说明inode为NULL，dentry->d_inode不为NULL；
+			 * - 即，原来是negative，现在变成了positive
+			 *   > __lock_parent()中放过dentry的锁
+			 */
 			/* negative that became positive */
 			if (parent)
 				spin_unlock(&parent->d_lock);
@@ -699,9 +752,15 @@ static struct dentry *dentry_kill(struct dentry *dentry)
 			goto slow_positive;
 		}
 	}
+	/*
+	 * 走到这里，说明dentry是root
+	 */
 	__dentry_kill(dentry);
 	return parent;
 
+/*
+ * 走到这里，说明inode不为NULL，且没有获取inode的锁
+ */
 slow_positive:
 	spin_unlock(&dentry->d_lock);
 	spin_lock(&inode->i_lock);
@@ -711,14 +770,25 @@ got_locks:
 	if (unlikely(dentry->d_lockref.count != 1)) {
 		dentry->d_lockref.count--;
 	} else if (likely(!retain_dentry(dentry))) {
+	/*
+	 * 走到这里，说明需要由我们开进行__dentry_kill()，其中会处理inode的
+	 * 引用计数，且会放掉dentry和inode的锁；
+	 */
 		__dentry_kill(dentry);
 		return parent;
 	}
+	/*
+	 * 走到这里，说明我们并没有__dentry_kill()这个dentry，所以inode
+	 * 也是安全的，可以解锁；
+	 */
 	/* we are keeping it, after all */
 	if (inode)
 		spin_unlock(&inode->i_lock);
 	if (parent)
 		spin_unlock(&parent->d_lock);
+	/*
+	 * dentry解锁在inode解锁之后
+	 */
 	spin_unlock(&dentry->d_lock);
 	return NULL;
 }
@@ -729,7 +799,9 @@ got_locks:
  * If unsuccessful, we return false, having already taken the dentry lock.
  *
  * The caller needs to hold the RCU read lock, so that the dentry is
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * guaranteed to stay around even if the refcount goes down to zero!
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  */
 static inline bool fast_dput(struct dentry *dentry)
 {
@@ -740,7 +812,7 @@ static inline bool fast_dput(struct dentry *dentry)
 	 * If we have a d_op->d_delete() operation, we sould not
 	 * let the dentry count go to zero, so use "put_or_lock".
 	 *
-	 * 如果dentry->d_lockref > 1，则对齐减1并返回1；
+	 * 如果dentry->d_lockref > 1，则对其减1并返回1；
 	 * 如果dentry->d_lockref <= 1，则加锁并返回0；
 	 */
 	if (unlikely(dentry->d_flags & DCACHE_OP_DELETE))
@@ -756,22 +828,46 @@ static inline bool fast_dput(struct dentry *dentry)
 	 * If the lockref_put_return() failed due to the lock being held
 	 * by somebody else, the fast path has failed. We will need to
 	 * get the lock, and then check the count again.
+	 *
+	 * lockref_put_return()小于0，说明dentry是被其他内核路径持锁了的；
+	 * 或者该dentry的reflock已经被其他内核路径减到0了，处于删除过程；
+	 * - 此处我们要区抢到这把锁才能操作；
+	 *
+	 * 如果此时另外持锁的内核路径把该dentry删除了怎么办？
+	 * - fast_dput()函数本身被rcu临界区保护，该dentry该宽限期内不会被
+	 *   释放内存（即便refcount减小为0也要等到宽限期结束才能free）！
 	 */
 	if (unlikely(ret < 0)) {
 		spin_lock(&dentry->d_lock);
 		if (dentry->d_lockref.count > 1) {
+		/*
+		 * 走到这里，说明该dentry仅仅是被其他内核路径持锁了，但
+		 * 还没有被其他内核路径删除，也不需要被本内核路径删除；
+		 */
 			dentry->d_lockref.count--;
 			spin_unlock(&dentry->d_lock);
 			return true;
 		}
+		/*
+		 * 走到这里，说明dentry要被释放，或者已经被其他内核路径释
+		 * 放了；返回false
+		 */
 		return false;
 	}
 
 	/*
 	 * If we weren't the last ref, we're done.
+	 *
+	 * lockref_put_return()大于0，说明成功减小其lockref，且减小后不为0；
+	 * 说明我们不是最后一个引用该dentry的内核路径，无须释放；
 	 */
 	if (ret)
 		return true;
+
+	/*
+	 * 走到这里，说明dentry原来的refcount是1，被我们减小为0了，我们是
+	 * 真正对其执行删除动作的内核路径
+	 */
 
 	/*
 	 * Careful, careful. The reference count went down
@@ -863,9 +959,8 @@ void dput(struct dentry *dentry)
 
 		rcu_read_lock();
 		/*
-		 * - 返回1说明dentry->lockref > 1，此时返回前减小了该值；
-		 * - 返回0说明dentry->lockref <= 1，此时没有做减小操作，但获取
-		 *   了dentry->lockref->lock自旋锁；
+		 * - 返回true表示成功减小其引用计数
+		 * - 返回false表示没成功，但此时本内核路径持有了该dentry的lock
 		 */
 		if (likely(fast_dput(dentry))) {
 			rcu_read_unlock();
@@ -874,6 +969,7 @@ void dput(struct dentry *dentry)
 
 		/*
 		 * 走到这里，说明dentry->lockref == 1，减1后应该删除了；
+		 * - 此时fast_dput()帮我们获取了dentry的锁
 		 */
 
 		/* Slow case: now with the dentry lock held */
@@ -890,6 +986,7 @@ void dput(struct dentry *dentry)
 
 		/*
 		 * 立即删除该dentry
+		 * - 此时我们持有dentry->d_lock
 		 */
 		dentry = dentry_kill(dentry);
 	}
@@ -1812,6 +1909,9 @@ struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
  */
 struct dentry *d_alloc(struct dentry * parent, const struct qstr *name)
 {
+	/*
+	 * 出来时引用计数lockref是1
+	 */
 	struct dentry *dentry = __d_alloc(parent->d_sb, name);
 	if (!dentry)
 		return NULL;
@@ -2395,6 +2495,7 @@ struct dentry *d_lookup(const struct dentry *parent, const struct qstr *name)
 		 * ref-lock用来预防查找过程中被改名了。
 		 *
 		 * 这是个全局锁哇!!!
+		 * - 还好，只是个顺序锁；
 		 */
 	} while (read_seqretry(&rename_lock, seq));
 	return dentry;

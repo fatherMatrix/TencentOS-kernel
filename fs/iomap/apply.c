@@ -39,9 +39,13 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 
 	/*
 	 * Need to map a range from start position for length bytes. This can
+	 *                                                           ^^^^^^^^
 	 * span multiple pages - it is only guaranteed to return a range of a
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * single type of pages (e.g. all into a hole, all mapped or all
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * unwritten). Failure at this point has nothing to undo.
+	 * ^^^^^^^^^^^
 	 *
 	 * If allocation is required for this range, reserve the space now so
 	 * that the allocation is guaranteed to succeed later on. Once we copy
@@ -79,6 +83,7 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	 * xfs中direct io对应 iomap_dio_actor()
 	 * - 该函数内部调用iomap_dio_bio_actor()，对iomap中的数据创建bio并调用
 	 *   submit_bio()将其提交到块层；
+	 * 对于zero区域对应 iomap_zero_range_actor()
 	 *
 	 * 从这里相对上面xfs_trans_commit()的位置可以得出结论：
 	 * - xfs中的日志仅作用于metadata

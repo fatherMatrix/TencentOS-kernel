@@ -1251,6 +1251,9 @@ static inline int wait_on_page_bit_common(wait_queue_head_t *q,
 	return ret;
 }
 
+/*
+ * 等待这个bit消失
+ */
 void wait_on_page_bit(struct page *page, int bit_nr)
 {
 	wait_queue_head_t *q = page_waitqueue(page);
@@ -3003,10 +3006,17 @@ inline ssize_t generic_write_checks(struct kiocb *iocb, struct iov_iter *from)
 	if (iocb->ki_flags & IOCB_APPEND)
 		iocb->ki_pos = i_size_read(inode);
 
+	/*
+	 * dio肯定是同步io
+	 */
 	if ((iocb->ki_flags & IOCB_NOWAIT) && !(iocb->ki_flags & IOCB_DIRECT))
 		return -EINVAL;
 
 	count = iov_iter_count(from);
+	/*
+	 * 保证iocb->ki_pos + count不会超过最大写文件限制
+	 * - 如果超过了限制，则将count调小；
+	 */
 	ret = generic_write_check_limits(file, iocb->ki_pos, &count);
 	if (ret)
 		return ret;
@@ -3310,6 +3320,9 @@ ssize_t generic_perform_write(struct file *file,
 				struct iov_iter *i, loff_t pos)
 {
 	struct address_space *mapping = file->f_mapping;
+	/*
+	 * ext4的普通情况下是： ext4_aops
+	 */
 	const struct address_space_operations *a_ops = mapping->a_ops;
 	long status = 0;
 	ssize_t written = 0;
@@ -3357,6 +3370,7 @@ again:
 
 		/*
  		 * write_begin方法会为该页分配和初始化缓冲区头部
+ 		 * - ext4_write_begin()
  		 */ 
 		status = a_ops->write_begin(file, mapping, pos, bytes, flags,
 						&page, &fsdata);
@@ -3386,6 +3400,9 @@ again:
 		copied = iov_iter_copy_from_user_atomic(page, i, offset, bytes);
 		flush_dcache_page(page);
 
+		/*
+		 * ext4_write_end()
+		 */
 		status = a_ops->write_end(file, mapping, pos, bytes, copied,
 						page, fsdata);
 		if (unlikely(status < 0))
@@ -3596,6 +3613,9 @@ int try_to_release_page(struct page *page, gfp_t gfp_mask)
 	if (PageWriteback(page))
 		return 0;
 
+	/*
+	 * xfs: xfs_vm_releasepage()
+	 */
 	if (mapping && mapping->a_ops->releasepage)
 		return mapping->a_ops->releasepage(page, gfp_mask);
 	return try_to_free_buffers(page);

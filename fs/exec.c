@@ -1620,6 +1620,12 @@ static void bprm_fill_uid(struct linux_binprm *bprm)
 	 * 处理set-user-id标志：
 	 * - 如果可执行文件有set-user-id标志，那么将inode->uid设置给bprm对应的
 	 *   cred->euid；该cred最后会通过commit_creds()提交给子进程使用；
+	 * - 子进程的cred->uid什么时候改变？
+	 *
+	 * crash实验发现：
+	 * - 对于有set-uid标志的可执行文件，运行起来后：
+	 *   > suid = euid = fs-set-uid；
+	 *   > uid = 运行可执行文件的uid；
 	 */
 	if (mode & S_ISUID) {
 		bprm->per_clear |= PER_CLEAR_ON_SETID;
@@ -1659,7 +1665,7 @@ int prepare_binprm(struct linux_binprm *bprm)
 	/* fill in binprm security blob */
 	/*
 	 * 里面会对file本身附加的capability做处理；
-	 * - 核心函数是cap_bprm_set_creds()
+	 * - 核心函数是 cap_bprm_set_creds()
 	 */
 	retval = security_bprm_set_creds(bprm);
 	if (retval)

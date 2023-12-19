@@ -987,7 +987,9 @@ xfs_ialloc_ag_select(
 
 		/*
 		 * Check that there is enough free space for the file plus a
+		 *                                           ^^^^^^^^^^^^^^^
 		 * chunk of inodes if we need to allocate some. If this is the
+		 * ^^^^^^^^^^^^^^^
 		 * first pass across the AGs, take into account the potential
 		 * space needed for alignment of inode chunks when checking the
 		 * longest contiguous free space in the AG - this prevents us
@@ -1659,7 +1661,9 @@ error_cur:
  * is a directory.
  *
  * This function is designed to be called twice if it has to do an allocation
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * to make more free inodes.  On the first call, *IO_agbp should be set to NULL.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^
  * If an inode is available without having to performn an allocation, an inode
  * number is returned.  In this case, *IO_agbp is set to NULL.  If an allocation
  * needs to be done, xfs_dialloc returns the current AGI buffer in *IO_agbp.

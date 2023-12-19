@@ -2932,12 +2932,19 @@ xfs_bmap_extsize_align(
 	/*
 	 * If this request overlaps an existing extent, then don't
 	 * attempt to perform any additional alignment.
+	 *
+	 * !delay在这里的作用是？
+	 * - 如果delay为1，表示延迟分配，要继续往下走；
 	 */
 	if (!delay && !eof &&
 	    (orig_off >= gotp->br_startoff) &&
 	    (orig_end <= gotp->br_startoff + gotp->br_blockcount)) {
 		return 0;
 	}
+
+	/*
+	 * 为什么延迟分配要走到下面来？
+	 */
 
 	/*
 	 * If the file offset is unaligned vs. the extent size
@@ -4108,8 +4115,8 @@ xfs_bmapi_reserve_delalloc(
 		if (!xfs_iext_peek_prev_extent(ifp, icur, &prev))
 			prev.br_startoff = NULLFILEOFF;
 
-		error = xfs_bmap_extsize_align(mp, got, &prev, extsz, 0, eof,
-					       1, 0, &aoff, &alen);
+		error = xfs_bmap_extsize_align(mp, got, &prev, extsz, 0/* rt */, eof,
+					       1/* delay */, 0/* convert */, &aoff, &alen);
 		ASSERT(!error);
 	}
 

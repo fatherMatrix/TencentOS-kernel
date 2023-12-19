@@ -1304,7 +1304,11 @@ static inline void clone_pgd_range(pgd_t *dst, pgd_t *src, int count)
 #ifdef CONFIG_PAGE_TABLE_ISOLATION
 	if (!static_cpu_has(X86_FEATURE_PTI))
 		return;
-	/* Clone the user space pgd as well */
+	/*
+	 * Clone the user space pgd as well
+	 *
+	 * 这个是内核页表隔离时，拷贝用户态用的那个pgd；
+	 */
 	memcpy(kernel_to_user_pgdp(dst), kernel_to_user_pgdp(src),
 	       count * sizeof(pgd_t));
 #endif

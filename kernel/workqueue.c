@@ -1427,7 +1427,7 @@ static void insert_work(struct pool_workqueue *pwq, struct work_struct *work,
 	/*
 	 * 如果当前pool中没有正在运行的worker，则唤醒；
 	 * 如果有正在运行的worker，则由该worker决定是否需要唤醒更多的worker；
-	 * - 参见process_one_work()
+	 * - 参见 process_one_work()
 	 */
 	if (__need_more_worker(pool))
 		wake_up_worker(pool);

@@ -314,6 +314,8 @@ static int acl_permission_check(struct inode *inode, int mask)
 	if (likely(uid_eq(current_fsuid(), inode->i_uid)))
 		/* 
  		 * 同一个用户，使用User的rwx标志
+ 		 * - 注意，/root目录本身是dr-xr-x---，其对自己home目录的写操作是
+ 		 *   经由后面DAC_OVERRIDE放过的；
  		 */ 
 		mode >>= 6;
 	else {
@@ -1747,6 +1749,10 @@ static struct dentry *__lookup_hash(const struct qstr *name,
 	if (unlikely(!dentry))
 		return ERR_PTR(-ENOMEM);
 
+	/*
+	 * xfs: xfs_vn_lookup()
+	 * - 出来后dentry的lockref没有改变；
+	 */
 	old = dir->i_op->lookup(dir, dentry, flags);
 	if (unlikely(old)) {
 		dput(dentry);
@@ -1811,6 +1817,7 @@ static int lookup_fast(struct nameidata *nd,
 		/*
 		 * seq来源于上面__d_lookup_rcu()中找到该子dentry时刻的dentry->d_seq；
 		 * 此时要检查dentry是否有变化；
+		 * - 之所以这里需要检查，因为要保证获取到的inode是一致的
 		 */
 		if (unlikely(read_seqcount_retry(&dentry->d_seq, seq)))
 			return -ECHILD;
@@ -1823,6 +1830,7 @@ static int lookup_fast(struct nameidata *nd,
 		 *  enough, we can use __read_seqcount_retry here.
 		 *
 		 * 保证在查找子dentry时，父dentry没有发生变化；
+		 * - 这里结束了父dentry的seqlock临界区
 		 */
 		if (unlikely(__read_seqcount_retry(&parent->d_seq, nd->seq)))
 			return -ECHILD;
@@ -2191,6 +2199,8 @@ static int walk_component(struct nameidata *nd, int flags)
  	 * 返回出来
 	 *
 	 * 对于ref-walk，是增加了引用计数的
+	 * 对于rcu-walk，seq返回子dentry查找到时的d_seq或者follow_mount_rcu()中
+	 * 更新的子dentry的d_seq
  	 */ 
 	err = lookup_fast(nd, &path, &inode, &seq);
 	if (unlikely(err <= 0)) {
@@ -4839,6 +4849,9 @@ int vfs_unlink(struct inode *dir, struct dentry *dentry, struct inode **delegate
 	if (!dir->i_op->unlink)
 		return -EPERM;
 
+	/*
+	 * 锁定待删除的inode
+	 */
 	inode_lock(target);
 	if (is_local_mountpoint(dentry))
 		error = -EBUSY;
@@ -4860,11 +4873,18 @@ int vfs_unlink(struct inode *dir, struct dentry *dentry, struct inode **delegate
 		}
 	}
 out:
+	/*
+	 * 解锁待删除的inode
+	 */
 	inode_unlock(target);
 
 	/* We don't d_delete() NFS sillyrenamed files--they still exist. */
 	if (!error && !(dentry->d_flags & DCACHE_NFSFS_RENAMED)) {
 		fsnotify_link_count(target);
+		/*
+		 * 减少dentry对inode的引用计数
+		 * - 只是根据lockref判断要不要操作inode，但并未真正减小dentry自己的引用计数；
+		 */
 		d_delete(dentry);
 	}
 
@@ -4919,6 +4939,7 @@ retry_deleg:
 			goto slashes;
 		/*
 		 * 待删除文件的inode
+		 * - 这里的dentry需要锁互斥访问吗？
 		 */
 		inode = dentry->d_inode;
 		if (d_is_negative(dentry))
@@ -4931,7 +4952,7 @@ retry_deleg:
 		if (error)
 			goto exit2;
 		/*
-		 * unlink，在文件系统中减少inode对应的计数，表示删除此文件；
+		 * unlink，在文件系统中减少inode对应的nlink计数，表示删除此文件；
 		 */
 		error = vfs_unlink(path.dentry->d_inode, dentry, &delegated_inode);
 exit2:
@@ -4940,6 +4961,8 @@ exit2:
 		 * - 进入里面后不考虑释放关联的inode，因为上面的ihold()保
 		 *   证inode的引用计数肯定不为0；
 		 * - 在后面的iput()中对inode做操作；
+		 *
+		 * 这次引用计数的减小对应的是上面__lookup_hash()中增加的引用计数；
 		 */
 		dput(dentry);
 	}

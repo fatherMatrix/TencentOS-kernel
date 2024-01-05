@@ -27,7 +27,8 @@ extern pte_t level1_fixmap_pgt[512 * FIXMAP_PMD_NUM];
 extern pgd_t init_top_pgt[];
 
 /* 
- * init_top_pgt是链接时预留的位置，start_kernel前修正的
+ * init_top_pgt是链接时预留的位置，start_kernel前修正的；
+ * - 参见arch/x86/kernel/head_64.S
  */
 #define swapper_pg_dir init_top_pgt
 

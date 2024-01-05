@@ -1341,6 +1341,9 @@ gfn_to_memslot_dirty_bitmap(struct kvm_vcpu *vcpu, gfn_t gfn,
 {
 	struct kvm_memory_slot *slot;
 
+	/*
+	 * 找到gfn所在的kvm_memory_slot
+	 */
 	slot = kvm_vcpu_gfn_to_memslot(vcpu, gfn);
 	if (!memslot_valid_for_gpte(slot, no_dirty_log))
 		slot = NULL;
@@ -1362,6 +1365,12 @@ static int mapping_level(struct kvm_vcpu *vcpu, gfn_t large_gfn,
 	if (unlikely(*force_pt_level))
 		return PT_PAGE_TABLE_LEVEL;
 
+	/*
+	 * 返回gfn的映射级别：
+	 * - 1: 4K
+	 * - 2: 2M
+	 * - 3: 1G
+	 */
 	host_level = host_mapping_level(vcpu, large_gfn);
 
 	if (host_level == PT_PAGE_TABLE_LEVEL)
@@ -4317,6 +4326,7 @@ static int tdp_page_fault(struct kvm_vcpu *vcpu, gpa_t gpa, u32 error_code,
 	bool force_pt_level;
 	/*
 	 * 获取引起缺页异常的虚拟机GPA对应的gfn；
+	 * - 通过gfn就可以在qemu进程虚地址空间中定位到GPA对应的HVA；
 	 */
 	gfn_t gfn = gpa >> PAGE_SHIFT;
 	unsigned long mmu_seq;
@@ -4330,6 +4340,9 @@ static int tdp_page_fault(struct kvm_vcpu *vcpu, gpa_t gpa, u32 error_code,
 	if (page_fault_handle_page_track(vcpu, error_code, gfn))
 		return RET_PF_EMULATE;
 
+	/*
+	 * 分配缓存池
+	 */
 	r = mmu_topup_memory_caches(vcpu);
 	if (r)
 		return r;
@@ -4337,14 +4350,25 @@ static int tdp_page_fault(struct kvm_vcpu *vcpu, gpa_t gpa, u32 error_code,
 	force_pt_level =
 		lpage_disallowed ||
 		!check_hugepage_cache_consistency(vcpu, gfn, PT_DIRECTORY_LEVEL);
+	/*
+	 * 1: 4K
+	 * 2: 2M
+	 * 3: 1G
+	 */
 	level = mapping_level(vcpu, gfn, &force_pt_level);
 	if (likely(!force_pt_level)) {
 		if (level > PT_DIRECTORY_LEVEL &&
 		    !check_hugepage_cache_consistency(vcpu, gfn, level))
 			level = PT_DIRECTORY_LEVEL;
+		/*
+		 * 如果是大页的话，获取大页的页框号；
+		 */
 		gfn &= ~(KVM_PAGES_PER_HPAGE(level) - 1);
 	}
 
+	/*
+	 * 页存在，仅访问权限位导致的PF才可以通过fast_page_fault()处理；
+	 */
 	if (fast_page_fault(vcpu, gpa, level, error_code))
 		return RET_PF_RETRY;
 
@@ -5623,10 +5647,10 @@ int kvm_mmu_page_fault(struct kvm_vcpu *vcpu, gpa_t cr2_or_gpa, u64 error_code,
 
 	if (r == RET_PF_INVALID) {
 		/*
-		 * 常规情况下，page_fault函数指针指向tdp_page_fault()；
+		 * 常规情况下，page_fault函数指针指向 tdp_page_fault()；
 		 * - 该函数指针的设置在kvm_init_mmu()
 		 *
-		 * 嵌套虚拟化情况下，page_fault函数指针指向ept_page_fault()；
+		 * 嵌套虚拟化情况下，page_fault函数指针指向 ept_page_fault()；
 		 * - ept_page_fault()的定义参见FNAME(page_fult)；
 		 * - 该函数指针的设置在prepare_vmcs02()
 		 *                     -> nested_ept_init_mmu_context()

@@ -2293,6 +2293,9 @@ static void gup_pgd_range(unsigned long addr, unsigned long end,
 	do {
 		pgd_t pgd = READ_ONCE(*pgdp);
 
+		/*
+		 * 这一个pgd覆盖了一段地址，这里得到这个pgd覆盖的结束地址；
+		 */
 		next = pgd_addr_end(addr, end);
 		if (pgd_none(pgd))
 			return;
@@ -2374,7 +2377,13 @@ int __get_user_pages_fast(unsigned long start, int nr_pages, int write,
 	 */
 
 	if (IS_ENABLED(CONFIG_HAVE_FAST_GUP) &&
+		/*
+		 * gup_fast_permitted()保证了start，end都处于用户地址空间；
+		 */
 	    gup_fast_permitted(start, end)) {
+		/*
+		 * 关中断
+		 */
 		local_irq_save(flags);
 		gup_pgd_range(start, end, write ? FOLL_WRITE : 0, pages, &nr);
 		local_irq_restore(flags);

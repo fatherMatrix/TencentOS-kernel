@@ -8393,7 +8393,7 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 		vcpu->arch.switch_db_regs &= ~KVM_DEBUGREG_RELOAD;
 	}
 
-	/* 对应vmx_vcpu_run */
+	/* 对应 vmx_vcpu_run */
 	kvm_x86_ops->run(vcpu);
 
 	/*
@@ -8426,6 +8426,10 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 	vcpu->mode = OUTSIDE_GUEST_MODE;
 	smp_wmb();
 
+	/*
+	 * 中断相关的退出处理，需要在关中断的情况下执行；
+	 * - 后面开中断后还有handle_exit()；
+	 */
 	kvm_x86_ops->handle_exit_irqoff(vcpu);
 
 	/*
@@ -9970,22 +9974,39 @@ int kvm_arch_create_memslot(struct kvm *kvm, struct kvm_memory_slot *slot,
 		lpages = gfn_to_index(slot->base_gfn + npages - 1,
 				      slot->base_gfn, level) + 1;
 
+		/*
+		 * kvcalloc()中做了全0初始化；
+		 */
 		slot->arch.rmap[i] =
 			kvcalloc(lpages, sizeof(*slot->arch.rmap[i]),
 				 GFP_KERNEL_ACCOUNT);
 		if (!slot->arch.rmap[i])
 			goto out_free;
+
+		/*
+		 * i == 0说明是4K页，此时不需要后面的流程；
+		 */
 		if (i == 0)
 			continue;
 
+		/*
+		 * 后面的流程是给大页准备的；
+		 */
 		linfo = kvcalloc(lpages, sizeof(*linfo), GFP_KERNEL_ACCOUNT);
 		if (!linfo)
 			goto out_free;
 
 		slot->arch.lpage_info[i - 1] = linfo;
 
+		/*
+		 * 这个if是看slot->base_pfn（第一个页）是不是和2M对齐或者1G对齐的；
+		 * - 如果不对齐，则if为true，标记disallow_lpage；
+		 */
 		if (slot->base_gfn & (KVM_PAGES_PER_HPAGE(level) - 1))
 			linfo[0].disallow_lpage = 1;
+		/*
+		 * 看slot的最后一个页是不是2M整数倍或者1G整数倍；
+		 */
 		if ((slot->base_gfn + npages) & (KVM_PAGES_PER_HPAGE(level) - 1))
 			linfo[lpages - 1].disallow_lpage = 1;
 		ugfn = slot->userspace_addr >> PAGE_SHIFT;
@@ -9998,6 +10019,9 @@ int kvm_arch_create_memslot(struct kvm *kvm, struct kvm_memory_slot *slot,
 		    !kvm_largepages_enabled()) {
 			unsigned long j;
 
+			/*
+			 * 标记所有的页都不支持大页；
+			 */
 			for (j = 0; j < lpages; ++j)
 				linfo[j].disallow_lpage = 1;
 		}

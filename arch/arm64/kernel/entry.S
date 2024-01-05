@@ -165,6 +165,9 @@ alternative_cb_end
 
 	.if	\el == 0
 	clear_gp_regs
+	/*
+	 * 获取用户态栈顶
+	 */
 	mrs	x21, sp_el0
 	ldr_this_cpu	tsk, __entry_task, x20	// Ensure MDSCR_EL1.SS is clear,
 	ldr	x19, [tsk, #TSK_TI_FLAGS]	// since we can unmask debug
@@ -182,7 +185,13 @@ alternative_cb_end
 	str	x20, [tsk, #TSK_TI_ADDR_LIMIT]
 	/* No need to reset PSTATE.UAO, hardware's already set it to 0 for us */
 	.endif /* \el == 0 */
+	/*
+	 * 获取返回用户态后的指定地址
+	 */
 	mrs	x22, elr_el1
+	/*
+	 * 获取用户态的pstate
+	 */
 	mrs	x23, spsr_el1
 	stp	lr, x21, [sp, #S_LR]
 
@@ -194,6 +203,9 @@ alternative_cb_end
 	.if \el == 0
 	stp	xzr, xzr, [sp, #S_STACKFRAME]
 	.else
+	/*
+	 * x29是frame pointer，x30是link register
+	 */
 	stp	x29, x22, [sp, #S_STACKFRAME]
 	.endif
 	add	x29, sp, #S_STACKFRAME
@@ -394,6 +406,10 @@ alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 	and	x25, x25, #~(THREAD_SIZE - 1)
 	cbnz	x25, 9998f
 
+	/*
+	 * 将percpu变量irq_stack_ptr的地址读入x25
+	 * - x26是过程中要使用的临时变量；
+	 */
 	ldr_this_cpu x25, irq_stack_ptr, x26
 	mov	x26, #IRQ_STACK_SIZE
 	add	x26, x25, x26
@@ -412,7 +428,7 @@ alternative_insn eret, nop, ARM64_UNMAP_KERNEL_AT_EL0
 	.endm
 
 /* GPRs used by entry code */
-tsk	.req	x28		// current thread_info
+tsk	.req	x28		// current thread_info	将x28寄存器用于特定目的
 
 /*
  * Interrupt handling.
@@ -986,6 +1002,11 @@ work_pending:
  * "slow" syscall return path.
  */
 ret_to_user:
+	/*
+	 * 这里又关中断了；
+	 * - arm中，当异常触发后，daif是自动被全部置1（关闭）了的；在el0_svc_handler()
+	 *   中，会开中断；
+	 */
 	disable_daif
 	gic_prio_kentry_setup tmp=x3
 	ldr	x1, [tsk, #TSK_TI_FLAGS]

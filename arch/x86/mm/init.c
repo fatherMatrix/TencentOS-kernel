@@ -677,6 +677,9 @@ void __init init_mem_mapping(void)
 	 * 参见pg_level枚举，每种支持的页框大小都在该变量中置位；
 	 */ 
 	probe_page_size_mask();
+	/*
+	 * 初始化pcid特性
+	 */
 	setup_pcid();
 
 #ifdef CONFIG_X86_64

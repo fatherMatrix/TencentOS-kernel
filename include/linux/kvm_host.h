@@ -361,8 +361,15 @@ struct kvm_memory_slot {
 	unsigned long npages;
 	unsigned long *dirty_bitmap;
 	struct kvm_arch_memory_slot arch;
+	/*
+	 * slot对应的HVA
+	 * - 但这个hva是userspace的地址；有可能是？还是一定是？
+	 */
 	unsigned long userspace_addr;
 	u32 flags;
+	/*
+	 * slot id，对应kvm_memslots->id_to_index
+	 */
 	short id;
 };
 
@@ -460,6 +467,10 @@ static inline int kvm_arch_vcpu_memslots_id(struct kvm_vcpu *vcpu)
  */
 struct kvm_memslots {
 	u64 generation;
+	/*
+	 * 这个数组的排序方式是按照kvm_memory_slot->base_gfn升序排序的；
+	 * - 参见 search_memslots()
+	 */
 	struct kvm_memory_slot memslots[KVM_MEM_SLOTS_NUM];
 	/*
 	 * The mapping table from slot id to the index in memslots[].
@@ -480,6 +491,8 @@ struct kvm {
 	spinlock_t mmu_lock;
 	/*
 	 * slot操作锁
+	 * - 例如：通过ioctl(KVM_SET_USER_MEMORY_REGION)向kvm中注册memory
+	 *   时，会使用此mutex做互斥；
 	 */
 	struct mutex slots_lock;
 	/*
@@ -488,6 +501,8 @@ struct kvm {
 	struct mm_struct *mm; /* userspace tied to this vm */
 	/*
 	 * 该虚拟机所有的内存条
+	 * - memslots数组中每一个元素代表一个address space，对应
+	 *   ioctl(KVM_SET_USER_MEMORY_REGION)中slot字段的高16位；
 	 */
 	struct kvm_memslots __rcu *memslots[KVM_ADDRESS_SPACE_NUM];
 	struct kvm_vcpu *vcpus[KVM_MAX_VCPUS];
@@ -702,6 +717,9 @@ id_to_memslot(struct kvm_memslots *slots, int id)
 
 	slot = &slots->memslots[index];
 
+	/*
+	 * 诶，这里为什么时warn，而不是bug？
+	 */
 	WARN_ON(slot->id != id);
 	return slot;
 }

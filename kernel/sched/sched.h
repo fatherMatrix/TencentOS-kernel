@@ -326,6 +326,9 @@ extern bool dl_cpu_busy(unsigned int cpu);
 struct cfs_rq;
 struct rt_rq;
 
+/*
+ * 链表头，链表元素是task_group->task；
+ */
 extern struct list_head task_groups;
 
 struct cfs_bandwidth {
@@ -351,15 +354,36 @@ struct cfs_bandwidth {
 #endif
 };
 
+/*
+ * 用于实现组调度
+ */
 /* Task group related information */
 struct task_group {
+	/*
+	 * 用于进程找到其所属的进程组结构
+	 */
 	struct cgroup_subsys_state css;
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
-	/* schedulable entities of this group on each CPU */
+	/*
+	 * schedulable entities of this group on each CPU
+	 *
+	 * 这个task_group在每个cpu上的调度实体。
+	 * - alloc_fair_sched_group()中分配内存；
+	 * - 之所以要在每个cpu都准备一个运行实体，是因为一个task_group有可能
+	 *   同时在多个cpu上运行；
+	 */
 	struct sched_entity	**se;
-	/* runqueue "owned" by this group on each CPU */
+	/*
+	 * runqueue "owned" by this group on each CPU
+	 *
+	 * 这个task_group在每个cpu上的调度队列。
+	 * - se就在这个调度队列上；
+	 */
 	struct cfs_rq		**cfs_rq;
+	/*
+	 * 用于保存优先级
+	 */
 	unsigned long		shares;
 
 #ifdef	CONFIG_SMP
@@ -369,8 +393,8 @@ struct task_group {
 	 * will also be accessed at each tick.
 	 */
 	atomic_long_t		load_avg ____cacheline_aligned;
-#endif
-#endif
+#endif // CONFIG_SMP
+#endif // CONFIG_FAIR_GROUP_SCHED
 
 #ifdef CONFIG_RT_GROUP_SCHED
 	struct sched_rt_entity	**rt_se;
@@ -380,8 +404,14 @@ struct task_group {
 #endif
 
 	struct rcu_head		rcu;
+	/*
+	 * 作为链表元素加入全局链表task_groups；
+	 */
 	struct list_head	list;
 
+	/*
+	 * 用于构建tree拓扑关系
+	 */
 	struct task_group	*parent;
 	struct list_head	siblings;
 	struct list_head	children;
@@ -502,6 +532,9 @@ struct cfs_rq {
 	u64			min_vruntime_copy;
 #endif
 
+	/*
+	 * 红黑树的root
+	 */
 	struct rb_root_cached	tasks_timeline;
 
 	/*
@@ -509,6 +542,9 @@ struct cfs_rq {
 	 * It is set to NULL otherwise (i.e when none are currently running).
 	 */
 	struct sched_entity	*curr;
+	/*
+	 * 紧急需要运行的SE，即使违反调度策略，也要提前运行
+	 */
 	struct sched_entity	*next;
 	struct sched_entity	*last;
 	struct sched_entity	*skip;
@@ -891,8 +927,6 @@ struct rq {
 
 	/*
 	 * 不同的调度队列
-	 *
-	 * 进程并不是由
 	 */
 	struct cfs_rq		cfs;
 	struct rt_rq		rt;
@@ -941,6 +975,9 @@ struct rq {
 #endif
 
 #ifdef CONFIG_SMP
+	/*
+	 * 调度域
+	 */
 	struct root_domain		*rd;
 	struct sched_domain __rcu	*sd;
 
@@ -1069,6 +1106,9 @@ static inline void update_idle_core(struct rq *rq)
 static inline void update_idle_core(struct rq *rq) { }
 #endif
 
+/*
+ * 每个cpu一个运行队列
+ */
 DECLARE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 #define cpu_rq(cpu)		(&per_cpu(runqueues, (cpu)))
@@ -1555,6 +1595,10 @@ static inline struct task_group *task_group(struct task_struct *p)
 
 static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
 {
+	/*
+	 * 设置task_struct的调度队列
+	 * - 只是完成了task_struct到rq的单向关联
+	 */
 	set_task_rq(p, cpu);
 #ifdef CONFIG_SMP
 	/*
@@ -1739,17 +1783,36 @@ extern const u32		sched_prio_to_wmult[40];
 #define RETRY_TASK		((void *)-1UL)
 
 struct sched_class {
+	/*
+	 * 下一优先级的调度类
+	 *
+	 * 调度类优先级顺序： stop_sched_class -> dl_sched_class -> rt_sched_class -> fair_sched_class -> idle_sched_class
+	 */
 	const struct sched_class *next;
 
 #ifdef CONFIG_UCLAMP_TASK
 	int uclamp_enabled;
 #endif
 
+	/*
+	 * 将进程加入到运行队列中，即将SE放入红黑树中，并对nr_running变量+1
+	 */
 	void (*enqueue_task) (struct rq *rq, struct task_struct *p, int flags);
+	/*
+	 * 从运行队列中删除SE，并对nr_running变量-1
+	 */
 	void (*dequeue_task) (struct rq *rq, struct task_struct *p, int flags);
+	/*
+	 * 放弃cpu
+	 * - 在compat_yield sysctl关闭的情况下，该函数实际上执行先出队后入队；在这种情况下，
+	 *   se被放在最右边；
+	 */
 	void (*yield_task)   (struct rq *rq);
 	bool (*yield_to_task)(struct rq *rq, struct task_struct *p, bool preempt);
 
+	/*
+	 * 检查当前进程是否可被新进程抢占
+	 */
 	void (*check_preempt_curr)(struct rq *rq, struct task_struct *p, int flags);
 
 	/*
@@ -1762,38 +1825,75 @@ struct sched_class {
 	 *
 	 * In that case (@rf != NULL) it may return RETRY_TASK when it finds a
 	 * higher prio class has runnable tasks.
+	 *
+	 * 选择下一个要运行的进程
 	 */
 	struct task_struct * (*pick_next_task)(struct rq *rq,
 					       struct task_struct *prev,
 					       struct rq_flags *rf);
+	/*
+	 * 将进程放回运行队列
+	 */
 	void (*put_prev_task)(struct rq *rq, struct task_struct *p);
 	void (*set_next_task)(struct rq *rq, struct task_struct *p, bool first);
 
 #ifdef CONFIG_SMP
 	int (*balance)(struct rq *rq, struct task_struct *prev, struct rq_flags *rf);
+	/*
+	 * 为进程选择一个合适的cpu
+	 */
 	int  (*select_task_rq)(struct task_struct *p, int task_cpu, int sd_flag, int flags);
+	/*
+	 * 迁移任务到另一个cpu
+	 */
 	void (*migrate_task_rq)(struct task_struct *p, int new_cpu);
 
+	/*
+	 * 进程唤醒
+	 */
 	void (*task_woken)(struct rq *this_rq, struct task_struct *task);
 
+	/*
+	 * 修改进程的cpu亲和性
+	 */
 	void (*set_cpus_allowed)(struct task_struct *p,
 				 const struct cpumask *newmask);
 
+	/*
+	 * 启动运行队列
+	 */
 	void (*rq_online)(struct rq *rq);
+	/*
+	 * 停止运行队列
+	 */
 	void (*rq_offline)(struct rq *rq);
 #endif
 
+	/*
+	 * 通常调用自time tick函数，它可能引起进程切换
+	 */
 	void (*task_tick)(struct rq *rq, struct task_struct *p, int queued);
+	/*
+	 * 进程创建时调用，不同调度策略的进程初始化不一样
+	 */
 	void (*task_fork)(struct task_struct *p);
+	/*
+	 * 在进程退出时会使用
+	 */
 	void (*task_dead)(struct task_struct *p);
 
 	/*
 	 * The switched_from() call is allowed to drop rq->lock, therefore we
 	 * cannot assume the switched_from/switched_to pair is serliazed by
 	 * rq->lock. They are however serialized by p->pi_lock.
+	 *
+	 * 用于进程切换
 	 */
 	void (*switched_from)(struct rq *this_rq, struct task_struct *task);
 	void (*switched_to)  (struct rq *this_rq, struct task_struct *task);
+	/*
+	 * 改变进程优先级
+	 */
 	void (*prio_changed) (struct rq *this_rq, struct task_struct *task,
 			      int oldprio);
 

@@ -564,7 +564,7 @@ ENTRY(interrupt_entry)
 	/*
 	 * 内核页表隔离（CONFIG_PAGE_TABLE_ISOLATION）相关：
 	 * - 如果没有开启内核页表隔离，这个宏是空的；
-	 * - 如果开启了内核页表格里，这个宏会切换cr3；当前devcloud是开启
+	 * - 如果开启了内核页表隔离，这个宏会切换cr3；当前devcloud是开启
 	 *   了的；
 	 *
 	 * 64位下定义见arch/x86/entry/calling.h

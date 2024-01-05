@@ -1383,6 +1383,9 @@ static inline void enqueue_task(struct rq *rq, struct task_struct *p, int flags)
 	}
 
 	uclamp_rq_inc(rq, p);
+	/*
+	 * 对于cfs，该函数指针为： enqueue_task_fair()
+	 */
 	p->sched_class->enqueue_task(rq, p, flags);
 }
 
@@ -2770,6 +2773,9 @@ int wake_up_state(struct task_struct *p, unsigned int state)
  */
 static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 {
+	/*
+	 * se等内嵌字段在dup_task_struct()中是整体拷贝的，这里仅作部分修改即可；
+	 */
 	p->on_rq			= 0;
 
 	p->se.on_rq			= 0;
@@ -2789,6 +2795,9 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	memset(&p->se.statistics, 0, sizeof(p->se.statistics));
 #endif
 
+	/*
+	 * 重新初始化红黑树节点
+	 */
 	RB_CLEAR_NODE(&p->dl.rb_node);
 	init_dl_task_timer(&p->dl);
 	init_dl_inactive_task_timer(&p->dl);
@@ -2929,6 +2938,9 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 {
 	unsigned long flags;
 
+	/*
+	 * 调度相关参数初始化
+	 */
 	__sched_fork(clone_flags, p);
 	/*
 	 * We mark the process as NEW here. This guarantees that
@@ -2965,7 +2977,13 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 		p->sched_reset_on_fork = 0;
 	}
 
+	/*
+	 * 设置调度类
+	 */
 	if (dl_prio(p->prio))
+		/*
+		 * 这个分支的激活条件是？
+		 */
 		return -EAGAIN;
 	else if (rt_prio(p->prio))
 		p->sched_class = &rt_sched_class;
@@ -2990,6 +3008,10 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	 * 将新创建的进程先放到当前cpu的调度队列上；
 	 */
 	__set_task_cpu(p, smp_processor_id());
+	/*
+	 * 调用具体调度类的task_fork()函数；
+	 * - 对fair_sched_class，该函数为 task_fork_fair()
+	 */
 	if (p->sched_class->task_fork)
 		p->sched_class->task_fork(p);
 	raw_spin_unlock_irqrestore(&p->pi_lock, flags);
@@ -3001,6 +3023,10 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 #if defined(CONFIG_SMP)
 	p->on_cpu = 0;
 #endif
+	/*
+	 * 对于x86，preempt_count是per cpu的，下面的函数为空；
+	 * 对于arm，preempt_count是在每个task的thread_info中的；
+	 */
 	init_task_preempt_count(p);
 #ifdef CONFIG_SMP
 	plist_node_init(&p->pushable_tasks, MAX_PRIO);
@@ -3052,6 +3078,9 @@ void wake_up_new_task(struct task_struct *p)
 	rseq_migrate(p);
 	__set_task_cpu(p, select_task_rq(p, task_cpu(p), SD_BALANCE_FORK, 0));
 #endif
+	/*
+	 * 锁运行队列
+	 */
 	rq = __task_rq_lock(p, &rf);
 	update_rq_clock(rq);
 	post_init_entity_util_avg(p);
@@ -3070,6 +3099,9 @@ void wake_up_new_task(struct task_struct *p)
 		rq_repin_lock(rq, &rf);
 	}
 #endif
+	/*
+	 * 解锁运行队列
+	 */
 	task_rq_unlock(rq, p, &rf);
 }
 
@@ -6686,12 +6718,19 @@ void __init sched_init(void)
 
 	wait_bit_init();
 
+	/*
+	 * 统计总共需要分配多少内存空间
+	 */
 #ifdef CONFIG_FAIR_GROUP_SCHED
 	ptr += 2 * nr_cpu_ids * sizeof(void **);
 #endif
 #ifdef CONFIG_RT_GROUP_SCHED
 	ptr += 2 * nr_cpu_ids * sizeof(void **);
 #endif
+
+	/*
+	 * 分配内存空间
+	 */
 	if (ptr) {
 		ptr = (unsigned long)kzalloc(ptr, GFP_NOWAIT);
 
@@ -6725,6 +6764,10 @@ void __init sched_init(void)
 	init_dl_bandwidth(&def_dl_bandwidth, global_rt_period(), global_rt_runtime());
 
 #ifdef CONFIG_SMP
+	/*
+	 * 初始化默认调度域，调度域包含一个或多个cpu，负载均衡是在调度域内执行的，相互
+	 * 之间隔离；
+	 */
 	init_defrootdomain();
 #endif
 
@@ -6736,12 +6779,18 @@ void __init sched_init(void)
 #ifdef CONFIG_CGROUP_SCHED
 	task_group_cache = KMEM_CACHE(task_group, 0);
 
+	/*
+	 * 将root_task_group加入全局task_groups链表；
+	 */
 	list_add(&root_task_group.list, &task_groups);
 	INIT_LIST_HEAD(&root_task_group.children);
 	INIT_LIST_HEAD(&root_task_group.siblings);
 	autogroup_init(&init_task);
 #endif /* CONFIG_CGROUP_SCHED */
 
+	/*
+	 * 遍历设置每个cpu的运行队列
+	 */
 	for_each_possible_cpu(i) {
 		struct rq *rq;
 
@@ -6800,6 +6849,9 @@ void __init sched_init(void)
 
 		INIT_LIST_HEAD(&rq->cfs_tasks);
 
+		/*
+		 * 将当前cpu的运行队列加入到默认调度域中；
+		 */
 		rq_attach_root(rq, &def_root_domain);
 #ifdef CONFIG_NO_HZ_COMMON
 		rq->last_load_update_tick = jiffies;
@@ -6807,6 +6859,10 @@ void __init sched_init(void)
 		atomic_set(&rq->nohz_flags, 0);
 #endif
 #endif /* CONFIG_SMP */
+		/*
+		 * 初始化运行队列的定时器
+		 * - 这是个高精度定时器
+		 */
 		hrtick_rq_init(rq);
 		atomic_set(&rq->nr_iowait, 0);
 	}

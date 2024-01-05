@@ -80,7 +80,7 @@ static inline enum ctx_state ct_state(void)
 	return context_tracking_is_enabled() ?
 		this_cpu_read(context_tracking.state) : CONTEXT_DISABLED;
 }
-#else
+#else	/* CONTEXT_TRACING */
 static inline void user_enter(void) { }
 static inline void user_exit(void) { }
 static inline void user_enter_irqoff(void) { }

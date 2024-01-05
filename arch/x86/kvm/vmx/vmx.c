@@ -5258,6 +5258,7 @@ static int handle_ept_violation(struct kvm_vcpu *vcpu)
 	/*
 	 * exit qualification字段的具体含义要结合退出原因做解释；
 	 * - 退出原因由exit reason表示；
+	 *   > 退出原因在vmx_vcpu_run()中获取；
 	 */
 	exit_qualification = vmcs_readl(EXIT_QUALIFICATION);
 

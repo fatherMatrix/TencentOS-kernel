@@ -255,6 +255,12 @@ alternative_endif
 	.macro ldr_this_cpu dst, sym, tmp
 	adr_l	\dst, \sym
 alternative_if_not ARM64_HAS_VIRT_HOST_EXTN
+	/*
+	 * 这个寄存器就相当于x86中的gs，用于表示本cpu上.data..percpu段的起始
+	 * 地址；
+	 * - percpu变量在编译时被处理成了从0开始逐渐递增的，即percpu的地址编译
+	 *   出来后的地址就是其在.data..percpu段的偏移；
+	 */
 	mrs	\tmp, tpidr_el1
 alternative_else
 	mrs	\tmp, tpidr_el2

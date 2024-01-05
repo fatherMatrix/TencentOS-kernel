@@ -1050,11 +1050,13 @@ int __kvm_set_memory_region(struct kvm *kvm,
 		goto out;
 
 	/*
-	 * 根据id从kvm->memslots中获取相对应的kvm_mem_slot
+	 * 先根据as_id从kvm->memslots数组中选出相对应的kvm_memslots；
+	 * 再根据id从kvm_memslots->memslots数组中选出相对应的kvm_memory_slot；
 	 */
 	slot = id_to_memslot(__kvm_memslots(kvm, as_id), id);
 	/*
 	 * 转换以page为单位
+	 * - 这里时guest pageframe number
 	 */
 	base_gfn = mem->guest_phys_addr >> PAGE_SHIFT;
 	npages = mem->memory_size >> PAGE_SHIFT;
@@ -1064,6 +1066,10 @@ int __kvm_set_memory_region(struct kvm *kvm,
 
 	new = old = *slot;
 
+	/*
+	 * 诶，这个id还可能不同吗？
+	 * - 参见id_to_memslot()中的WARN_ON()；
+	 */
 	new.id = id;
 	new.base_gfn = base_gfn;
 	new.npages = npages;
@@ -1124,6 +1130,7 @@ int __kvm_set_memory_region(struct kvm *kvm,
 
 	r = -ENOMEM;
 	if (change == KVM_MR_CREATE) {
+		/* 创建操作不存在冲突，执行创建动作；*/
 		new.userspace_addr = mem->userspace_addr;
 
 		if (kvm_arch_create_memslot(kvm, &new, npages))
@@ -1138,6 +1145,7 @@ int __kvm_set_memory_region(struct kvm *kvm,
 
 	/*
 	 * 这里使用的是RCU机制，所以需要拷贝一份新的；
+	 * - 要注意，这里拷贝的竟然是kvm_memslots，而不是kvm_memory_slot；
 	 */
 	slots = kvzalloc(sizeof(struct kvm_memslots), GFP_KERNEL_ACCOUNT);
 	if (!slots)
@@ -1145,12 +1153,16 @@ int __kvm_set_memory_region(struct kvm *kvm,
 	memcpy(slots, __kvm_memslots(kvm, as_id), sizeof(struct kvm_memslots));
 
 	if ((change == KVM_MR_DELETE) || (change == KVM_MR_MOVE)) {
+		/*
+		 * 将我们的目标kvm_memory_slot在复制的kvm_memslots中标记为INVALID
+		 */
 		slot = id_to_memslot(slots, id);
 		slot->flags |= KVM_MEMSLOT_INVALID;
 
 		/*
-		 * 更新kvm->memslots的结构，该函数的主要作用是将
-		 * kvm->memslots[as_id]指针通过RCU机制替换成刚刚分配的slots
+		 * 更新kvm->memslots的结构，该函数的主要作用是:
+		 * - 将kvm->memslots[as_id]指针通过RCU机制替换成刚刚分配的slots
+		 * - 更新kvm_memslots->generation
 		 */
 		old_memslots = install_new_memslots(kvm, as_id, slots);
 
@@ -1160,6 +1172,8 @@ int __kvm_set_memory_region(struct kvm *kvm,
 		 * validation of sp->gfn happens in:
 		 *	- gfn_to_hva (kvm_read_guest, gfn_to_pfn)
 		 *	- kvm_is_visible_gfn (mmu_check_roots)
+		 *
+		 * 调用kvm->arch.track_notifier_head上的回调函数；
 		 */
 		kvm_arch_flush_shadow_memslot(kvm, slot);
 
@@ -1172,7 +1186,7 @@ int __kvm_set_memory_region(struct kvm *kvm,
 	}
 
 	/*
-	 * 处理好反向映射？
+	 * 如果是MOVE操作，在这里创建目标kvm_memory_slot
 	 */
 	r = kvm_arch_prepare_memory_region(kvm, &new, mem, change);
 	if (r)
@@ -1184,7 +1198,15 @@ int __kvm_set_memory_region(struct kvm *kvm,
 		memset(&new.arch, 0, sizeof(new.arch));
 	}
 
+	/*
+	 * 将kvm_memory_slot new放入kvm_memslots slots中的数组中；
+	 * - 这个数组的排序方式还没看明白；
+	 */
 	update_memslots(slots, &new, change);
+	/*
+	 * 更新指向kvm_memslots的指针
+	 * - rcu的更新方式；
+	 */
 	old_memslots = install_new_memslots(kvm, as_id, slots);
 
 	/*
@@ -1467,15 +1489,25 @@ unsigned long kvm_host_page_size(struct kvm_vcpu *vcpu, gfn_t gfn)
 
 	size = PAGE_SIZE;
 
+	/*
+	 * 获取到gfn/GPA对应的HVA
+	 */
 	addr = kvm_vcpu_gfn_to_hva_prot(vcpu, gfn, NULL);
 	if (kvm_is_error_hva(addr))
 		return PAGE_SIZE;
 
 	down_read(&current->mm->mmap_sem);
+	/*
+	 * 找到HVA所在的vma
+	 */
 	vma = find_vma(current->mm, addr);
 	if (!vma)
 		goto out;
 
+	/*
+	 * vma->ops->page_size()回调函数负责告诉我们这个vma的page size是多少；
+	 * - hugetlbfs
+	 */
 	size = vma_kernel_pagesize(vma);
 
 out:
@@ -1726,6 +1758,9 @@ out:
 static kvm_pfn_t hva_to_pfn(unsigned long addr, bool atomic, bool *async,
 			bool write_fault, bool *writable)
 {
+	/*
+	 * addr是HVA
+	 */
 	struct vm_area_struct *vma;
 	kvm_pfn_t pfn = 0;
 	int npages, r;
@@ -1775,6 +1810,9 @@ kvm_pfn_t __gfn_to_pfn_memslot(struct kvm_memory_slot *slot, gfn_t gfn,
 			       bool atomic, bool *async, bool write_fault,
 			       bool *writable)
 {
+	/*
+	 * 得到hva
+	 */
 	unsigned long addr = __gfn_to_hva_many(slot, gfn, NULL, write_fault);
 
 	if (addr == KVM_HVA_ERR_RO_BAD) {

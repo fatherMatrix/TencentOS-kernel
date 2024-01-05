@@ -5272,9 +5272,18 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	if (p->in_iowait)
 		cpufreq_update_util(rq, SCHED_CPUFREQ_IOWAIT);
 
+	/*
+	 * 向上迭代
+	 */
 	for_each_sched_entity(se) {
+		/*
+		 * 如果调教为真，说明se已经在cfs红黑树了，则跳过
+		 */
 		if (se->on_rq)
 			break;
+		/*
+		 * 获取se所处的cfs_rq
+		 */
 		cfs_rq = cfs_rq_of(se);
 		enqueue_entity(cfs_rq, se, flags);
 
@@ -10063,21 +10072,40 @@ static void task_tick_fair(struct rq *rq, struct task_struct *curr, int queued)
 /*
  * called on fork with the child task as argument from the parent's context
  *  - child not yet on the tasklist
- *  - preemption disabled
+ *  - preemption disabled：关闭抢占后，即使开启了内核抢占，在中断返回后也不会发生调度；
  */
 static void task_fork_fair(struct task_struct *p)
 {
 	struct cfs_rq *cfs_rq;
 	struct sched_entity *se = &p->se, *curr;
+	/*
+	 * 本cpu的rq
+	 */
 	struct rq *rq = this_rq();
 	struct rq_flags rf;
 
 	rq_lock(rq, &rf);
+	/*
+	 * 更新rq运行时间
+	 */
 	update_rq_clock(rq);
 
+	/*
+	 * 获取父进程当前所处的cfs_rq
+	 */
 	cfs_rq = task_cfs_rq(current);
+	/*
+	 * 父进程当前所处的cfs_rq当前正在运行的se
+	 * - 这不肯定是父进程current吗？
+	 */
 	curr = cfs_rq->curr;
+	/*
+	 * 这里还有可能为NULL？
+	 */
 	if (curr) {
+		/*
+		 * 更新当前进程运行时间
+		 */
 		update_curr(cfs_rq);
 		se->vruntime = curr->vruntime;
 	}
@@ -10348,6 +10376,10 @@ int alloc_fair_sched_group(struct task_group *tg, struct task_group *parent)
 	struct cfs_rq *cfs_rq;
 	int i;
 
+	/*
+	 * 一个task_group有可能在多个cpu上运行，所以需要多个rq和se；
+	 * - 这里仅分配了指针数组的内存；
+	 */
 	tg->cfs_rq = kcalloc(nr_cpu_ids, sizeof(cfs_rq), GFP_KERNEL);
 	if (!tg->cfs_rq)
 		goto err;

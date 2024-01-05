@@ -111,12 +111,24 @@ enum {
 };
 #define KVM_NR_PAGE_SIZES	(PT_MAX_HUGEPAGE_LEVEL - \
 				 PT_PAGE_TABLE_LEVEL + 1)
+/*
+ * 9表示啥？
+ * - 1G中有2 ** 9个2M；
+ * - 2M中有2 ** 9个4K；
+ */
 #define KVM_HPAGE_GFN_SHIFT(x)	(((x) - 1) * 9)
 #define KVM_HPAGE_SHIFT(x)	(PAGE_SHIFT + KVM_HPAGE_GFN_SHIFT(x))
 #define KVM_HPAGE_SIZE(x)	(1UL << KVM_HPAGE_SHIFT(x))
 #define KVM_HPAGE_MASK(x)	(~(KVM_HPAGE_SIZE(x) - 1))
 #define KVM_PAGES_PER_HPAGE(x)	(KVM_HPAGE_SIZE(x) / PAGE_SIZE)
 
+/*
+ * 这个函数的用处是计算gfn是base_gfn开始的地址中的第几个页；
+ * - 页的大小以level来指定：
+ *   > 1: 4K页
+ *   > 2: 2M页
+ *   > 3: 1G页
+ */
 static inline gfn_t gfn_to_index(gfn_t gfn, gfn_t base_gfn, int level)
 {
 	/* KVM_HPAGE_GFN_SHIFT(PT_PAGE_TABLE_LEVEL) must be 0. */
@@ -306,6 +318,9 @@ union kvm_mmu_role {
 };
 
 struct kvm_rmap_head {
+	/*
+	 * 关于pte_list_desc的单链表？
+	 */
 	unsigned long val;
 };
 
@@ -844,14 +859,16 @@ struct kvm_lpage_info {
 struct kvm_arch_memory_slot {
 	/*
 	 * 保存的是gfn与其对应页表项的rmap，KVM_NR_PAGE_SIZES表示页表项的种类，
-	 * 目前为3，分别表示4KB、2MB和1GB页面
+	 * 目前为3，分别表示4KB、2MB和1GB页面;
+	 * - 这个数组的每个元素都是一个数组！
 	 *
 	 * ??? 通过这个，可以唯一定位到page ???
 	 */
 	struct kvm_rmap_head *rmap[KVM_NR_PAGE_SIZES];
 	/*
 	 * 2MB和1GB页面称为大页，lpage_info保存的是大页的信息，所以lpage_info的
-	 * 元素个数比rmap元素个数少1（少了4KB的页信息）
+	 * 元素个数比rmap元素个数少1（少了4KB的页信息）；
+	 * - 这个数组的每个元素都是一个数组！
 	 */
 	struct kvm_lpage_info *lpage_info[KVM_NR_PAGE_SIZES - 1];
 	unsigned short *gfn_track[KVM_PAGE_TRACK_MAX];

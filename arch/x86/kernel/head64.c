@@ -340,6 +340,9 @@ static void __init reset_early_page_tables(void)
 {
 	memset(early_top_pgt, 0, sizeof(pgd_t)*(PTRS_PER_PGD-1));
 	next_early_pgt = 0;
+	/*
+	 * 这里对cr3的写应该是要flush tlb和page entry cache？
+	 */
 	write_cr3(__sme_pa_nodebug(early_top_pgt));
 }
 

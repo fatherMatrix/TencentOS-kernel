@@ -450,32 +450,77 @@ struct sched_statistics {
 #endif
 };
 
+/*
+ * 一个调度实体，包含一组或一个指定的进程
+ */
 struct sched_entity {
 	/* For load-balancing: */
+	/*
+	 * 在 prio_to_weight[] 中包含优先级转换权重的数值?
+	 */
 	struct load_weight		load;
 	unsigned long			runnable_weight;
 	/*
 	 * 标准的树节点，用于在红黑树上排序
 	 */
 	struct rb_node			run_node;
+	/*
+	 * 进程所在的task_group
+	 */
 	struct list_head		group_node;
+	/*
+	 * 实体是否处于红黑树运行队列中
+	 */
 	unsigned int			on_rq;
 
+	/*
+	 * 开始运行时间
+	 */
 	u64				exec_start;
+	/*
+	 * 总运行时间
+	 */
 	u64				sum_exec_runtime;
+	/*
+	 * 虚拟运行时间
+	 */
 	u64				vruntime;
+	/*
+	 * 进程在切换进cpu时的sum_exec_runtime值
+	 */
 	u64				prev_sum_exec_runtime;
 
+	/*
+	 * 此调度实体中进程迁移到其他CPU组的数量
+	 */
 	u64				nr_migrations;
 
 	struct sched_statistics		statistics;
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
+	/*
+	 * task_group的深度，每个task_group的depth都比其parent的大1
+	 */
 	int				depth;
+	/*
+	 * 父se：
+	 * - 如果是进程则指向其运行队列的se；
+	 * - 如果是task_group则指向上一个task_group的se；
+	 */
 	struct sched_entity		*parent;
-	/* rq on which this entity is (to be) queued: */
+	/*
+	 * rq on which this entity is (to be) queued:
+	 *
+	 * se所处红黑树运行队列；
+	 */
 	struct cfs_rq			*cfs_rq;
-	/* rq "owned" by this entity/group: */
+	/*
+	 * rq "owned" by this entity/group:
+	 *
+	 * se自己的红黑树运行队列
+	 * - 本字段为NULL，表明是一个进程
+	 * - 本字段不为NULL，表明是task_group
+	 */
 	struct cfs_rq			*my_q;
 #endif
 
@@ -697,10 +742,22 @@ struct task_struct {
 	int				normal_prio;
 	unsigned int			rt_priority;
 
+	/*
+	 * 调度类
+	 */
 	const struct sched_class	*sched_class;
+	/*
+	 * 调度实体，cfs？
+	 */
 	struct sched_entity		se;
+	/*
+	 * 调度实体，rt？
+	 */
 	struct sched_rt_entity		rt;
 #ifdef CONFIG_CGROUP_SCHED
+	/*
+	 * 指向进程所属的task_group
+	 */
 	struct task_group		*sched_task_group;
 #endif
 	struct sched_dl_entity		dl;

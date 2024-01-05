@@ -685,6 +685,8 @@ asmlinkage __visible void __init start_kernel(void)
 	 * Set up the scheduler prior starting any interrupts (such as the
 	 * timer interrupt). Full topology setup happens at smp_init()
 	 * time - but meanwhile we still have a functioning scheduler.
+	 *
+	 * 初始化调度子系统
 	 */
 	sched_init();
 	/*

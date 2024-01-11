@@ -1910,6 +1910,7 @@ xfs_btree_lookup(
 	/* initialise start pointer from cursor */
 	/*
 	 * 对于refcount btree，这里是： xfs_refcountbt_ops
+	 * 对于ino btee，这里是： xfs_inobt_ops -- xfs_inobt_init_ptr_from_cur()
 	 */
 	cur->bc_ops->init_ptr_from_cur(cur, &ptr);
 	pp = &ptr;
@@ -1925,7 +1926,12 @@ xfs_btree_lookup(
 	 *   > 哦，nlevels表示的是有几个层级，然而leaf的层级是0不是1；
 	 */
 	for (level = cur->bc_nlevels - 1, diff = 1; level >= 0; level--) {
-		/* Get the block we need to do the lookup on. */
+		/*
+		 * Get the block we need to do the lookup on.
+		 *
+		 * 读盘，将btree的一个节点（block）读上来，放到xfs_btree_cur->bc_bufs[level]
+		 * 中，并在block中返回；
+		 */
 		error = xfs_btree_lookup_get_block(cur, level, pp, &block);
 		if (error)
 			goto error0;
@@ -2311,6 +2317,9 @@ xfs_btree_update(
 
 	/* Fill in the new contents and log them. */
 	xfs_btree_copy_recs(cur, rp, rec, 1);
+	/*
+	 * 将修改log到xfs_trans中
+	 */
 	xfs_btree_log_recs(cur, bp, ptr, ptr);
 
 	/*
@@ -4263,6 +4272,9 @@ error0:
 
 /*
  * Get the data from the pointed-to record.
+ *
+ * 从xfs_btree_cur转换为xfs_btree_rec
+ * - 这里转换的重点是从xfs_btree_cur指向的block中取出我们需要的一个record；
  */
 int					/* error */
 xfs_btree_get_rec(
@@ -4277,6 +4289,9 @@ xfs_btree_get_rec(
 	int			error;	/* error return value */
 #endif
 
+	/*
+	 * xfs的btree中，level 0表示的是叶子节点
+	 */
 	ptr = cur->bc_ptrs[0];
 	block = xfs_btree_get_block(cur, 0, &bp);
 

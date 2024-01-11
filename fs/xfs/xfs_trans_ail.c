@@ -371,6 +371,9 @@ xfsaild_push_item(
 	 */
 	if (!lip->li_ops->iop_push)
 		return XFS_ITEM_PINNED;
+	/*
+	 * inode: xfs_
+	 */
 	return lip->li_ops->iop_push(lip, &ailp->ail_buf_list);
 }
 

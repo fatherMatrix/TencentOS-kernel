@@ -43,6 +43,7 @@ struct xfs_buf_log_item {
 	/*
 	 * 这个xfs_buf_log_item实际对应的xfs_buf；
 	 * xfs_buf中指向了包含磁盘数据的内存地址；
+	 * xfs_buf->b_log_item就指向本结构体；
 	 */
 	struct xfs_buf		*bli_buf;	/* real buffer pointer */
 	unsigned int		bli_flags;	/* misc flags */

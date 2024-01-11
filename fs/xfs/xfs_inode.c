@@ -779,8 +779,21 @@ xfs_ialloc(
 	 */
 	error = xfs_dialloc(tp, pip ? pip->i_ino : 0, mode,
 			    ialloc_context, &ino);
+	/*
+	 * 如果分配失败了，返回值非0；
+	 * - 如果分配失败的原因时-ENOSPC，则xfs_dialloc()也会返回0，
+	 *   但ino此时等于NULLFSINO，在下面的if中处理；
+	 */
 	if (error)
 		return error;
+	/*
+	 * error == 0时，有两种情况：
+	 * - 分配成功，此时*ialloc_context == NULL，且ino中保存分配到的ino；该
+	 *   事实导致跳过下面的if语句继续执行；
+	 * - 分配不成功，有如下两种表现（两种表现都会进入if语句导致本函数退出）：
+	 *   > 内存不足，此时ino == NULLFSINO
+	 *   > 触发了AGI的批量分配，此时*ialloc_context != NULL
+	 */
 	if (*ialloc_context || ino == NULLFSINO) {
 		*ipp = NULL;
 		return 0;
@@ -803,6 +816,9 @@ xfs_ialloc(
 	 * Get the in-core inode with the lock held exclusively.
 	 * This is because we're setting fields here we need
 	 * to prevent others from looking at until we're done.
+	 *
+	 * 获取一个vfs inode/xfs_inode
+	 * - 对应的xfs_dinode此时已经在盘上分配好了
 	 */
 	error = xfs_iget(mp, tp, ino, XFS_IGET_CREATE,
 			 XFS_ILOCK_EXCL, &ip);
@@ -957,11 +973,18 @@ xfs_ialloc(
 
 	/*
 	 * Log the new values stuffed into the inode.
+	 *
+	 * 把xfs_dinode的新改动记录到xfs_trans中；
 	 */
 	xfs_trans_ijoin(tp, ip, XFS_ILOCK_EXCL);
 	xfs_trans_log_inode(tp, ip, flags);
 
-	/* now that we have an i_mode we can setup the inode structure */
+	/*
+	 * now that we have an i_mode we can setup the inode structure
+	 *
+	 * 这里设置的都是vfs inode了，不涉及xfs_dinode的改变，所以可以放在
+	 * log inode动作之后；
+	 */
 	xfs_setup_inode(ip);
 
 	*ipp = ip;
@@ -985,7 +1008,7 @@ xfs_dir_ialloc(
 	xfs_inode_t	*dp,		/* directory within whose allocate
 					   the inode. */
 	umode_t		mode,
-	xfs_nlink_t	nlink,
+	xfs_nlink_t	nlink,		/* 对于regular file是1，对于dir是2 */
 	dev_t		rdev,
 	prid_t		prid,		/* project id */
 	xfs_inode_t	**ipp)		/* pointer to inode; it will be
@@ -1006,8 +1029,11 @@ xfs_dir_ialloc(
 	 * the Space Manager has an available inode on the free
 	 * list. Otherwise, it will do an allocation and replenish
 	 * the freelist.  Since we can only do one allocation per
+	 *                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * transaction without deadlocks, we will need to commit the
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * current transaction and start a new one.  We will then
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * need to call xfs_ialloc again to get the inode.
 	 *
 	 * If xfs_ialloc did an allocation to replenish the freelist,
@@ -1037,7 +1063,9 @@ xfs_dir_ialloc(
 	 * If the AGI buffer is non-NULL, then we were unable to get an
 	 * inode in one operation.  We need to commit the current
 	 * transaction and call xfs_ialloc() again.  It is guaranteed
+	 *                                           ^^^^^^^^^^^^^^^^
 	 * to succeed the second time.
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 */
 	if (ialloc_context) {
 		/*
@@ -1170,6 +1198,9 @@ xfs_create(
 	if (XFS_FORCED_SHUTDOWN(mp))
 		return -EIO;
 
+	/*
+	 * project id是用来干什么的？
+	 */
 	prid = xfs_get_initial_prid(dp);
 
 	/*
@@ -1259,6 +1290,11 @@ xfs_create(
 	 * If this is a synchronous mount, make sure that the
 	 * create transaction goes to disk before returning to
 	 * the user.
+	 *
+	 * 对了，文件系统没有必要保证所有的元数据修改都在返回用户态之前在磁盘
+	 * 上持久化。这个工作是需要用户态调用fsync()/fsyncdata()保证的；
+	 *
+	 * 所以，只有在必要的情况下，xfs_trans才会被设置为同步事务；
 	 */
 	if (mp->m_flags & (XFS_MOUNT_WSYNC|XFS_MOUNT_DIRSYNC))
 		xfs_trans_set_sync(tp);
@@ -1270,6 +1306,9 @@ xfs_create(
 	 */
 	xfs_qm_vop_create_dqattach(tp, ip, udqp, gdqp, pdqp);
 
+	/*
+	 * 在这里才提交
+	 */
 	error = xfs_trans_commit(tp);
 	if (error)
 		goto out_release_inode;

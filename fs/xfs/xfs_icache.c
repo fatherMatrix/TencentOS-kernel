@@ -544,6 +544,10 @@ xfs_iget_cache_miss(
 	if (!ip)
 		return -ENOMEM;
 
+	/*
+	 * disk上新分配的inode是否已经初始化了？（magic number等）
+	 * - 初始化了，参见： xfs_ialloc_inode_init()
+	 */
 	error = xfs_iread(mp, tp, ip, flags);
 	if (error)
 		goto out_destroy;

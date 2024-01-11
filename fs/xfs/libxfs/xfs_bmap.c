@@ -1190,6 +1190,8 @@ xfs_iread_extents(
 	/*
 	 * Root level must use BMAP_BROOT_PTR_ADDR macro to get ptr out.
 	 * - 诶，如果我这棵树就一个叶子结点怎么办？
+	 *
+	 * xfs_ifork->if_broot不会为NULL吗？
 	 */
 	level = be16_to_cpu(block->bb_level);
 	if (unlikely(level == 0)) {

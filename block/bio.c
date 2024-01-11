@@ -394,7 +394,7 @@ static void punt_bios_to_rescuer(struct bio_set *bs)
 /**
  * bio_alloc_bioset - allocate a bio for I/O
  * @gfp_mask:   the GFP_* mask given to the slab allocator
- * @nr_iovecs:	number of iovecs to pre-allocate
+ * @nr_iovecs:	number of iovecs to pre-allocate -- bio尾部bio_vec数组的长度
  * @bs:		the bio_set to allocate from.
  *
  * Description:
@@ -444,6 +444,9 @@ struct bio *bio_alloc_bioset(gfp_t gfp_mask, unsigned int nr_iovecs,
 			    nr_iovecs * sizeof(struct bio_vec),
 			    gfp_mask);
 		front_pad = 0;
+		/*
+		 * bio尾部bio_vec的长度
+		 */
 		inline_vecs = nr_iovecs;
 	} else {
 		/* should not use nobvec bioset for nr_iovecs > 0 */
@@ -494,6 +497,9 @@ struct bio *bio_alloc_bioset(gfp_t gfp_mask, unsigned int nr_iovecs,
 	bio = p + front_pad;
 	bio_init(bio, NULL, 0);
 
+	/*
+	 * 内联bio_vec数组放不够用
+	 */
 	if (nr_iovecs > inline_vecs) {
 		unsigned long idx = 0;
 
@@ -514,6 +520,9 @@ struct bio *bio_alloc_bioset(gfp_t gfp_mask, unsigned int nr_iovecs,
 
 	bio->bi_pool = bs;
 	bio->bi_max_vecs = nr_iovecs;
+	/*
+	 * 要么指向内联尾部数组，要么指向分配的数组；
+	 */
 	bio->bi_io_vec = bvl;
 	return bio;
 
@@ -687,14 +696,35 @@ static inline bool page_is_mergeable(const struct bio_vec *bv,
 	phys_addr_t vec_end_addr = page_to_phys(bv->bv_page) + bv_end - 1;
 	phys_addr_t page_addr = page_to_phys(page);
 
+	/*
+	 * 物理地址要紧邻
+	 * - 之所以要求物理地址，因为xfs_buf中关联的page有可能是vmalloc()或者
+	 *   vb_alloc()分配的；
+	 */
 	if (vec_end_addr + 1 != page_addr + off)
 		return false;
 	if (xen_domain() && !xen_biovec_phys_mergeable(bv, page))
 		return false;
 
+	/*
+	 * same_page关注的问题是在尾部新加的内容是不是全部处于现有的最后一个
+	 * page中（因为有可能有跨页或者最后一个现有尾页全满的情况；
+	 */
 	*same_page = ((vec_end_addr & PAGE_MASK) == page_addr);
 	if (*same_page)
 		return true;
+
+	/*
+	 * 走到这里，说明：
+	 * 1. 物理地址紧邻满足；
+	 * 2. 不在同一个page上；
+	 */
+
+	/*
+	 * 上面都是bio_vec仅包含一个page的情况，这里似乎是在说bio_vec有可能会
+	 * 包含多个page？
+	 * - bv_end / PAGE_SIZE表示bv_page指向的数据占了几个page；
+	 */
 	return (bv->bv_page + bv_end / PAGE_SIZE) == (page + off / PAGE_SIZE);
 }
 
@@ -790,8 +820,11 @@ EXPORT_SYMBOL(bio_add_pc_page);
  * @same_page: return if the segment has been merged inside the same page
  *
  * Try to add the data at @page + @off to the last bvec of @bio.  This is a
+ *                                                                ^^^^^^^^^
  * a useful optimisation for file systems with a block size smaller than the
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * page size.
+ * ^^^^^^^^^^
  *
  * Warn if (@len, @off) crosses pages in case that @same_page is true.
  *
@@ -804,8 +837,14 @@ bool __bio_try_merge_page(struct bio *bio, struct page *page,
 		return false;
 
 	if (bio->bi_vcnt > 0) {
+		/*
+		 * 这里仅对bio中的最后一个bio_vec做合并尝试
+		 */
 		struct bio_vec *bv = &bio->bi_io_vec[bio->bi_vcnt - 1];
 
+		/*
+		 * 合并成功返回true
+		 */
 		if (page_is_mergeable(bv, page, len, off, same_page)) {
 			if (bio->bi_iter.bi_size > UINT_MAX - len) {
 				*same_page = false;
@@ -865,7 +904,13 @@ int bio_add_page(struct bio *bio, struct page *page,
 {
 	bool same_page = false;
 
+	/*
+	 * 合并成功返回true
+	 */
 	if (!__bio_try_merge_page(bio, page, len, offset, &same_page)) {
+		/*
+		 * 走到这里，说明合并不成功；下一步要增加新的bio_vec；
+		 */
 		if (bio_full(bio, len))
 			return 0;
 		__bio_add_page(bio, page, len, offset);

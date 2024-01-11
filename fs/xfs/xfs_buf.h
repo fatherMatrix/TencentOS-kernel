@@ -102,11 +102,19 @@ typedef void (*xfs_buf_iodone_t)(struct xfs_buf *);
 
 #define XB_PAGES	2
 
+/*
+ * 一个xfs_buf_map可否覆盖多个page呢？
+ * - 目前看似乎是可以的，参见 xfs_buf_ioapply_map() 中的相关注释；
+ */
 struct xfs_buf_map {
 	/*
 	 * 注意这里表示的都是basic block number
 	 */
 	xfs_daddr_t		bm_bn;	/* block number for I/O */
+	/*
+	 * 这里的单位是basic block
+	 * - 参见 xfs_buf_read()
+	 */
 	int			bm_len;	/* size of I/O */
 };
 
@@ -132,12 +140,25 @@ typedef struct xfs_buf {
 	 * which is the only bit that is touched if we hit the semaphore
 	 * fast-path on locking.
 	 */
+	/*
+	 * 将xfs_buf放入perag的哈希表中；
+	 * - xfs_perag->pag_buf_hash
+	 */
 	struct rhash_head	b_rhash_head;	/* pag buffer hash node */
+	/*
+	 * 这里是basic block number
+	 */
 	xfs_daddr_t		b_bn;		/* block number of buffer */
+	/*
+	 * 单位是basic block个数
+	 */
 	int			b_length;	/* size of buffer in BBs */
 	atomic_t		b_hold;		/* reference count */
 	atomic_t		b_lru_ref;	/* lru reclaim ref count */
 	xfs_buf_flags_t		b_flags;	/* status flags */
+	/*
+	 * xfs_buf_lock()/xfs_buf_unlock()相关
+	 */
 	struct semaphore	b_sema;		/* semaphore for lockables */
 
 	/*
@@ -149,6 +170,10 @@ typedef struct xfs_buf {
 	unsigned int		b_state;	/* internal state flags */
 	int			b_io_error;	/* internal IO error state */
 	wait_queue_head_t	b_waiters;	/* unpin waiters */
+	/*
+	 * 在xfsaild()阶段作为链表元素加入xfs_ail->ail_buf_list链表，等待异步回写
+	 * 到磁盘上；
+	 */
 	struct list_head	b_list;
 	struct xfs_perag	*b_pag;		/* contains rbtree root */
 	struct xfs_mount	*b_mount;
@@ -157,12 +182,38 @@ typedef struct xfs_buf {
 	struct work_struct	b_ioend_work;
 	xfs_buf_iodone_t	b_iodone;	/* I/O completion function */
 	struct completion	b_iowait;	/* queue for I/O waiters */
+	/*
+	 * xfs_buf所属的xfs_buf_log_item
+	 * - xfs_buf_log_item->bli_buf即指向本结构体；
+	 */
 	struct xfs_buf_log_item	*b_log_item;
+	/*
+	 * 链表头，链表元素是xfs_log_item->li_bio_list
+	 * - 当本xfs_buf的io操作完成后，调用该链表上的回调
+	 * - 参见： xfs_buf_attach_iodone()
+	 *
+	 * 所以结合b_log_item和b_li_list字段，意思是会有多个xfs_log_item对应同一个
+	 * xfs_buf？
+	 */
 	struct list_head	b_li_list;	/* Log items list head */
 	struct xfs_trans	*b_transp;
+	/*
+	 * 如果b_page_count < 2，则b_pages = b_page_array
+	 * - 参见 xfs_buf_allocate_memory()
+	 */
 	struct page		**b_pages;	/* array of page pointers */
+	/*
+	 * 内联的page数组
+	 */
 	struct page		*b_page_array[XB_PAGES]; /* inline pages */
+	/*
+	 * 每个xfs_buf关联的xfs_buf_map数组，元素个数是b_map_count
+	 */
 	struct xfs_buf_map	*b_maps;	/* compound buffer map */
+	/*
+	 * 内联的xfs_buf_map
+	 * - 如果b_map_count为1，则b_maps = &__b_map；
+	 */
 	struct xfs_buf_map	__b_map;	/* inline compound buffer map */
 	int			b_map_count;
 	atomic_t		b_pin_count;	/* pin count */
@@ -227,6 +278,9 @@ xfs_buf_read(
 	xfs_buf_flags_t		flags,
 	const struct xfs_buf_ops *ops)
 {
+	/*
+	 * map中已经是绝对磁盘块号了，512为单位的那种；
+	 */
 	DEFINE_SINGLE_BUF_MAP(map, blkno, numblks);
 	return xfs_buf_read_map(target, &map, 1, flags, ops);
 }

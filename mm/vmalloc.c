@@ -129,6 +129,9 @@ static void vunmap_p4d_range(pgd_t *pgd, unsigned long addr, unsigned long end)
 	} while (p4d++, addr = next, addr != end);
 }
 
+/*
+ * 这里其实还并未涉及rmap相关，因为vmalloc仅涉及主内核页表，而不涉及进程页表；
+ */
 static void vunmap_page_range(unsigned long addr, unsigned long end)
 {
 	pgd_t *pgd;
@@ -1319,6 +1322,9 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end)
 	 * 主内核页表到其他内核页表的同步
 	 * - 这里同步的是前面对页表映射的取消动作，即将非主内核页表中该清零的地
 	 *   方清零；
+	 *
+	 * x86_32：要研究一下
+	 * x86_64：空操作
 	 */
 	vmalloc_sync_unmappings();
 
@@ -1335,6 +1341,12 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end)
 
 	/*
 	 * smp_call_function() + ipi中断
+	 * - 为什么是在这里flush tlb？不应该取消页表映射后就清除吗？而且这里是lazy
+	 *   执行的，如果在page被释放掉后，该lazy动作还未触发，又通过tlb访问到了此
+	 *   page，不会有问题吗？
+	 *   > 混蛋才会vfree()之后继续访问该地址！所以不存在page被释放后又访问。
+	 *   > 在该lazy动作执行结束之前，下一次vmalloc()也分配不到这个虚地址，所以
+	 *     该tlb不会被hit。
 	 */
 	flush_tlb_kernel_range(start, end);
 	resched_threshold = lazy_max_pages() << 1;
@@ -1428,6 +1440,11 @@ static void free_unmap_vmap_area(struct vmap_area *va)
 	/*
 	 * 首先，将vmap_area从vmap_area_root红黑树上摘下来；
 	 * 然后，将vmap_area链接到vmap_purge_list链表上，lazy回收；
+	 *
+	 * lazy回收时：
+	 * 首先，将vmap_area从vmap_purge_list链表上摘下来；
+	 * 然后，flush tlb；
+	 * 最后，将vmap_area放回到free_vmap_area_root红黑树上；
 	 */
 	free_vmap_area_noflush(va);
 }
@@ -1473,8 +1490,14 @@ static struct vmap_area *find_vmap_area(unsigned long addr)
 
 #define VMAP_BLOCK_SIZE		(VMAP_BBMAP_BITS * PAGE_SIZE)
 
+/*
+ * 每个cpu一个
+ */
 struct vmap_block_queue {
 	spinlock_t lock;
+	/*
+	 * 链表头，链表元素是vmap_block->free_list
+	 */
 	struct list_head free;
 };
 
@@ -1483,6 +1506,9 @@ struct vmap_block {
 	struct vmap_area *va;
 	unsigned long free, dirty;
 	unsigned long dirty_min, dirty_max; /*< dirty range */
+	/*
+	 * 作为链表元素链入vmap_block_queue->free链表
+	 */
 	struct list_head free_list;
 	struct rcu_head rcu_head;
 	struct list_head purge;
@@ -1653,6 +1679,9 @@ static void *vb_alloc(unsigned long size, gfp_t gfp_mask)
 	void *vaddr = NULL;
 	unsigned int order;
 
+	/*
+	 * 这里要求size必须是page size的整数倍
+	 */
 	BUG_ON(offset_in_page(size));
 	BUG_ON(size > PAGE_SIZE*VMAP_MAX_ALLOC);
 	if (WARN_ON(size == 0)) {
@@ -1666,6 +1695,9 @@ static void *vb_alloc(unsigned long size, gfp_t gfp_mask)
 	order = get_order(size);
 
 	rcu_read_lock();
+	/*
+	 * 获取本cpu的vmap_block_queue
+	 */
 	vbq = &get_cpu_var(vmap_block_queue);
 	list_for_each_entry_rcu(vb, &vbq->free, free_list) {
 		unsigned long pages_off;
@@ -1676,11 +1708,18 @@ static void *vb_alloc(unsigned long size, gfp_t gfp_mask)
 			continue;
 		}
 
+		/*
+		 * 感觉像是这里有一个pages数组，free表示空闲的page个数，也表示
+		 * 第1个空闲page的数组下标；
+		 */
 		pages_off = VMAP_BBMAP_BITS - vb->free;
 		vaddr = vmap_block_vaddr(vb->va->va_start, pages_off);
 		vb->free -= 1UL << order;
 		if (vb->free == 0) {
 			spin_lock(&vbq->lock);
+			/*
+			 * 诶，拿下来之后怎么放回去呢？
+			 */
 			list_del_rcu(&vb->free_list);
 			spin_unlock(&vbq->lock);
 		}
@@ -1777,7 +1816,13 @@ static void _vm_unmap_aliases(unsigned long start, unsigned long end, int flush)
 	}
 
 	mutex_lock(&vmap_purge_lock);
+	/*
+	 * 收集vb_alloc()
+	 */
 	purge_fragmented_blocks_allcpus();
+	/*
+	 * 收集vmalloc()
+	 */
 	if (!__purge_vmap_area_lazy(start, end) && flush)
 		flush_tlb_kernel_range(start, end);
 	mutex_unlock(&vmap_purge_lock);
@@ -1857,6 +1902,9 @@ void *vm_map_ram(struct page **pages, unsigned int count, int node, pgprot_t pro
 	unsigned long addr;
 	void *mem;
 
+	/*
+	 * 这个if使用vb_alloc()/vmalloc()两种策略来分配虚地址空间；
+	 */
 	if (likely(count <= VMAP_MAX_ALLOC)) {
 		mem = vb_alloc(size, GFP_KERNEL);
 		if (IS_ERR(mem))
@@ -1872,6 +1920,9 @@ void *vm_map_ram(struct page **pages, unsigned int count, int node, pgprot_t pro
 		addr = va->va_start;
 		mem = (void *)addr;
 	}
+	/*
+	 * 做page和virtual address space的主内核页表映射
+	 */
 	if (vmap_page_range(addr, addr + size, prot, pages) < 0) {
 		vm_unmap_ram(mem, count);
 		return NULL;
@@ -2108,6 +2159,10 @@ EXPORT_SYMBOL_GPL(map_vm_area);
 static void setup_vmalloc_vm(struct vm_struct *vm, struct vmap_area *va,
 			      unsigned long flags, const void *caller)
 {
+	/*
+	 * 这个临界区有必要这么大吗？
+	 * 这个临界区有必要吗？
+	 */
 	spin_lock(&vmap_area_lock);
 	vm->flags = flags;
 	vm->addr = (void *)va->va_start;
@@ -2274,6 +2329,9 @@ struct vm_struct *remove_vm_area(const void *addr)
 		 */
 		free_unmap_vmap_area(va);
 
+		/*
+		 * 此时vm_struct并没有被回收
+		 */
 		return vm;
 	}
 
@@ -2597,6 +2655,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	/*
 	 * 建立主内核页表中的映射
 	 * - 其他进程的只会在PGD这一级产生内核态的缺页异常，同步一下即可；
+	 * - 除PGD外的其他级页表是共享的，所以不会出现缺页异常；
 	 */
 	if (map_vm_area(area, prot, pages))
 		goto fail;
@@ -2637,13 +2696,16 @@ void *__vmalloc_node_range(unsigned long size, unsigned long align,
 	void *addr;
 	unsigned long real_size = size;
 
+	/*
+	 * vmalloc()分配的内存一定是以page为单位的；
+	 */
 	size = PAGE_ALIGN(size);
 	if (!size || (size >> PAGE_SHIFT) > totalram_pages())
 		goto fail;
 
 	/*
 	 * 获取vm_struct结构体
-	 * - 里面也分配的vmap_area结构体
+	 * - 里面也分配了vmap_area结构体
 	 * - 通过free_vmap_area_root红黑树分配了空闲虚拟地址空间
 	 */
 	area = __get_vm_area_node(size, align, VM_ALLOC | VM_UNINITIALIZED |

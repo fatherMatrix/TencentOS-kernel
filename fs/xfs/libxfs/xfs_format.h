@@ -848,6 +848,9 @@ typedef struct xfs_agi {
 	__be32		agi_level;	/* levels in inode btree */
 	__be32		agi_freecount;	/* number of free inodes */
 
+	/*
+	 * 这个ino是AG-relative的
+	 */
 	__be32		agi_newino;	/* new inode just allocated */
 	__be32		agi_dirino;	/* last directory inode chunk */
 	/*
@@ -1037,7 +1040,8 @@ typedef struct xfs_dinode {
 	/* structure must be padded to 64 bit alignment */
 } xfs_dinode_t;
 /*
- * 紧跟在xfs_dinode_t后的
+ * 紧跟在xfs_dinode_t后的是data fork，attr fork
+ * - cow fork在哪里
  */
 
 #define XFS_DINODE_CRC_OFF	offsetof(struct xfs_dinode, di_crc)

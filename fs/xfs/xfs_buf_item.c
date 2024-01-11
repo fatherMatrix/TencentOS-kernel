@@ -991,6 +991,9 @@ xfs_buf_attach_iodone(
 {
 	ASSERT(xfs_buf_islocked(bp));
 
+	/*
+	 * 用于将xfs_log_item在
+	 */
 	lip->li_cb = cb;
 	list_add_tail(&lip->li_bio_list, &bp->b_li_list);
 

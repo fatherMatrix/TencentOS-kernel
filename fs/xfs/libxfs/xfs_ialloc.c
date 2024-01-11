@@ -97,6 +97,8 @@ xfs_inobt_btrec_to_irec(
 
 /*
  * Get the data from the pointed-to record.
+ *
+ * stat返回1表示成功
  */
 int
 xfs_inobt_get_rec(
@@ -110,10 +112,18 @@ xfs_inobt_get_rec(
 	int				error;
 	uint64_t			realfree;
 
+	/*
+	 * 从xfs_btree_cur转换为xfs_btree_rec
+	 * - 从block中取出record
+	 */
 	error = xfs_btree_get_rec(cur, &rec, stat);
 	if (error || *stat == 0)
 		return error;
 
+	/*
+	 * 从xfs_btree_rec转换为xfs_inobt_rec_incore
+	 * - 将record的表达形式做个转换
+	 */
 	xfs_inobt_btrec_to_irec(mp, rec, irec);
 
 	if (!xfs_verify_agino(mp, agno, irec->ir_startino))
@@ -336,6 +346,10 @@ xfs_ialloc_inode_init(
 
 		/* Initialize the inode buffers and log them appropriately. */
 		fbuf->b_ops = &xfs_inode_buf_ops;
+		/*
+		 * 将所有的xfs_dinode数据都清零了，然后在限免对magic number，version
+		 * 等进行设置；
+		 */
 		xfs_buf_zero(fbuf, 0, BBTOB(fbuf->b_length));
 		for (i = 0; i < M_IGEO(mp)->inodes_per_cluster; i++) {
 			int	ioffset = i << mp->m_sb.sb_inodelog;
@@ -637,6 +651,8 @@ xfs_ialloc_ag_alloc(
 	/*
 	 * Locking will ensure that we don't have two callers in here
 	 * at one time.
+	 *
+	 * 批量分配inode时的默认个数？
 	 */
 	newlen = igeo->ialloc_inos;
 	if (igeo->maxicount &&
@@ -650,15 +666,30 @@ xfs_ialloc_ag_alloc(
 	 * an entire stripe unit with inodes.
 	 */
 	agi = XFS_BUF_TO_AGI(agbp);
+	/*
+	 * 首先尝试紧挨着上次分配的ino继续分配
+	 */
 	newino = be32_to_cpu(agi->agi_newino);
 	agno = be32_to_cpu(agi->agi_seqno);
+	/*
+	 * 上次分配的ino所处的ag block number
+	 * - 一个AG的所有ino都是连着的，这里的newino也是相对AG起始ino的增量。
+	 *   所以agbno中保存的是该newino在该AG的AGI所管理的第几个block中，然
+	 *   后加上本次要分配的block数；
+	 */
 	args.agbno = XFS_AGINO_TO_AGBNO(args.mp, newino) +
 		     igeo->ialloc_blks;
 	if (do_sparse)
 		goto sparse_alloc;
 	if (likely(newino != NULLAGINO &&
 		  (args.agbno < be32_to_cpu(agi->agi_length)))) {
+		/*
+		 * agbno是AG-relative的，这里转换为fs block number
+		 */
 		args.fsbno = XFS_AGB_TO_FSB(args.mp, agno, args.agbno);
+		/*
+		 * 在fsbno这个block上分配；
+		 */
 		args.type = XFS_ALLOCTYPE_THIS_BNO;
 		args.prod = 1;
 
@@ -800,6 +831,8 @@ sparse_alloc:
 	 * freed and then immediately reallocated. We use random numbers
 	 * rather than a linear progression to prevent the next generation
 	 * number from being easily guessable.
+	 *
+	 * 对新批量分配的inode进行初始化，主要是magic number、version等字段；
 	 */
 	error = xfs_ialloc_inode_init(args.mp, tp, NULL, newlen, agno,
 			args.agbno, args.len, prandom_u32());
@@ -942,6 +975,9 @@ xfs_ialloc_ag_select(
 	needspace = S_ISDIR(mode) || S_ISREG(mode) || S_ISLNK(mode);
 	mp = tp->t_mountp;
 	agcount = mp->m_maxagi;
+	/*
+	 * dir在多个AG中robin分配，regular file与parent分配到同一个AG；
+	 */
 	if (S_ISDIR(mode))
 		pagno = xfs_ialloc_next_ag(mp);
 	else {
@@ -1470,6 +1506,9 @@ xfs_dialloc_ag_finobt_newino(
 					 XFS_LOOKUP_EQ, &i);
 		if (error)
 			return error;
+		/*
+		 * i == 1：表示查找成功
+		 */
 		if (i == 1) {
 			error = xfs_inobt_get_rec(cur, rec, &i);
 			if (error)
@@ -1584,10 +1623,17 @@ xfs_dialloc_ag(
 	if (agno == pagno)
 		error = xfs_dialloc_ag_finobt_near(pagino, &cur, &rec);
 	else
+		/*
+		 * 返回了AGI最后分配的ino所在ino btree的extent
+		 */
 		error = xfs_dialloc_ag_finobt_newino(agi, cur, &rec);
 	if (error)
 		goto error_cur;
 
+	/*
+	 * 在ino btree的extent中找到第一个空闲的ino
+	 * - extent中使用一个bitmap来管理空闲ino
+	 */
 	offset = xfs_inobt_first_free_inode(&rec);
 	ASSERT(offset >= 0);
 	ASSERT(offset < XFS_INODES_PER_CHUNK);
@@ -1600,6 +1646,9 @@ xfs_dialloc_ag(
 	 */
 	rec.ir_free &= ~XFS_INOBT_MASK(offset);
 	rec.ir_freecount--;
+	/*
+	 * 内部会log到trans中
+	 */
 	if (rec.ir_freecount)
 		error = xfs_inobt_update(cur, &rec);
 	else
@@ -1609,9 +1658,16 @@ xfs_dialloc_ag(
 
 	/*
 	 * The finobt has now been updated appropriately. We haven't updated the
+	 *     ^^^^^^
+	 *  Free Inode Btree
 	 * agi and superblock yet, so we can create an inobt cursor and validate
 	 * the original freecount. If all is well, make the equivalent update to
 	 * the inobt using the finobt record and offset information.
+	 *     ^^^^^
+	 * (Allocated) Inode Btree
+	 *
+	 * 上面通过free inode btree分配到了ino（也即意味着分配了inode），此时需要
+	 * 同步更新inode btree，表示这个ino已经被分配到了；
 	 */
 	icur = xfs_inobt_init_cursor(mp, tp, agbp, agno, XFS_BTNUM_INO);
 
@@ -1628,9 +1684,15 @@ xfs_dialloc_ag(
 	 * superblock before we can check the freecount for each btree.
 	 */
 	be32_add_cpu(&agi->agi_freecount, -1);
+	/*
+	 * log AGI到trans中
+	 */
 	xfs_ialloc_log_agi(tp, agbp, XFS_AGI_FREECOUNT);
 	pag->pagi_freecount--;
 
+	/*
+	 * log superblock到trans中
+	 */
 	xfs_trans_mod_sb(tp, XFS_TRANS_SB_IFREE, -1);
 
 	error = xfs_check_agi_freecount(icur, agi);
@@ -1666,7 +1728,9 @@ error_cur:
  * ^^^^^^^^^^^^^^^^^^^^^^^^^
  * If an inode is available without having to performn an allocation, an inode
  * number is returned.  In this case, *IO_agbp is set to NULL.  If an allocation
+ *                                                              ^^^^^^^^^^^^^^^^
  * needs to be done, xfs_dialloc returns the current AGI buffer in *IO_agbp.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * The caller should then commit the current transaction, allocate a
  * new transaction, and call xfs_dialloc() again, passing in the previous value
  * of *IO_agbp.  IO_agbp should be held across the transactions. Since the AGI
@@ -1675,7 +1739,9 @@ error_cur:
  *
  * Once we successfully pick an inode its number is returned and the on-disk
  * data structures are updated.  The inode itself is not read in, since doing so
+ *                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * would break ordering constraints with xfs_reclaim.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  */
 int
 xfs_dialloc(
@@ -1723,6 +1789,8 @@ xfs_dialloc(
 	 *
 	 * Read rough value of mp->m_icount by percpu_counter_read_positive,
 	 * which will sacrifice the preciseness but improve the performance.
+	 *
+	 * 所以这里是牺牲了精确性来换取性能
 	 */
 	if (igeo->maxicount &&
 	    percpu_counter_read_positive(&mp->m_icount) + igeo->ialloc_inos
@@ -1759,11 +1827,17 @@ xfs_dialloc(
 		/*
 		 * Then read in the AGI buffer and recheck with the AGI buffer
 		 * lock held.
+		 *
+		 * 将agno对应的AG的AGI读入agbp（xfs_buf)中；
+		 * - 其中会更新pag->pagi_freecount，来源是从磁盘上读出来的agbp；
 		 */
 		error = xfs_ialloc_read_agi(mp, tp, agno, &agbp);
 		if (error)
 			goto out_error;
 
+		/*
+		 * 如果该agi中还有空闲的inode，则可以直接进行inode分配了；
+		 */
 		if (pag->pagi_freecount) {
 			xfs_perag_put(pag);
 			goto out_alloc;
@@ -1773,6 +1847,9 @@ xfs_dialloc(
 			goto nextag_relse_buffer;
 
 
+		/*
+		 * 本AGI中已经没有空闲的inode了，需要给本AG的AGI分配一批新的inode
+		 */
 		error = xfs_ialloc_ag_alloc(tp, agbp, &ialloced);
 		if (error) {
 			xfs_trans_brelse(tp, agbp);
@@ -1785,6 +1862,10 @@ xfs_dialloc(
 			return 0;
 		}
 
+		/*
+		 * 如果AGI批量分配成功了，则更新IO_agbp，退出（调用者来提交事务），
+		 * 并等待下次进入直接跳到out_alloc标签处进行inode分配；
+		 */
 		if (ialloced) {
 			/*
 			 * We successfully allocated some inodes, return
@@ -1814,6 +1895,11 @@ nextag:
 
 out_alloc:
 	*IO_agbp = NULL;
+	/*
+	 * 在一个AGI中分配ino
+	 * - 分配了ino就意味着分配了inode
+	 * - 内部对finobt、inobt、agi、sb都进行了必要的log（但还未提交）
+	 */
 	return xfs_dialloc_ag(tp, agbp, parent, inop);
 out_error:
 	xfs_perag_put(pag);
@@ -2777,6 +2863,9 @@ xfs_ialloc_setup_geometry(
 	igeo->inobt_mnr[0] = igeo->inobt_mxr[0] / 2;
 	igeo->inobt_mnr[1] = igeo->inobt_mxr[1] / 2;
 
+	/*
+	 * 这里为什么是max而不是min
+	 */
 	igeo->ialloc_inos = max_t(uint16_t, XFS_INODES_PER_CHUNK,
 			sbp->sb_inopblock);
 	igeo->ialloc_blks = igeo->ialloc_inos >> sbp->sb_inopblog;

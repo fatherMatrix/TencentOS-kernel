@@ -90,6 +90,8 @@ struct vmap_area {
 	 *    1) in "free" tree (root is vmap_area_root)
 	 *    2) in "busy" tree (root is free_vmap_area_root)
 	 *    3) in purge list  (head is vmap_purge_list)
+	 *
+	 * 下边的8 bytes空间复用；
 	 */
 	union {
 		unsigned long subtree_max_size; /* in "free" tree */

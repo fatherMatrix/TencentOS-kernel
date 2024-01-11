@@ -79,6 +79,10 @@ struct xfs_ail {
 	spinlock_t		ail_lock;
 	xfs_lsn_t		ail_last_pushed_lsn;
 	int			ail_log_flush;
+	/*
+	 * xfsaild() 阶段要写到磁盘上的xfs_buf链表；
+	 * - 链表元素是 xfs_buf->b_list
+	 */
 	struct list_head	ail_buf_list;
 	wait_queue_head_t	ail_empty;
 };

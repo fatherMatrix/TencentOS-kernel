@@ -53,6 +53,10 @@ struct xfs_log_item {
 	uint				li_type;	/* item type */
 	unsigned long			li_flags;	/* misc flags */
 	struct xfs_buf			*li_buf;	/* real buffer pointer */
+	/*
+	 * 作为链表元素链入xfs_buf->b_li_list
+	 * - 当xfs_buf的io操作完成后，依次调用该链表上xfs_log_item的回调
+	 */
 	struct list_head		li_bio_list;	/* buffer item list */
 	void				(*li_cb)(struct xfs_buf *,
 						 struct xfs_log_item *);

@@ -31,6 +31,9 @@ struct bvec_iter {
 	 */
 	sector_t		bi_sector;	/* device address in 512 byte
 						   sectors */
+	/*
+	 * 总的字节数
+	 */
 	unsigned int		bi_size;	/* residual I/O count */
 
 	/*

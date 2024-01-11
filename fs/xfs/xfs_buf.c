@@ -173,11 +173,17 @@ xfs_buf_get_maps(
 	ASSERT(bp->b_maps == NULL);
 	bp->b_map_count = map_count;
 
+	/*
+	 * 使用内联的xfs_buf_map
+	 */
 	if (map_count == 1) {
 		bp->b_maps = &bp->__b_map;
 		return 0;
 	}
 
+	/*
+	 * 分配非内联的xfs_buf_map数组
+	 */
 	bp->b_maps = kmem_zalloc(map_count * sizeof(struct xfs_buf_map),
 				KM_NOFS);
 	if (!bp->b_maps)
@@ -225,6 +231,9 @@ _xfs_buf_alloc(
 	INIT_LIST_HEAD(&bp->b_lru);
 	INIT_LIST_HEAD(&bp->b_list);
 	INIT_LIST_HEAD(&bp->b_li_list);
+	/*
+	 * 设置为0，表示在xfs_buf_unlock()之前不能xfs_buf_lock()了
+	 */
 	sema_init(&bp->b_sema, 0); /* held, no waiters */
 	spin_lock_init(&bp->b_lock);
 	bp->b_target = target;
@@ -242,11 +251,18 @@ _xfs_buf_alloc(
 		return NULL;
 	}
 
+	/*
+	 * 设置xfs_buf的basic block number
+	 * - 诶，一个xfs_buf中的多个xfs_buf_map的bm_bn是否要求首尾相连呢？
+	 */
 	bp->b_bn = map[0].bm_bn;
 	bp->b_length = 0;
 	for (i = 0; i < nmaps; i++) {
 		bp->b_maps[i].bm_bn = map[i].bm_bn;
 		bp->b_maps[i].bm_len = map[i].bm_len;
+		/*
+		 * 记录一下总的basic block数量；
+		 */
 		bp->b_length += map[i].bm_len;
 	}
 
@@ -362,14 +378,31 @@ xfs_buf_allocate_memory(
 	 */
 	size = BBTOB(bp->b_length);
 	if (size < PAGE_SIZE) {
+		/*
+		 * 如果目标设备的request_queue没有设置，则默认为511
+		 */
 		int align_mask = xfs_buftarg_dma_alignment(bp->b_target);
+		/*
+		 * 分配对齐到align_mask的内存，内存大小为xfs_buf->b_length
+		 */
 		bp->b_addr = kmem_alloc_io(size, align_mask,
 					   KM_NOFS | kmflag_mask);
+		/*
+		 * 没有一次性分配到足够内存，尝试直接使用alloc_pages()分配
+		 * - 有必要吗？vmalloc()底层不也是alloc_pages()来分配散页吗？
+		 */
 		if (!bp->b_addr) {
 			/* low memory - use alloc_page loop instead */
 			goto use_alloc_page;
 		}
 
+		/*
+		 * 能走到这里，说明size < PAGE_SIZE（外层if条件），此时检查一下
+		 * 分配的内存是不是横跨两个page，如果横跨了两个page，则尝试使用
+		 * alloc_pages()重新分配；
+		 * - 其实这种仅可能是通过kmalloc()分配的结果；vmalloc()一定是以
+		 *   page为单位进行分配的；
+		 */
 		if (((unsigned long)(bp->b_addr + size - 1) & PAGE_MASK) !=
 		    ((unsigned long)bp->b_addr & PAGE_MASK)) {
 			/* b_addr spans two pages - use alloc_page instead */
@@ -377,8 +410,17 @@ xfs_buf_allocate_memory(
 			bp->b_addr = NULL;
 			goto use_alloc_page;
 		}
+		/*
+		 * 走到这里，说明没有b_addr指向的内存没有横跨两个页；
+		 */
 		bp->b_offset = offset_in_page(bp->b_addr);
+		/*
+		 * b_pages指向内联的page指针数组；
+		 */
 		bp->b_pages = bp->b_page_array;
+		/*
+		 * 因为只有一个页，所以只需要设置0号元素
+		 */
 		bp->b_pages[0] = kmem_to_page(bp->b_addr);
 		bp->b_page_count = 1;
 		bp->b_flags |= _XBF_KMEM;
@@ -386,14 +428,26 @@ xfs_buf_allocate_memory(
 	}
 
 use_alloc_page:
+	/*
+	 * 看这里的话，似乎是在说一个xfs_buf中的多个xfs_buf_map在内存这一侧是
+	 * 收尾相连的；
+	 * - 但这里无法得出其在磁盘上是否相连的结论；
+	 */
 	start = BBTOB(bp->b_maps[0].bm_bn) >> PAGE_SHIFT;
 	end = (BBTOB(bp->b_maps[0].bm_bn + bp->b_length) + PAGE_SIZE - 1)
 								>> PAGE_SHIFT;
 	page_count = end - start;
+	/*
+	 * 根据page_count的值决定b_pages指向内联的b_page_array还是分配指针数组；
+	 */
 	error = _xfs_buf_get_pages(bp, page_count);
 	if (unlikely(error))
 		return error;
 
+	/*
+	 * 初始化了吗？
+	 * - _xfs_buf_alloc() 中分配xfs_buf时清0了所有元素；
+	 */
 	offset = bp->b_offset;
 	bp->b_flags |= _XBF_PAGES;
 
@@ -452,11 +506,17 @@ _xfs_buf_map_pages(
 {
 	ASSERT(bp->b_flags & _XBF_PAGES);
 	if (bp->b_page_count == 1) {
+		/*
+		 * 映射单个页
+		 */
 		/* A single page buffer is always mappable */
 		bp->b_addr = page_address(bp->b_pages[0]) + bp->b_offset;
 	} else if (flags & XBF_UNMAPPED) {
 		bp->b_addr = NULL;
 	} else {
+		/*
+		 * 映射多个页
+		 */
 		int retried = 0;
 		unsigned nofs_flag;
 
@@ -470,6 +530,10 @@ _xfs_buf_map_pages(
 		 */
 		nofs_flag = memalloc_nofs_save();
 		do {
+			/*
+			 * 建立b_pages在主内核页表中vmalloc()区域的页表映射，并
+			 * 返回虚地址；
+			 */
 			bp->b_addr = vm_map_ram(bp->b_pages, bp->b_page_count,
 						-1, PAGE_KERNEL);
 			if (bp->b_addr)
@@ -612,7 +676,12 @@ xfs_buf_find(
 		goto found;
 	}
 
-	/* No match found */
+	/*
+	 * No match found
+	 *
+	 * 没找到对应的xfs_buf
+	 */
+
 	/*
 	 * 当传入的参数中new_bp为NULL时，如果cache miss，则直接返回-ENOENT；
 	 */
@@ -622,6 +691,10 @@ xfs_buf_find(
 		xfs_perag_put(pag);
 		return -ENOENT;
 	}
+
+	/*
+	 * 没找到目标xfs_buf，且new_bp不为空，则插入；
+	 */
 
 	/* the buffer keeps the perag reference until it is freed */
 	new_bp->b_pag = pag;
@@ -635,6 +708,13 @@ found:
 	spin_unlock(&pag->pag_buf_lock);
 	xfs_perag_put(pag);
 
+	/*
+	 * 如果存在已有的xfs_buf，则对其加锁
+	 * - 对应的解锁操作在哪里？
+	 *   > ？
+	 * - 确实不存在（需要插入）的xfs_buf对应的加锁操作在哪里？
+	 *   > _xfs_buf_alloc()中将信号量的初始值设置为0，可以理解为加锁了；
+	 */
 	if (!xfs_buf_trylock(bp)) {
 		if (flags & XBF_TRYLOCK) {
 			xfs_buf_rele(bp);
@@ -696,6 +776,9 @@ xfs_buf_get_map(
 	struct xfs_buf		*new_bp;
 	int			error = 0;
 
+	/*
+	 * 现在xfs_buf的缓存中查找目标buf
+	 */
 	error = xfs_buf_find(target, map, nmaps, flags, NULL, &bp);
 
 	switch (error) {
@@ -718,10 +801,17 @@ xfs_buf_get_map(
 		return NULL;
 	}
 
+	/*
+	 * cache miss走这里
+	 * - 内部设置好了xfs_buf的xfs_buf_map数组，即其在磁盘上的位置信息；
+	 */
 	new_bp = _xfs_buf_alloc(target, map, nmaps, flags);
 	if (unlikely(!new_bp))
 		return NULL;
 
+	/*
+	 * 分配xfs_buf->b_addr指向的内存，并配置到该内存对应的b_pages；
+	 */
 	error = xfs_buf_allocate_memory(new_bp, flags);
 	if (error) {
 		xfs_buf_free(new_bp);
@@ -738,7 +828,14 @@ xfs_buf_get_map(
 		xfs_buf_free(new_bp);
 
 found:
+	/*
+	 * xfs_buf_allocate_memory() 中如果是通过alloc_pages()分配得到的，那么
+	 * bp->b_addr是空的，但相对应的内存在b_pages数组中；
+	 */
 	if (!bp->b_addr) {
+		/*
+		 * 映射pages到内核虚地址空间
+		 */
 		error = _xfs_buf_map_pages(bp, flags);
 		if (unlikely(error)) {
 			xfs_warn(target->bt_mount,
@@ -812,21 +909,27 @@ xfs_buf_reverify(
 xfs_buf_t *
 xfs_buf_read_map(
 	struct xfs_buftarg	*target,
-	struct xfs_buf_map	*map,
+	struct xfs_buf_map	*map,	/* 这个map字段是个xfs_buf_map的数组，元素个数为nmaps */
 	int			nmaps,
-	xfs_buf_flags_t		flags,
+	xfs_buf_flags_t		flags,	/* XBF_READ 等 */
 	const struct xfs_buf_ops *ops)
 {
 	struct xfs_buf		*bp;
 
 	flags |= XBF_READ;
 
+	/*
+	 * 分配xfs_buf，并根据map数组的内容分配足够的内存来承载磁盘上读出来的数据；
+	 */
 	bp = xfs_buf_get_map(target, map, nmaps, flags);
 	if (!bp)
 		return NULL;
 
 	trace_xfs_buf_read(bp, flags, _RET_IP_);
 
+	/*
+	 * 上面分配到的xfs_buf有可能是在cache中的，其中已包含了有效数据；
+	 */
 	if (!(bp->b_flags & XBF_DONE)) {
 		XFS_STATS_INC(target->bt_mount, xb_get_read);
 		/*
@@ -1287,6 +1390,9 @@ xfs_buf_ioapply_map(
 	/* skip the pages in the buffer before the start offset */
 	page_index = 0;
 	offset = *buf_offset;
+	/*
+	 * 找到当前xfs_buf_map对应的page在xfs_buf->b_pages数组中的index；
+	 */
 	while (offset >= PAGE_SIZE) {
 		page_index++;
 		offset -= PAGE_SIZE;
@@ -1295,48 +1401,94 @@ xfs_buf_ioapply_map(
 	/*
 	 * Limit the IO size to the length of the current vector, and update the
 	 * remaining IO count for the next time around.
+	 *
+	 * *count中包含的是一个xfs_buf中所有xfs_buf_map的总长度，这里每次操作最多
+	 * 只处理一个xfs_buf_map；
 	 */
 	size = min_t(int, BBTOB(bp->b_maps[map].bm_len), *count);
 	*count -= size;
 	*buf_offset += size;
 
 next_chunk:
+	/*
+	 * 用b_io_remaining字段标志xfs_buf的io是否结束；
+	 */
 	atomic_inc(&bp->b_io_remaining);
 	nr_pages = min(total_nr_pages, BIO_MAX_PAGES);
 
 	bio = bio_alloc(GFP_NOIO, nr_pages);
 	bio_set_dev(bio, bp->b_target->bt_bdev);
+	/*
+	 * 起始扇区号
+	 */
 	bio->bi_iter.bi_sector = sector;
 	bio->bi_end_io = xfs_buf_bio_end_io;
+	/*
+	 * xfs_buf本身放入了bio->bi_private字段
+	 */
 	bio->bi_private = bp;
 	bio_set_op_attrs(bio, op, op_flags);
 
+	/*
+	 * 看样子一个xfs_buf_map可以对应多个page？
+	 */
 	for (; size && nr_pages; nr_pages--, page_index++) {
 		int	rbytes, nbytes = PAGE_SIZE - offset;
 
 		if (nbytes > size)
 			nbytes = size;
 
+		/*
+		 * 将page放入bio中
+		 */
 		rbytes = bio_add_page(bio, bp->b_pages[page_index], nbytes,
 				      offset);
+		/*
+		 * bio_add_page()失败后返回0，成功后返回nbytes；
+		 * - 这里的意思是失败后就要break
+		 */
 		if (rbytes < nbytes)
 			break;
 
 		offset = 0;
+		/*
+		 * sector向后跳nbytes对应的扇区数
+		 */
 		sector += BTOBB(nbytes);
 		size -= nbytes;
 		total_nr_pages--;
 	}
 
+	/*
+	 * 走到这里有两种情况：
+	 * 1. 所有的page都添加到bio中了
+	 * 2. 将page添加进bio的过程中失败了；
+	 */
+	 
 	if (likely(bio->bi_iter.bi_size)) {
+	/*
+	 * 走到这里，说明至少向bio中添加了部分page
+	 */
+	 	/*
+	 	 * 确保对虚地址的修改在物理内存上可见；
+	 	 * - 应该是与架构相关，arm、x86上都是空操作，parisc上有内容；
+	 	 * - 与VIVT或某些VIPT（index超出PAGE_SIZE的情况）的缓存别名相关；
+	 	 * - PIPT架构无缓存别名问题；
+	 	 */
 		if (xfs_buf_is_vmapped(bp)) {
 			flush_kernel_vmap_range(bp->b_addr,
 						xfs_buf_vmap_len(bp));
 		}
 		submit_bio(bio);
+		/*
+		 * 如果还有内容没有写完，则返回继续
+		 */
 		if (size)
 			goto next_chunk;
 	} else {
+	/*
+	 * 一个bio都没成功添加进去
+	 */
 		/*
 		 * This is guaranteed not to be the last io reference count
 		 * because the caller (xfs_buf_submit) holds a count itself.
@@ -1411,9 +1563,14 @@ _xfs_buf_ioapply(
 	 * into the buffer and the desired IO size before we start -
 	 * _xfs_buf_ioapply_vec() will modify them appropriately for each
 	 * subsequent call.
+	 *
+	 * b_offset是在第一个页中的偏移；
 	 */
 	offset = bp->b_offset;
 	size = BBTOB(bp->b_length);
+	/*
+	 * 塞住
+	 */
 	blk_start_plug(&plug);
 	for (i = 0; i < bp->b_map_count; i++) {
 		xfs_buf_ioapply_map(bp, i, &offset, &size, op, op_flags);
@@ -1422,6 +1579,9 @@ _xfs_buf_ioapply(
 		if (size <= 0)
 			break;	/* all done */
 	}
+	/*
+	 * 开始io
+	 */
 	blk_finish_plug(&plug);
 }
 
@@ -1494,6 +1654,12 @@ __xfs_buf_submit(
 	 * If _xfs_buf_ioapply failed, we can get back here with only the IO
 	 * reference we took above. If we drop it to zero, run completion so
 	 * that we don't return to the caller with completion still pending.
+	 *
+	 * 每此submit_bio()之前，都会增加xfs_buf->b_io_remaining的值。bio的完成
+	 * 回调中减小xfs_buf->b_io_remaining的值；如果这里等于1，说明所有bio都
+	 * 是处理完了的；
+	 *
+	 * - xfs_buf_bio_end_io()中对异步的已经做了操作的呀？
 	 */
 	if (atomic_dec_and_test(&bp->b_io_remaining) == 1) {
 		if (bp->b_error || !(bp->b_flags & XBF_ASYNC))
@@ -1521,9 +1687,15 @@ xfs_buf_offset(
 {
 	struct page		*page;
 
+	/*
+	 * vmap/vb映射过的
+	 */
 	if (bp->b_addr)
 		return bp->b_addr + offset;
 
+	/*
+	 * 没映射过的
+	 */
 	offset += bp->b_offset;
 	page = bp->b_pages[offset >> PAGE_SHIFT];
 	return page_address(page) + (offset & (PAGE_SIZE-1));

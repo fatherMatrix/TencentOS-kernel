@@ -558,6 +558,10 @@ xfs_inode_item_push(
 	spin_unlock(&lip->li_ailp->ail_lock);
 
 	error = xfs_iflush(ip, &bp);
+	/*
+	 * 将要写的xfs_buf加入buffer_list
+	 * - 该链表一般为xfs_ail->ail_buf_list
+	 */
 	if (!error) {
 		if (!xfs_buf_delwri_queue(bp, buffer_list))
 			rval = XFS_ITEM_FLUSHING;

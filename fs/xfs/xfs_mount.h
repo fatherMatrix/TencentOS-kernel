@@ -399,6 +399,9 @@ typedef struct xfs_perag {
 	 * 似乎是：如果文件系统对inode数量有了限制，有些AG不能用于分配inode
 	 */
 	char		pagi_inodeok;	/* The agi is ok for inodes */
+	/*
+	 * 每种树的层高
+	 */
 	uint8_t		pagf_levels[XFS_BTNUM_AGF];
 					/* # of levels in bno & cnt btree */
 	bool		pagf_agflreset; /* agfl requires reset before use */
@@ -441,6 +444,10 @@ typedef struct xfs_perag {
 
 	/* buffer cache index */
 	spinlock_t	pag_buf_lock;	/* lock for pag_buf_hash */
+	/*
+	 * xfs_buf的哈希表
+	 * - xfs_buf中的关联字段是b_rhash_head
+	 */
 	struct rhashtable pag_buf_hash;
 
 	/* for rcu-safe freeing */

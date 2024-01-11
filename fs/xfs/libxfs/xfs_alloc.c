@@ -2000,6 +2000,9 @@ xfs_alloc_longest_free_extent(
 	return pag->pagf_flcount > 0 || pag->pagf_longest > 0;
 }
 
+/*
+ * 计算要保留多少block才能保证树结构操作成功；
+ */
 unsigned int
 xfs_alloc_min_freelist(
 	struct xfs_mount	*mp,
@@ -2043,16 +2046,23 @@ xfs_alloc_space_available(
 	if (flags & XFS_ALLOC_FLAG_FREEING)
 		return true;
 
+	/*
+	 * 保留起来不能用于分配的block数量
+	 */
 	reservation = xfs_ag_resv_needed(pag, args->resv);
 
 	/*
 	 * do we have enough contiguous free space for the allocation?
 	 *                   ^^^^^^^^^^
 	 *                 为什么要求连续？
-	 * 这里的minlen应该值得是要写入的数据需要的最小的len？而不是修改btree需
-	 * 要的最小的len？
+	 *
+	 * minlen表示本次分配最小的连续block数量；
 	 */
 	alloc_len = args->minlen + (args->alignment - 1) + args->minalignslop;
+	/*
+	 * longest表示free block btree中最大的extent，扣除我们要分配的数量、各种
+	 * 保留block后还剩下的block
+	 */
 	longest = xfs_alloc_longest_free_extent(pag, min_free, reservation);
 	if (longest < alloc_len)
 		return false;
@@ -2281,6 +2291,9 @@ xfs_alloc_fix_freelist(
 	 * 增几个btree block
 	 */
 	need = xfs_alloc_min_freelist(mp, pag);
+	/*
+	 * 计算本AG中是否有足够的空间用于此次分配
+	 */
 	if (!xfs_alloc_space_available(args, need, flags |
 			XFS_ALLOC_FLAG_CHECK))
 		goto out_agbp_relse;
@@ -2531,9 +2544,13 @@ xfs_alloc_pagf_init(
 {
 	xfs_buf_t		*bp;
 	int			error;
-
+	
 	if ((error = xfs_alloc_read_agf(mp, tp, agno, flags, &bp)))
 		return error;
+	/*
+	 * 感觉这个xfs_buf像是一直存留在了xfs的buf哈希表中
+	 * - 因为xfs_alloc_read_afg()中给这个xfs_buf设置了一个较大的引用计数
+	 */
 	if (bp)
 		xfs_trans_brelse(tp, bp);
 	return 0;

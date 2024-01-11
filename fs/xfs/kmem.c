@@ -92,6 +92,9 @@ kmem_alloc_io(size_t size, int align_mask, xfs_km_flags_t flags)
 	if (WARN_ON_ONCE(align_mask >= PAGE_SIZE))
 		align_mask = PAGE_SIZE - 1;
 
+	/*
+	 * 分别尝试使用kmalloc()和vmalloc()，确保分配的内存对齐到align_mask
+	 */
 	ptr = kmem_alloc(size, flags | KM_MAYFAIL);
 	if (ptr) {
 		if (!((uintptr_t)ptr & align_mask))

@@ -587,6 +587,9 @@ EXPORT_SYMBOL(kvmalloc_node);
  */
 void kvfree(const void *addr)
 {
+	/*
+	 * vmalloc()分配的地址处于特殊范围，可直接用来决策分配路径；
+	 */
 	if (is_vmalloc_addr(addr))
 		vfree(addr);
 	else

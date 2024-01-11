@@ -143,6 +143,9 @@ static inline void bio_issue_init(struct bio_issue *issue,
  * stacking drivers)
  */
 struct bio {
+	/*
+	 * request->bio和request->bio_tail
+	 */
 	struct bio		*bi_next;	/* request queue link */
 	struct gendisk		*bi_disk;
 	unsigned int		bi_opf;		/* bottom bits req flags,
@@ -187,6 +190,9 @@ struct bio {
 #endif
 	};
 
+	/*
+	 * 目前bi_io_vec数组的有效元素个数
+	 */
 	unsigned short		bi_vcnt;	/* how many bio_vec's */
 
 	/*
@@ -194,7 +200,7 @@ struct bio {
 	 */
 
 	/*
-	 * 目前bi_io_vec数组的尺寸
+	 * 目前bi_io_vec数组的尺寸（最大空间）
 	 */
 	unsigned short		bi_max_vecs;	/* max bvl_vecs we can hold */
 

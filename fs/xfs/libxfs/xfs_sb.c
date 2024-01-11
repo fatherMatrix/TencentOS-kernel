@@ -42,6 +42,10 @@ xfs_perag_get(
 	struct xfs_perag	*pag;
 	int			ref = 0;
 
+	/*
+	 * rcu保护的xarray中的操作
+	 * - 可是有必要吗？
+	 */
 	rcu_read_lock();
 	pag = radix_tree_lookup(&mp->m_perag_tree, agno);
 	if (pag) {

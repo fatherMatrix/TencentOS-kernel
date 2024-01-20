@@ -1280,6 +1280,11 @@ xfs_buf_ioend(
 		bp->b_flags |= XBF_DONE;
 	}
 
+	/*
+	 * 调用xfs_buf关联的b_iodone回调函数
+	 * - 看到有地方将其设置为了 xfs_buf_iodone_callbacks()，但内部似乎又
+	 *   递归调用了xfs_buf_ioend()；哦，递归前的将b_iodone字段清空了；
+	 */
 	if (bp->b_iodone)
 		(*(bp->b_iodone))(bp);
 	else if (bp->b_flags & XBF_ASYNC)
@@ -1668,7 +1673,13 @@ __xfs_buf_submit(
 			xfs_buf_ioend_async(bp);
 	}
 
+	/*
+	 * 是否要wait完全取决于xfs_buf->b_flags中是否包含XBF_ASYNC
+	 */
 	if (wait)
+		/*
+		 * xfs_buf->b_ioend()回调中会complete(bp)
+		 */
 		error = xfs_buf_iowait(bp);
 
 	/*

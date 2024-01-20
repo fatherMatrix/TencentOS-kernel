@@ -1939,6 +1939,9 @@ void touch_atime(const struct path *path)
 	if (!atime_needs_update(path, inode))
 		return;
 
+	/*
+	 * 没锁住就直接返回了？
+	 */
 	if (!sb_start_write_trylock(inode->i_sb))
 		return;
 

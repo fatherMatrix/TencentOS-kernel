@@ -835,6 +835,11 @@ xfs_alloc_ag_vextent(
 		/* NOTREACHED */
 	}
 
+	/*
+	 * 分配结束后，xfs_alloc_arg_t->agbno中即包含分配到的磁盘块起始
+	 * 地址；
+	 */
+
 	if (error || args->agbno == NULLAGBLOCK)
 		return error;
 
@@ -1529,6 +1534,9 @@ restart:
 	 * are no smaller extents available.
 	 */
 	if (!i) {
+	/*
+	 * 没找到足够大的free extent
+	 */
 		error = xfs_alloc_ag_vextent_small(args, cnt_cur,
 						   &fbno, &flen, &i);
 		if (error)
@@ -1542,6 +1550,9 @@ restart:
 		busy = xfs_alloc_compute_aligned(args, fbno, flen, &rbno,
 				&rlen, &busy_gen);
 	} else {
+	/*
+	 * 找到了足够大的free extent
+	 */
 		/*
 		 * Search for a non-busy extent that is large enough.
 		 */
@@ -1557,6 +1568,11 @@ restart:
 			if (rlen >= args->maxlen)
 				break;
 
+			/*
+			 * 上面查找的btree是以extent中的free block number为顺序
+			 * 排列的，这里对cursor加一，得到的还是长度上符合要求的
+			 * extent；
+			 */
 			error = xfs_btree_increment(cnt_cur, 0, &i);
 			if (error)
 				goto error0;
@@ -2070,7 +2086,11 @@ xfs_alloc_space_available(
 	/*
 	 * Do we have enough free space remaining for the allocation? Don't
 	 * account extra agfl blocks because we are about to defer free them,
+	 *                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * making them unavailable until the current transaction commits.
+	 *
+	 * pagf_flount字段是freelist现有的空闲块；
+	 * min_free是此次操作对btree的修改需要的空闲块；
 	 */
 	agflcount = min_t(xfs_extlen_t, pag->pagf_flcount, min_free);
 	available = (int)(pag->pagf_freeblks + agflcount -
@@ -2167,7 +2187,9 @@ xfs_agfl_needs_reset(
 
 /*
  * Reset the agfl to an empty state. Ignore/drop any existing blocks since the
+ *                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * agfl content cannot be trusted. Warn the user that a repair is required to
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * recover leaked blocks.
  *
  * The purpose of this mechanism is to handle filesystems affected by the agfl
@@ -2289,6 +2311,7 @@ xfs_alloc_fix_freelist(
 	/*
 	 * 计算这次插入要消耗多少freelist中的block elements，也就是这次插入要新
 	 * 增几个btree block
+	 * - freelist中保留的块是用来给修改各种btree使用的；
 	 */
 	need = xfs_alloc_min_freelist(mp, pag);
 	/*
@@ -2301,6 +2324,9 @@ xfs_alloc_fix_freelist(
 	/*
 	 * Get the a.g. freespace buffer.
 	 * Can fail if we're not blocking on locks, and it's held.
+	 *
+	 * 上边已经读过一次了，这里再读一次的意义是？
+	 * - 上边的pag->pagf_init有可能为true，所以此时agbp是NULL；
 	 */
 	if (!agbp) {
 		error = xfs_alloc_read_agf(mp, tp, args->agno, flags, &agbp);
@@ -2313,9 +2339,18 @@ xfs_alloc_fix_freelist(
 		}
 	}
 
-	/* reset a padding mismatched agfl before final free space check */
+	/*
+	 * reset a padding mismatched agfl before final free space check
+	 *
+	 * xfs_alloc_read_agf()中在把AGF读上来后，会检查AGFL的信息是否正确，若
+	 * 不正确，则设置pagf_agflreset标志；
+	 */
 	if (pag->pagf_agflreset)
 		xfs_agfl_reset(tp, agbp, pag);
+
+	/*
+	 * 前面对AGFL有过一次reset，所以这里要重新计算
+	 */
 
 	/* If there isn't enough total space or single-extent, reject it. */
 	need = xfs_alloc_min_freelist(mp, pag);
@@ -2902,7 +2937,6 @@ xfs_alloc_vextent(
 		args->pag = xfs_perag_get(mp, args->agno);
 		/*
 		 * 更新freelist，保证修改btree导致的空间分配不会失败；
-		 * - user data分配是否成功不考虑是吧？
 		 */
 		error = xfs_alloc_fix_freelist(args, 0);
 		if (error) {

@@ -256,7 +256,7 @@ xfs_trans_read_buf_map(
 	if (tp)
 		bp = xfs_trans_buf_item_match(tp, target, map, nmaps);
 	/*
-	 * 如果当前transaction中已经包含了该xfs_buf
+	 * 如果xfs_buf cache中已经包含了该xfs_buf
 	 */
 	if (bp) {
 		ASSERT(xfs_buf_islocked(bp));

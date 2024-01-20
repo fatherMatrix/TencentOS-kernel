@@ -26,7 +26,15 @@ enum xfs_defer_ops_type {
  * item.
  */
 struct xfs_defer_pending {
+	/*
+	 * 作为链表元素加入xfs_trans->t_dfops
+	 */
 	struct list_head		dfp_list;	/* pending items */
+	/*
+	 * 作为链表头，链表元素是 xfs_rmap_intent->ri_list
+	 * - 在xfs_defer_pending本身保序的前提下，相同类型的xfs_rmap_intent链
+	 *   接到同一个xfs_defer_pending
+	 */
 	struct list_head		dfp_work;	/* work items */
 	void				*dfp_intent;	/* log intent item */
 	void				*dfp_done;	/* log done item */

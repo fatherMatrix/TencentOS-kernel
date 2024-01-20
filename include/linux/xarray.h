@@ -225,6 +225,8 @@ static inline int xa_err(void *entry)
 	if (xa_is_err(entry))
 		/*
 		 * 这里指定了long（有符号数），所以移位时最左端补的是1；
+		 * - 错误值本身是个internal value，这里做的动作类似于
+		 *   xa_to_internal()，只不过这里做的是有符号移位操作；
 		 */
 		return (long)entry >> 2;
 	return 0;

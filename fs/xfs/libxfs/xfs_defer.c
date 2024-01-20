@@ -509,6 +509,9 @@ xfs_defer_add(
 	 * Add the item to a pending item at the end of the intake list.
 	 * If the last pending item has the same type, reuse it.  Else,
 	 * create a new pending item at the end of the intake list.
+	 *
+	 * 判断tp->t_dfops链表中的最后一个xfs_defer_pending是否适合用于接收
+	 * 这个xfs_rmap_intent
 	 */
 	if (!list_empty(&tp->t_dfops)) {
 		dfp = list_last_entry(&tp->t_dfops,
@@ -518,6 +521,10 @@ xfs_defer_add(
 		    (ops->max_items && dfp->dfp_count >= ops->max_items))
 			dfp = NULL;
 	}
+	/*
+	 * 如果tp->t_dfops链表的最后一个xfs_defer_pending不适合接收本
+	 * xfs_rmap_intent，那么生成一个新的xfs_defer_pending；
+	 */
 	if (!dfp) {
 		dfp = kmem_alloc(sizeof(struct xfs_defer_pending),
 				KM_NOFS);
@@ -529,6 +536,9 @@ xfs_defer_add(
 		list_add_tail(&dfp->dfp_list, &tp->t_dfops);
 	}
 
+	/*
+	 * 将xfs_rmap_intent挂入选中的xfs_defer_pending
+	 */
 	list_add_tail(li, &dfp->dfp_work);
 	dfp->dfp_count++;
 }

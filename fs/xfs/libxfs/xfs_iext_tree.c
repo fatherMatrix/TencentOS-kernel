@@ -909,12 +909,19 @@ xfs_iext_remove(
 
 	xfs_iext_inc_seq(ifp);
 
+	/*
+	 * 在incore btree中删除cur->leaf叶节点中cur->pos位置的record
+	 */
 	nr_entries = xfs_iext_leaf_nr_entries(ifp, leaf, cur->pos) - 1;
 	for (i = cur->pos; i < nr_entries; i++)
 		leaf->recs[i] = leaf->recs[i + 1];
 	xfs_iext_rec_clear(&leaf->recs[nr_entries]);
 	ifp->if_bytes -= sizeof(struct xfs_iext_rec);
 
+	/*
+	 * 删除头元素的话要影响父节点
+	 * - 看来xfs中btree的实现上，父节点的key是按照子节点的0号元素来的；
+	 */
 	if (cur->pos == 0 && nr_entries > 0) {
 		xfs_iext_update_node(ifp, offset, xfs_iext_leaf_key(leaf, 0), 1,
 				leaf);
@@ -927,8 +934,15 @@ xfs_iext_remove(
 		cur->pos = 0;
 	}
 
+	/*
+	 * 超过一半元素，不需要重平衡
+	 */
 	if (nr_entries >= RECS_PER_LEAF / 2)
 		return;
+
+	/*
+	 * 重新平衡btree
+	 */
 
 	if (ifp->if_height > 1)
 		xfs_iext_rebalance_leaf(ifp, cur, leaf, offset, nr_entries);
@@ -1022,9 +1036,21 @@ xfs_iext_lookup_extent_before(
 	struct xfs_bmbt_irec	*gotp)
 {
 	/* could be optimized to not even look up the next on a match.. */
+
+	/*
+	 * xfs_iext_lookup_extent()返回true有两种情况：
+	 * - *end - 1处于一个extent中，此时gotp->br_startoff <= *end - 1，进入if
+	 * - *end - 1处于eof之前的hole中，此时gotp->br_startoff > *end - 1，跳过if
+	 */
 	if (xfs_iext_lookup_extent(ip, ifp, *end - 1, cur, gotp) &&
 	    gotp->br_startoff <= *end - 1)
 		return true;
+	/*
+	 * 走到这里有两种情况：
+	 * - *end - 1处于eof之前的hole中
+	 * - *end - 1处于eof之后
+	 *   > 这种情况是不是不存在，因为*end肯定都是存在的？
+	 */
 	if (!xfs_iext_prev_extent(ifp, cur, gotp))
 		return false;
 	*end = gotp->br_startoff + gotp->br_blockcount;

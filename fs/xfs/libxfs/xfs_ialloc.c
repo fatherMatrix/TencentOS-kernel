@@ -2379,6 +2379,9 @@ xfs_imap(
 	 */
 	agno = XFS_INO_TO_AGNO(mp, ino);
 	agino = XFS_INO_TO_AGINO(mp, ino);
+	/*
+	 * 这个agbno并不是指在AG中的绝对bno，而是在inobt中的bno
+	 */
 	agbno = XFS_AGINO_TO_AGBNO(mp, agino);
 	if (agno >= mp->m_sb.sb_agcount || agbno >= mp->m_sb.sb_agblocks ||
 	    ino != XFS_AGINO_TO_INO(mp, agno, agino)) {

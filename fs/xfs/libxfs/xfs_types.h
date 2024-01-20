@@ -176,7 +176,7 @@ typedef enum {
 } xfs_exntst_t;
 
 /*
- * 对应磁盘数据结构xfs_bmbt_rec，在内存中表示一个data extent
+ * 对应磁盘数据结构 xfs_bmbt_rec ，在内存中表示一个data extent
  * - 可以通过xfs_bmbt_rec解析出来，参见xfs_bmbt_disk_get_all()
  * - 可以通过xfs_iext_rec解析出来，参见xfs_iext_get()
  */

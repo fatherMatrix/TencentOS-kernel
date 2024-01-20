@@ -324,6 +324,9 @@ static bool __xas_nomem(struct xa_state *xas, gfp_t gfp)
 {
 	unsigned int lock_type = xa_lock_type(xas->xa);
 
+	/*
+	 * 本函数仅处理-ENOMEM错误，其他的错误直接返回false，迫使调用者退出尝试循环
+	 */
 	if (xas->xa_node != XA_ERROR(-ENOMEM)) {
 		xas_destroy(xas);
 		return false;
@@ -560,12 +563,18 @@ static int xas_expand(struct xa_state *xas, void *head)
 	unsigned long max = xas_max(xas);
 
 	if (!head) {
+	/*
+	 * xa->xa_head是空的，树上没有节点
+	 */
 		if (max == 0)
 			return 0;
 		while ((max >> shift) >= XA_CHUNK_SIZE)
 			shift += XA_CHUNK_SHIFT;
 		return shift + XA_CHUNK_SHIFT;
 	} else if (xa_is_node(head)) {
+	/*
+	 * 树上有节点，且是内部节点
+	 */
 		node = xa_to_node(head);
 		shift = node->shift + XA_CHUNK_SHIFT;
 	}
@@ -642,6 +651,9 @@ static void *xas_create(struct xa_state *xas, bool allow_root)
 	unsigned int order = xas->xa_shift;
 
 	if (xas_top(node)) {
+		/*
+		 * entry = xa->xa_head
+		 */
 		entry = xa_head_locked(xa);
 		xas->xa_node = NULL;
 		if (!entry && xa_zero_busy(xa))

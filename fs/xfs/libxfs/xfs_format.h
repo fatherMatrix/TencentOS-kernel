@@ -837,6 +837,9 @@ typedef struct xfs_agi {
 	__be32		agi_magicnum;	/* magic number == XFS_AGI_MAGIC */
 	__be32		agi_versionnum;	/* header version == XFS_AGI_VERSION */
 	__be32		agi_seqno;	/* sequence # starting from 0 */
+	/*
+	 * AGI所属AG的长度，以fs block为单位
+	 */
 	__be32		agi_length;	/* size in blocks of a.g. */
 	/*
 	 * Inode information
@@ -1746,19 +1749,25 @@ typedef xfs_bmbt_rec_t xfs_bmdr_rec_t;
 static inline int isnullstartblock(xfs_fsblock_t x)
 {
 	/*
-	 * 要求低17位全部为0？
+	 * 高位是STARTBLOCKMASK
 	 */
 	return ((x) & STARTBLOCKMASK) == STARTBLOCKMASK;
 }
 
 static inline xfs_fsblock_t nullstartblock(int k)
 {
+	/*
+	 * 向高位塞入STARTBLOCKMASK
+	 */
 	ASSERT(k < (1 << STARTBLOCKVALBITS));
 	return STARTBLOCKMASK | (k);
 }
 
 static inline xfs_filblks_t startblockval(xfs_fsblock_t x)
 {
+	/*
+	 * 取消高位的STARTBLOCKMASK
+	 */
 	return (xfs_filblks_t)((x) & ~STARTBLOCKMASK);
 }
 

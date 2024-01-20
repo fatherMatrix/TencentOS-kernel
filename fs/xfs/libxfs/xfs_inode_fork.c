@@ -684,6 +684,10 @@ xfs_ifork_init_cow(
 
 	ip->i_cowfp = kmem_zone_zalloc(xfs_ifork_zone,
 				       KM_NOFS);
+	/*
+	 * 这是个内存数据结构，所以每次在内存中建立的时候都是最新的，所以要
+	 * 添加下面的标志；
+	 */
 	ip->i_cowfp->if_flags = XFS_IFEXTENTS;
 	ip->i_cformat = XFS_DINODE_FMT_EXTENTS;
 	ip->i_cnextents = 0;

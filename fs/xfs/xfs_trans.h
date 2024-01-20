@@ -175,6 +175,7 @@ typedef struct xfs_trans {
 	struct list_head	t_busy;		/* list of busy extents */
 	/*
 	 * 链表元素是xfs_defer_pending->dfp_list；
+	 * - 参见 xfs_defer_add()
 	 */
 	struct list_head	t_dfops;	/* deferred operations */
 	/*

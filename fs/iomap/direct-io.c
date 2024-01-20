@@ -87,6 +87,9 @@ static ssize_t iomap_dio_complete(struct iomap_dio *dio)
 	loff_t offset = iocb->ki_pos;
 	ssize_t ret = dio->error;
 
+	/*
+	 * 对于xfs dio，end_io = xfs_dio_write_ops.xfs_dio_write_end_io()
+	 */
 	if (dops && dops->end_io)
 		ret = dops->end_io(iocb, dio->size, ret, dio->flags);
 
@@ -453,8 +456,8 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	 */
 	dio->i_size = i_size_read(inode);
 	/*
-	 * 对xfs，dops是xfs_dio_write_ops；
-	 * - 其实只有一个字段，就是end_io，用于设置dio结束时的回调；
+	 * 对xfs，dops是 xfs_dio_write_ops ；
+	 * - 其实只有一个字段，就是end_io，作为dio结束时的回调；
 	 */
 	dio->dops = dops;
 	dio->error = 0;
@@ -543,6 +546,10 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	inode_dio_begin(inode);
 
 	blk_start_plug(&plug);
+	/*
+	 * 对xfs来说，一次iomap_apply()只处理一个extents，所以这里需要一个循
+	 * 环来操作指定的字节数；
+	 */
 	do {
 		/*
 		 * iomap机制的核心接口

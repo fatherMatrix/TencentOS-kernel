@@ -97,7 +97,7 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	 * Now the data has been copied, commit the range we've copied.  This
 	 * should not fail unless the filesystem has had a fatal error.
 	 *
-	 * 对xfs，对应函数xfs_file_iomap_end()
+	 * 对xfs，对应函数 xfs_file_iomap_end()
 	 * - 猜测：对于写操作，且有磁盘上空间的释放需求时，在这里做；
 	 */
 	if (ops->iomap_end) {

@@ -1173,7 +1173,7 @@ xfs_file_iomap_begin(
 
 		/* may drop and re-acquire the ilock */
 		/*
-		 * cmap保存了imap中的参数，即读到的xfs_bmbt_irec
+		 * cmap保存了imap中的参数，即读到的data fork中的xfs_bmbt_irec
 		 * - 注意上面调用xfs_bmapi_read()时，最后一个参数为0，即imap中保存
 		 *   的extent来自data fork；
 		 */

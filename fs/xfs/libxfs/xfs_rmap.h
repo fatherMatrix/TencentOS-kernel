@@ -154,6 +154,9 @@ enum xfs_rmap_intent_type {
 };
 
 struct xfs_rmap_intent {
+	/*
+	 * 作为链表元素链入xfs_defer_pending->dfp_work
+	 */
 	struct list_head			ri_list;
 	enum xfs_rmap_intent_type		ri_type;
 	uint64_t				ri_owner;

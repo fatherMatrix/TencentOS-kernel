@@ -199,6 +199,9 @@ sector_t iomap_bmap(struct address_space *mapping, sector_t bno,
 #define IOMAP_DIO_COW		(1 << 1)	/* covers COW extent(s) */
 
 struct iomap_dio_ops {
+	/*
+	 * 在 iomap_dio_complete() 中调用
+	 */
 	int (*end_io)(struct kiocb *iocb, ssize_t size, int error,
 		      unsigned flags);
 };

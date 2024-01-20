@@ -288,6 +288,9 @@ xfs_reflink_convert_cow_locked(
 	int			dummy_logflags;
 	int			error = 0;
 
+	/*
+	 * 如果在cow fork中没有找到offset_fsb，则进入下面的分支
+	 */
 	if (!xfs_iext_lookup_extent(ip, ip->i_cowfp, offset_fsb, &icur, &got))
 		return 0;
 
@@ -368,6 +371,8 @@ xfs_find_trim_cow_extent(
 		got.br_startoff = offset_fsb + count_fsb;
 	if (got.br_startoff > offset_fsb) {
 	/*
+	 * 目标extent处于cow fork的hole中；
+	 * 
 	 * 两种情况：
 	 * - offset_fsb处于eof之前的一个hole中，got.br_startoff是该hole后的第一
 	 *   个extent的文件偏移；
@@ -392,6 +397,12 @@ xfs_find_trim_cow_extent(
 
 	*shared = true;
 	if (isnullstartblock(got.br_startblock)) {
+	/*
+	 * cow fork中的extents是delayed allocated
+	 */
+		/*
+		 * 求imap与指定范围的交集
+		 */
 		xfs_trim_extent(imap, got.br_startoff, got.br_blockcount);
 		return 0;
 	}
@@ -441,10 +452,28 @@ xfs_reflink_allocate_cow(
 	 *     在cow中的hole；
 	 */
 	error = xfs_find_trim_cow_extent(ip, imap, shared, &found);
+	/*
+	 * 这个返回有两种可能：
+	 * - error不为0，说明上面的查找过程出了错误；
+	 * - *share为false，即不共享；
+	 *
+	 * shared指的是在cow fork中找到任意类型的extents
+	 * found指的是在cow fork中找到real extents（已分配的extents）
+	 */
 	if (error || !*shared)
 		return error;
+	/*
+	 * 到这里说明shared
+	 */
 	if (found)
+	/*
+	 * 与cow fork中已分配的extents shared，直接跳转到convert
+	 */
 		goto convert;
+
+	/*
+	 * 到这里说明是与cow fork中delayed extents shared
+	 */
 
 	/*
 	 * 在cow fork中没有找到目标extent
@@ -470,6 +499,9 @@ xfs_reflink_allocate_cow(
 
 	/*
 	 * Check for an overlapping extent again now that we dropped the ilock.
+	 *
+	 * 因为上面xfs_trans_alloc()前后有一个放锁、上锁动作，所以这里要重复检查
+	 * 一下；
 	 */
 	error = xfs_find_trim_cow_extent(ip, imap, shared, &found);
 	if (error || !*shared)
@@ -511,10 +543,17 @@ convert:
 	 * COW fork extents are supposed to remain unwritten until we're ready
 	 * to initiate a disk write.  For direct I/O we are going to write the
 	 * data and need the conversion, but for buffered writes we're done.
+	 *
+	 * 如果不是directio，则直接返回；
+	 * 如果是XFS_EXT_NORM，则直接返回；
 	 */
 	if (!convert_now || imap->br_state == XFS_EXT_NORM)
 		return 0;
 	trace_xfs_reflink_convert_cow(ip, imap);
+	/*
+	 * 因为上面xfs_bmapi_write()分配的磁盘块都是PREALLOC，即unwritten的，这
+	 * 里视情况将其转换为NORM
+	 */
 	return xfs_reflink_convert_cow_locked(ip, offset_fsb, count_fsb);
 
 out_unreserve:
@@ -713,9 +752,14 @@ xfs_reflink_end_cow_extent(
 	 * In case of racing, overlapping AIO writes no COW extents might be
 	 * left by the time I/O completes for the loser of the race.  In that
 	 * case we are done.
+	 *
+	 * xfs_iext_lookup_extent_before()返回false，进入if；
 	 */
 	if (!xfs_iext_lookup_extent_before(ip, ifp, end_fsb, &icur, &got) ||
 	    got.br_startoff + got.br_blockcount <= offset_fsb) {
+		/*
+		 * 这么一来，调用者的循环就结束了；
+		 */
 		*end_fsb = offset_fsb;
 		goto out_cancel;
 	}
@@ -746,6 +790,12 @@ xfs_reflink_end_cow_extent(
 	error = __xfs_bunmapi(tp, ip, del.br_startoff, &rlen, 0, 1);
 	if (error)
 		goto out_cancel;
+
+	/*
+	 * rlen表示del中前面部分（unmap是从后向前）剩下的，没有unmap的长度；
+	 * - del.br_startoff + rlen表示已经unmap的extent的起始地址
+	 * - del.br_blockcount - rlen表示已经unmap的extent的长度
+	 */
 
 	/* Trim the extent to whatever got unmapped. */
 	xfs_trim_extent(&del, del.br_startoff + rlen, del.br_blockcount - rlen);

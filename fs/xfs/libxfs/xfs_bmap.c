@@ -1570,6 +1570,9 @@ xfs_bmap_add_extent_delay_real(
 	struct xfs_bmalloca	*bma,
 	int			whichfork)
 {
+	/*
+	 * bma->got中保存的是分配到的ondisk extent
+	 */
 	struct xfs_bmbt_irec	*new = &bma->got;
 	int			error;	/* error return value */
 	int			i;	/* temp state */
@@ -1605,6 +1608,8 @@ xfs_bmap_add_extent_delay_real(
 
 	/*
 	 * Set up a bunch of variables to make the tests simpler.
+	 *
+	 * bma->icur中保存的是incore extent；
 	 */
 	xfs_iext_get_extent(ifp, &bma->icur, &PREV);
 	new_endoff = new->br_startoff + new->br_blockcount;
@@ -1612,12 +1617,17 @@ xfs_bmap_add_extent_delay_real(
 	ASSERT(PREV.br_startoff <= new->br_startoff);
 	ASSERT(PREV.br_startoff + PREV.br_blockcount >= new_endoff);
 
+	/*
+	 * 这个好像是长度？
+	 */
 	da_old = startblockval(PREV.br_startblock);
 	da_new = 0;
 
 	/*
 	 * Set flags determining what part of the previous delayed allocation
+	 *                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * extent is being replaced by a real allocation.
+	 * ^^^^^^                      ^^^^^^^^^^^^^^^^^^
 	 */
 	if (PREV.br_startoff == new->br_startoff)
 		state |= BMAP_LEFT_FILLING;
@@ -1679,12 +1689,21 @@ xfs_bmap_add_extent_delay_real(
 		 */
 		LEFT.br_blockcount += PREV.br_blockcount + RIGHT.br_blockcount;
 
-		xfs_iext_remove(bma->ip, &bma->icur, state);
-		xfs_iext_remove(bma->ip, &bma->icur, state);
+		/*
+		 * 修改incore btree
+		 */
+		xfs_iext_remove(bma->ip, &bma->icur, state);	/* 删除PREV对应的incore record */
+		/* 此时bma->icur在xfs_iext_remove()中被自动移动至后一个incore record，即RIGHT */
+		xfs_iext_remove(bma->ip, &bma->icur, state);	/* 删除RIGHT对应的incore record */
+		/* 此时bma->icur ... */
 		xfs_iext_prev(ifp, &bma->icur);
+		/* 此时bma->icur指向LEFT对应的incore record */
 		xfs_iext_update_extent(bma->ip, state, &bma->icur, &LEFT);
 		(*nextents)--;
 
+		/*
+		 * 修改ondisk btree
+		 */
 		if (bma->cur == NULL)
 			rval = XFS_ILOG_CORE | XFS_ILOG_DEXT;
 		else {
@@ -1701,6 +1720,9 @@ xfs_bmap_add_extent_delay_real(
 			if (error)
 				goto done;
 			XFS_WANT_CORRUPTED_GOTO(mp, i == 1, done);
+			/*
+			 * 更新bma->cur
+			 */
 			error = xfs_bmbt_update(bma->cur, &LEFT);
 			if (error)
 				goto done;
@@ -3468,7 +3490,9 @@ xfs_bmap_btalloc(
 		ASSERT(ap->length);
 	}
 
-
+	/*
+	 * 本transaction还未读写过磁盘
+	 */
 	nullfb = ap->tp->t_firstblock == NULLFSBLOCK;
 	fb_agno = nullfb ? NULLAGNUMBER : XFS_FSB_TO_AGNO(mp,
 							ap->tp->t_firstblock);
@@ -3484,6 +3508,9 @@ xfs_bmap_btalloc(
 	} else
 		ap->blkno = ap->tp->t_firstblock;
 
+	/*
+	 * 要分配的extent是否可以和前面或者后面的extent结合起来？
+	 */
 	xfs_bmap_adjacent(ap);
 
 	/*
@@ -3515,6 +3542,8 @@ xfs_bmap_btalloc(
 		 * Search for an allocation group with a single extent large
 		 * enough for the request.  If one isn't found, then adjust
 		 * the minimum allocation size to the largest space found.
+		 *
+		 * 这里的作用是找到合适的AG和AGBNO，但未进行分配动作；
 		 */
 		if (xfs_alloc_is_userdata(ap->datatype) &&
 		    xfs_inode_is_filestream(ap->ip))
@@ -3664,6 +3693,9 @@ xfs_bmap_btalloc(
 		       XFS_FSB_TO_AGNO(mp, ap->tp->t_firstblock) <=
 		       XFS_FSB_TO_AGNO(mp, args.fsbno));
 
+		/*
+		 * 记录分配到的extent的起始磁盘块号（文件系统级块号）
+		 */
 		ap->blkno = args.fsbno;
 		if (ap->tp->t_firstblock == NULLFSBLOCK)
 			ap->tp->t_firstblock = args.fsbno;
@@ -4152,10 +4184,16 @@ xfs_bmapi_reserve_delalloc(
 	xfs_mod_delalloc(ip->i_mount, alen + indlen);
 
 	got->br_startoff = aoff;
+	/*
+	 * 这里记录的好像是数量而不是起始块号
+	 */
 	got->br_startblock = nullstartblock(indlen);
 	got->br_blockcount = alen;
 	got->br_state = XFS_EXT_NORM;
 
+	/*
+	 * 向incore btree插入extent
+	 */
 	xfs_bmap_add_extent_hole_delay(ip, whichfork, icur, got);
 
 	/*
@@ -4211,6 +4249,9 @@ xfs_bmapi_allocate(
 	 * 在洞中？
 	 */
 		bma->length = XFS_FILBLKS_MIN(bma->length, MAXEXTLEN);
+		/*
+		 * 在eof前的hole中
+		 */
 		if (!bma->eof)
 			bma->length = XFS_FILBLKS_MIN(bma->length,
 					bma->got.br_startoff - bma->offset);
@@ -4307,6 +4348,9 @@ xfs_bmapi_allocate(
 	 * Update our extent pointer, given that xfs_bmap_add_extent_delay_real
 	 * or xfs_bmap_add_extent_hole_real might have merged it into one of
 	 * the neighbouring ones.
+	 *
+	 * xfs_bmap_add_extent_xxx_real()中仅修改了bma->icur和bma->cur，这里将
+	 * 其同步到bma->got中；
 	 */
 	xfs_iext_get_extent(ifp, &bma->icur, &bma->got);
 
@@ -4479,6 +4523,9 @@ xfs_bmapi_write(
 	orig_mval = mval;
 	orig_nmap = *nmap;
 #endif
+	/*
+	 * 取出对应的fork
+	 */
 	whichfork = xfs_bmapi_whichfork(flags);
 
 	ASSERT(*nmap >= 1);
@@ -4524,7 +4571,7 @@ xfs_bmapi_write(
 
 	/*
 	 * 为什么又要检查一次eof，上层函数的xfs_bmapi_read()中已经检查过了；
-	 * - 目的时获取eof，在后面要根据eof做不同处理；
+	 * - 目的是获取eof，在后面要根据eof做不同处理；
 	 */
 	if (!xfs_iext_lookup_extent(ip, ifp, bno, &bma.icur, &bma.got))
 		eof = true;
@@ -4555,6 +4602,9 @@ xfs_bmapi_write(
 
 			need_alloc = true;
 		} else if (isnullstartblock(bma.got.br_startblock)) {
+			/*
+			 * 在btree树中存在对应的extent，但是其对应的磁盘位置为特殊值
+			 */
 			wasdelay = true;
 		}
 
@@ -4583,6 +4633,9 @@ xfs_bmapi_write(
 
 			ASSERT(len > 0);
 			ASSERT(bma.length > 0);
+			/*
+			 * 分配extent的磁盘空间
+			 */
 			error = xfs_bmapi_allocate(&bma);
 			if (error)
 				goto error0;
@@ -4592,6 +4645,8 @@ xfs_bmapi_write(
 			/*
 			 * If this is a CoW allocation, record the data in
 			 * the refcount btree for orphan recovery.
+			 *
+			 * 对于COW，要在refcount btree中添加extent；
 			 */
 			if (whichfork == XFS_COW_FORK)
 				xfs_refcount_alloc_cow_extent(tp, bma.blkno,
@@ -4627,6 +4682,11 @@ xfs_bmapi_write(
 	}
 	*nmap = n;
 
+	/*
+	 * 将这个fork从btree形式转换为extent形式（当条件满足时）
+	 * - data fork有两种组织形式，当extents数量比较少时使用extent list，
+	 *   当extents数量比较多时使用btree；
+	 */
 	error = xfs_bmap_btree_to_extents(tp, ip, bma.cur, &bma.logflags,
 			whichfork);
 	if (error)
@@ -5400,6 +5460,9 @@ __xfs_bunmapi(
 	int			wasdel;		/* was a delayed alloc extent */
 	int			whichfork;	/* data or attribute fork */
 	xfs_fsblock_t		sum;
+	/*
+	 * len的初始值设置为*rlen
+	 */
 	xfs_filblks_t		len = *rlen;	/* length to unmap in file */
 	xfs_fileoff_t		max_len;
 	xfs_agnumber_t		prev_agno = NULLAGNUMBER, agno;
@@ -5448,10 +5511,20 @@ __xfs_bunmapi(
 	isrt = (whichfork == XFS_DATA_FORK) && XFS_IS_REALTIME_INODE(ip);
 	end = start + len;
 
+	/*
+	 * 返回false后进入if，返回false后说明end之前没有extent了，自然也就没有
+	 * 需要unmap的东西了；
+	 */
 	if (!xfs_iext_lookup_extent_before(ip, ifp, &end, &icur, &got)) {
 		*rlen = 0;
 		return 0;
 	}
+
+	/*
+	 * 走到这里，说明xfs_iext_lookup_extent_before()返回的是true，此时got和
+	 * icur中的内容都是有意义的；
+	 */
+	
 	end--;
 
 	logflags = 0;
@@ -5502,6 +5575,8 @@ __xfs_bunmapi(
 		/*
 		 * Make sure we don't touch multiple AGF headers out of order
 		 * in a single transaction, as that could cause AB-BA deadlocks.
+		 *
+		 * 在同一个transaction中，对AGF的访问要保持顺序；
 		 */
 		if (!wasdel && !isrt) {
 			agno = XFS_FSB_TO_AGNO(mp, del.br_startblock);
@@ -5510,6 +5585,10 @@ __xfs_bunmapi(
 			prev_agno = agno;
 		}
 		if (got.br_startoff < start) {
+		/*
+		 * 进入到这里，说明start位于got.br_startoff开始的extent中；
+		 * - 将其trim到与[start, end)相同
+		 */
 			del.br_startoff = start;
 			del.br_blockcount -= start - got.br_startoff;
 			if (!wasdel)
@@ -5677,6 +5756,9 @@ nodelete:
 			extno++;
 		}
 	}
+	/*
+	 * rlen表示的是前面剩余的没有unmap的长度
+	 */
 	if (done || end == (xfs_fileoff_t)-1 || end < start)
 		*rlen = 0;
 	else

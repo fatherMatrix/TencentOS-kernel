@@ -2273,6 +2273,8 @@ no_cached_page:
 		/*
 		 * Ok, it wasn't cached, so we need to create a new
 		 * page..
+		 *
+		 * 分配一个物理页
 		 */
 		page = page_cache_alloc(mapping);
 		if (!page) {

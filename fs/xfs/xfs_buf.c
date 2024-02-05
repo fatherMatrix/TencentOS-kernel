@@ -225,6 +225,9 @@ _xfs_buf_alloc(
 	 */
 	flags &= ~(XBF_UNMAPPED | XBF_TRYLOCK | XBF_ASYNC | XBF_READ_AHEAD);
 
+	/*
+	 * 初始b_hold设置为1
+	 */
 	atomic_set(&bp->b_hold, 1);
 	atomic_set(&bp->b_lru_ref, 1);
 	init_completion(&bp->b_iowait);
@@ -671,6 +674,11 @@ xfs_buf_find(
 	spin_lock(&pag->pag_buf_lock);
 	bp = rhashtable_lookup_fast(&pag->pag_buf_hash, &cmap,
 				    xfs_buf_hash_params);
+	/*
+	 * 对xfs_buf的插入和删除操作都需要在xfs_perag->pag_buf_lock的临界区内进
+	 * 行，所以这里在哈希表中查找到bp后，在atomic_inc()之间的时间里，该目标
+	 * xfs_buf不会被释放掉；
+	 */
 	if (bp) {
 		atomic_inc(&bp->b_hold);
 		goto found;
@@ -717,6 +725,10 @@ found:
 	 */
 	if (!xfs_buf_trylock(bp)) {
 		if (flags & XBF_TRYLOCK) {
+			/*
+			 * 这里仅释放b_hold，对应的是在哈希表中查找到xfs_buf后
+			 * 的那次atomic_inc()；
+			 */
 			xfs_buf_rele(bp);
 			XFS_STATS_INC(btp->bt_mount, xb_busy_locked);
 			return -EAGAIN;
@@ -778,6 +790,7 @@ xfs_buf_get_map(
 
 	/*
 	 * 现在xfs_buf的缓存中查找目标buf
+	 * - 返回时xfs_buf处于lock状态，且引用计数被加一
 	 */
 	error = xfs_buf_find(target, map, nmaps, flags, NULL, &bp);
 
@@ -804,6 +817,7 @@ xfs_buf_get_map(
 	/*
 	 * cache miss走这里
 	 * - 内部设置好了xfs_buf的xfs_buf_map数组，即其在磁盘上的位置信息；
+	 * - 返回式xfs_buf->b_sema为0，此时需要一次xfs_buf_unlock()；
 	 */
 	new_bp = _xfs_buf_alloc(target, map, nmaps, flags);
 	if (unlikely(!new_bp))
@@ -920,6 +934,9 @@ xfs_buf_read_map(
 
 	/*
 	 * 分配xfs_buf，并根据map数组的内容分配足够的内存来承载磁盘上读出来的数据；
+	 * - 如果是新分配的，那么xfs_buf->b_hold此时为1；
+	 * - 如果是cache中的，那么也对b_hold进行了加一；
+	 * - 返回的bp总是lock状态的；
 	 */
 	bp = xfs_buf_get_map(target, map, nmaps, flags);
 	if (!bp)
@@ -928,11 +945,13 @@ xfs_buf_read_map(
 	trace_xfs_buf_read(bp, flags, _RET_IP_);
 
 	/*
-	 * 上面分配到的xfs_buf有可能是在cache中的，其中已包含了有效数据；
+	 * xfs_buf中未包含有效数据，需要触发IO操作
 	 */
 	if (!(bp->b_flags & XBF_DONE)) {
 		XFS_STATS_INC(target->bt_mount, xb_get_read);
 		/*
+		 * 这里的ops主要目的是用来对read/write做verify
+		 *
 		 * 目前遇到过的该ops：
 		 * - xfs_bmbt_buf_ops
 		 */
@@ -941,11 +960,29 @@ xfs_buf_read_map(
 		 * 调用submit_bio()
 		 */
 		_xfs_buf_read(bp, flags);
+		/*
+		 * IO是否失败可以通过xfs_buf->b_error得到；
+		 */
 		return bp;
 	}
 
+	/*
+	 * xfs_buf中已经包含了有效数据
+	 */
+
 	xfs_buf_reverify(bp, ops);
 
+	/*
+	 * 如果xfs_buf中已经包含了有效数据，那么会跳过上面的_xfs_buf_read() ->
+	 * submit_bio() -> io_end_callback。在callback中会视同步/异步进行lock的
+	 * 释放、引用计数的减小。所以，对于已经包含了有效数据的xfs_buf，在这里
+	 * 进行对等操作；
+	 *
+	 * - 如果是同步操作，那么不要释放xfs_buf的lock和xfs_buf_get_map()增加的
+	 *   引用计数，将xfs_buf返回给上层处理；
+	 * - 如果是异步操作，那么这里的xfs_buf_relse()释放的lock和引用计数是上面
+	 *   xfs_buf_get_map()增加的。
+	 */
 	if (flags & XBF_ASYNC) {
 		/*
 		 * Read ahead call which is already satisfied,
@@ -1211,6 +1248,10 @@ xfs_buf_lock(
 {
 	trace_xfs_buf_lock(bp, _RET_IP_);
 
+	/*
+	 * if条件成立的话，该xfs_buf一定是被lock的，与其在下面的down()中睡眠等
+	 * 待其他内核路径up()这个xfs_buf，不如自己提前push这个xfs_buf
+	 */
 	if (atomic_read(&bp->b_pin_count) && (bp->b_flags & XBF_STALE))
 		xfs_log_force(bp->b_mount, 0);
 	down(&bp->b_sema);
@@ -1222,6 +1263,9 @@ void
 xfs_buf_unlock(
 	struct xfs_buf		*bp)
 {
+	/*
+	 * 此时必定处于unlock状态，所以可以直接读取sema的count
+	 */
 	ASSERT(xfs_buf_islocked(bp));
 
 	up(&bp->b_sema);
@@ -1288,8 +1332,14 @@ xfs_buf_ioend(
 	if (bp->b_iodone)
 		(*(bp->b_iodone))(bp);
 	else if (bp->b_flags & XBF_ASYNC)
+		/*
+		 * 对于异步xfs_buf，释放自旋锁，并减小引用计数
+		 */
 		xfs_buf_relse(bp);
 	else
+		/*
+		 * 对于同步xfs_buf，这里需要唤醒等待方；
+		 */
 		complete(&bp->b_iowait);
 }
 
@@ -1636,9 +1686,16 @@ __xfs_buf_submit(
 	 * Grab a reference so the buffer does not go away underneath us. For
 	 * async buffers, I/O completion drops the callers reference, which
 	 * could occur before submission returns.
+	 *
+	 * 增加一次b_hold，这个引用计数保护的是整个io提交过程；
 	 */
 	xfs_buf_hold(bp);
 
+	/*
+	 * xfs_buf可能此时被pin在内存中，正在写日志；此时不能修改xfs_buf中的内
+	 * 容；
+	 * - 因为此时已经lock了xfs_buf，wait_unpin()返回后，不会再有新的pin
+	 */
 	if (bp->b_flags & XBF_WRITE)
 		xfs_buf_wait_unpin(bp);
 
@@ -1674,7 +1731,8 @@ __xfs_buf_submit(
 	}
 
 	/*
-	 * 是否要wait完全取决于xfs_buf->b_flags中是否包含XBF_ASYNC
+	 * 如果xfs_buf->b_flags中包含XBF_ASYNC，则wait为false；反之为true；
+	 * - 对于同步的xfs_buf，在这里阻塞等待完成；
 	 */
 	if (wait)
 		/*
@@ -1686,6 +1744,8 @@ __xfs_buf_submit(
 	 * Release the hold that keeps the buffer referenced for the entire
 	 * I/O. Note that if the buffer is async, it is not safe to reference
 	 * after this release.
+	 *
+	 * 这里仅减小引用计数b_hold，对应上面的xfs_buf_hold()
 	 */
 	xfs_buf_rele(bp);
 	return error;

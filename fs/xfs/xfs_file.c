@@ -538,6 +538,7 @@ xfs_file_dio_aio_write(
 	/*
 	 * Don't take the exclusive iolock here unless the I/O is unaligned to
 	 * the file system block size.  We don't need to consider the EOF
+	 *     ^^^^^^^^^^^^^^^^^^^^^^
 	 * extension case here because xfs_file_aio_write_checks() will relock
 	 * the inode as necessary for EOF zeroing cases and fill out the new
 	 * inode size as appropriate.

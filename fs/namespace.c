@@ -703,6 +703,10 @@ static struct mountpoint *get_mountpoint(struct dentry *dentry)
 	struct mountpoint *mp, *new = NULL;
 	int ret;
 
+	/*
+	 * 它为什么会成为挂载点呢？
+	 * - move挂载？
+	 */
 	if (d_mountpoint(dentry)) {
 		/* might be worth a WARN_ON() */
 		if (d_unlinked(dentry))
@@ -721,7 +725,13 @@ mountpoint:
 		return ERR_PTR(-ENOMEM);
 
 
-	/* Exactly one processes may set d_mounted */
+	/*
+	 * Exactly one processes may set d_mounted
+	 *
+	 * 被挂载文件系统的root dentry也会进入下面的函数，导致其d_flags被设置上
+	 * DCACHE_MOUNTED标志，后面是在哪里清除的？
+	 * - put_mountpoint() ？
+	 */
 	ret = d_set_mounted(dentry);
 
 	/* Someone else set d_mounted? */
@@ -755,11 +765,21 @@ done:
 static void __put_mountpoint(struct mountpoint *mp, struct list_head *list)
 {
 	if (!--mp->m_count) {
+		/*
+		 * 挂载点目录
+		 */
 		struct dentry *dentry = mp->m_dentry;
 		BUG_ON(!hlist_empty(&mp->m_list));
 		spin_lock(&dentry->d_lock);
+		/*
+		 * 清除挂载点的DCACHE_MOUNTED标志
+		 */
 		dentry->d_flags &= ~DCACHE_MOUNTED;
 		spin_unlock(&dentry->d_lock);
+		/*
+		 * 挂载点目录应该是经历过一次dget()
+		 * - 在哪里？
+		 */
 		dput_to_list(dentry, list);
 		hlist_del(&mp->m_hash);
 		kfree(mp);
@@ -820,6 +840,9 @@ static struct mountpoint *unhash_mnt(struct mount *mnt)
  */
 static void umount_mnt(struct mount *mnt)
 {
+	/*
+	 * 进入put_mountpoint()之前，unhash_mnt()已经将mount从树上取下来了；
+	 */
 	put_mountpoint(unhash_mnt(mnt));
 }
 
@@ -953,6 +976,7 @@ struct vfsmount *vfs_create_mount(struct fs_context *fc)
 	 *
 	 * 这里还没有对mount结构体进行关联，当进行关联时，会将mnt_mountpoint字
 	 * 段指向正确的位置
+	 * - mnt_set_mountpoint()
 	 */
 	mnt->mnt_mountpoint	= mnt->mnt.mnt_root;
 	mnt->mnt_parent		= mnt;
@@ -1122,6 +1146,9 @@ static void cleanup_mnt(struct mount *mnt)
 		mntput(&m->mnt);
 	}
 	fsnotify_vfsmount_delete(&mnt->mnt);
+	/*
+	 * 这里对应的是哪里？
+	 */
 	dput(mnt->mnt.mnt_root);
 	deactivate_super(mnt->mnt.mnt_sb);
 	mnt_free_id(mnt);
@@ -1178,6 +1205,9 @@ static void mntput_no_expire(struct mount *mnt)
 		unlock_mount_hash();
 		return;
 	}
+	/*
+	 * 走到这里，说明count为0了
+	 */
 	if (unlikely(mnt->mnt.mnt_flags & MNT_DOOMED)) {
 		rcu_read_unlock();
 		unlock_mount_hash();
@@ -1198,6 +1228,9 @@ static void mntput_no_expire(struct mount *mnt)
 	unlock_mount_hash();
 	shrink_dentry_list(&list);
 
+	/*
+	 * 将清理mount的工作交给task_work或者delayed_work来做
+	 */
 	if (likely(!(mnt->mnt.mnt_flags & MNT_INTERNAL))) {
 		struct task_struct *task = current;
 		if (likely(!(task->flags & PF_KTHREAD))) {
@@ -1576,6 +1609,9 @@ static int do_umount(struct mount *mnt, int flags)
 	 */
 
 	if (flags & MNT_FORCE && sb->s_op->umount_begin) {
+		/*
+		 * xfs: NULL
+		 */
 		sb->s_op->umount_begin(sb);
 	}
 
@@ -1710,6 +1746,9 @@ int ksys_umount(char __user *name, int flags)
 	retval = user_path_mountpoint_at(AT_FDCWD, name, lookup_flags, &path);
 	if (retval)
 		goto out;
+	/*
+	 * 通过path中的vfsmount获取到mount
+	 */
 	mnt = real_mount(path.mnt);
 	retval = -EINVAL;
 	if (path.dentry != path.mnt->mnt_root)
@@ -2079,6 +2118,8 @@ static int attach_recursive_mnt(struct mount *source_mnt,
 
 	/* Preallocate a mountpoint in case the new mounts need
 	 * to be tucked under other mounts.
+	 *
+	 * source_mnt->mnt.mnt_root是被挂载子树的根目录；
 	 */
 	smp = get_mountpoint(source_mnt->mnt.mnt_root);
 	if (IS_ERR(smp))
@@ -2732,6 +2773,9 @@ static int do_add_mount(struct mount *newmnt, struct path *path, int mnt_flags)
 
 	mnt_flags &= ~MNT_INTERNAL_FLAGS;
 
+	/*
+	 * 父mountpoint
+	 */
 	mp = lock_mount(path);
 	if (IS_ERR(mp))
 		return PTR_ERR(mp);
@@ -2757,6 +2801,9 @@ static int do_add_mount(struct mount *newmnt, struct path *path, int mnt_flags)
 	if (d_is_symlink(newmnt->mnt.mnt_root))
 		goto unlock;
 
+	/*
+	 * 挂载参数是保存在vfsmount中的
+	 */
 	newmnt->mnt.mnt_flags = mnt_flags;
 	/* 
 	 * 进行mount结构体的关联
@@ -3141,13 +3188,17 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	if (flags & MS_NOUSER)
 		return -EINVAL;
 
-	/* ... and get the mountpoint */
+	/*
+	 * ... and get the mountpoint
+	 *
+	 * 这个得到的path是跨越了挂载点之后的；
+	 */
 	retval = user_path_at(AT_FDCWD, dir_name, LOOKUP_FOLLOW, &path);
 	if (retval)
 		return retval;
 
 	/*
-	 * 盲猜这里检查的应该是挂载点目录是否允许挂载
+	 * 检查挂载点目录是否允许挂载
 	 */ 
 	retval = security_sb_mount(dev_name, &path,
 				   type_page, flags, data_page);
@@ -3401,11 +3452,18 @@ int ksys_mount(const char __user *dev_name, const char __user *dir_name,
 	char *kernel_dev;
 	void *options;
 
+	/*
+	 * "xfs"
+	 */
 	kernel_type = copy_mount_string(type);
 	ret = PTR_ERR(kernel_type);
 	if (IS_ERR(kernel_type))
 		goto out_type;
 
+	/*
+	 * "/dev/loop0"
+	 * "/dev/vdb"
+	 */
 	kernel_dev = copy_mount_string(dev_name);
 	ret = PTR_ERR(kernel_dev);
 	if (IS_ERR(kernel_dev))
@@ -3430,6 +3488,10 @@ out_type:
 SYSCALL_DEFINE5(mount, char __user *, dev_name, char __user *, dir_name,
 		char __user *, type, unsigned long, flags, void __user *, data)
 {
+	/*
+	 * 举个例子：
+	 * - mount("/dev/loop0", "/data/mnt", "xfs", MS_MGC_VAL, NULL) = 0
+	 */
 	return ksys_mount(dev_name, dir_name, type, flags, data);
 }
 

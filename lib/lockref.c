@@ -12,22 +12,22 @@
 	int retry = 100;							\
 	struct lockref old;							\
 	BUILD_BUG_ON(sizeof(old) != 8);						\
-	/* 记录下老的lock_count */							\
+	/* 记录下老的lock_count */						\
 	old.lock_count = READ_ONCE(lockref->lock_count);			\
-	/* 如果没有上锁，则尝试执行CODE，否则直接跳过这部分代码 */					\
+	/* 如果没有上锁，则尝试执行CODE，否则直接跳过这部分代码 */		\
 	while (likely(arch_spin_value_unlocked(old.lock.rlock.raw_lock))) {  	\
 		struct lockref new = old, prev = old;				\
 		CODE								\
 		/*						*/		\
-		/* 如果*ptr与old相同，则将new赋值给*ptr；			*/		\
-		/* - 最终返回的都是*ptr原来的值				*/		\
+		/* 如果*ptr与old相同，则将new赋值给*ptr；	*/		\
+		/* - 最终返回的都是*ptr原来的值			*/		\
 		/*						*/		\
 		old.lock_count = cmpxchg64_relaxed(&lockref->lock_count,	\
 						   old.lock_count,		\
 						   new.lock_count);		\
 		/*						*/		\
-		/* 如果返回的*ptr原值（此处是old）和我们期望的			*/		\
-		/* old（此处是prev，prev的初始值和old是一样的)，*/				\
+		/* 如果返回的*ptr原值（此处是old）和我们期望的	*/		\
+		/* old（此处是prev，prev的初始值和old是一样的)，*/		\
 		/* 说明cmpxchg成功了。				*/		\
 		/*						*/		\
 		if (likely(old.lock_count == prev.lock_count)) {		\

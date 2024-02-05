@@ -1183,6 +1183,9 @@ xfs_log_commit_cil(
 		if (lip->li_ops->iop_committing)
 			lip->li_ops->iop_committing(lip, xc_commit_lsn);
 	}
+	/*
+	 * 如果CIL上日志足够多，则写入iclog
+	 */
 	xlog_cil_push_background(log);
 
 	up_read(&cil->xc_ctx_lock);

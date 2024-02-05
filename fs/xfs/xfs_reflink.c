@@ -811,7 +811,13 @@ xfs_reflink_end_cow_extent(
 	xfs_trans_mod_dquot_byino(tp, ip, XFS_TRANS_DQ_DELBCOUNT,
 			(long)del.br_blockcount);
 
-	/* Remove the mapping from the CoW fork. */
+	/*
+	 * Remove the mapping from the CoW fork.
+	 *
+	 * 这里操作的仅仅是incore btree
+	 * - ondisk btree在哪里操作的？
+	 *   > cow fork没有ondisk btree的嘛，怕不是看迷瞪了！
+	 */
 	xfs_bmap_del_extent_cow(ip, &icur, &got, &del);
 
 	error = xfs_trans_commit(tp);

@@ -663,6 +663,9 @@ static void evict(struct inode *inode)
 	if (S_ISCHR(inode->i_mode) && inode->i_cdev)
 		cd_forget(inode);
 
+	/*
+	 * 将inode从hash表上摘下来
+	 */
 	remove_inode_hash(inode);
 
 	spin_lock(&inode->i_lock);
@@ -1772,6 +1775,9 @@ retry:
 		 * - 如果文件都要被删除了，也就没有必要将inode回写了
 		 */
 		if (inode->i_nlink && (inode->i_state & I_DIRTY_TIME)) {
+			/*
+			 * 保证回写过程中inode不会被从内存中释放
+			 */
 			atomic_inc(&inode->i_count);
 			spin_unlock(&inode->i_lock);
 			trace_writeback_lazytime_iput(inode);

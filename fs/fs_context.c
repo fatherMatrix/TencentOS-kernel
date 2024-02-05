@@ -652,6 +652,9 @@ static int legacy_get_tree(struct fs_context *fc)
 	struct super_block *sb;
 	struct dentry *root;
 
+	/*
+	 * xfs: xfs_fs_mount()
+	 */
 	root = fc->fs_type->mount(fc->fs_type, fc->sb_flags,
 				      fc->source, ctx->legacy_data);
 	if (IS_ERR(root))

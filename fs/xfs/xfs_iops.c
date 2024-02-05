@@ -1288,6 +1288,10 @@ xfs_setup_inode(
 
 	inode_sb_list_add(inode);
 	/* make the inode look hashed for the writeback code */
+	/*
+	 * fake hash是为啥？哪里将inode放到hash表上呢
+	 * - crash看了一下，似乎每个xfs inode的i_hash都是独立的，没有一个哈希表；
+	 */
 	inode_fake_hash(inode);
 
 	inode->i_uid    = xfs_uid_to_kuid(ip->i_d.di_uid);

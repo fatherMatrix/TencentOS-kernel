@@ -5597,7 +5597,12 @@ __xfs_bunmapi(
 		if (del.br_startoff + del.br_blockcount > end + 1)
 			del.br_blockcount = end + 1 - del.br_startoff;
 
-		/* How much can we safely unmap? */
+		/*
+		 * How much can we safely unmap?
+		 *
+		 * 如果max_len限制了可以unmap的extent长度，那么按照从后往前的方
+		 * 向截取extent；
+		 */
 		if (max_len < del.br_blockcount) {
 			del.br_startoff += del.br_blockcount - max_len;
 			if (!wasdel)
@@ -5607,6 +5612,10 @@ __xfs_bunmapi(
 
 		if (!isrt)
 			goto delete;
+
+		/*
+		 * 走到这里，必定是realtime device
+		 */
 
 		sum = del.br_startblock + del.br_blockcount;
 		div_u64_rem(sum, mp->m_sb.sb_rextsize, &mod);

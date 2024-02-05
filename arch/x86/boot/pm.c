@@ -119,6 +119,8 @@ void go_to_protected_mode(void)
 	/*
 	 * 要进入保护模式，就必须先设置好GDT和IDT
 	 * - 诶，实模式下的gdt和idt在哪儿设置的呢？
+	 *   > 实模式有个锤子的gdt !
+	 *   > idt呢？
 	 */
 	/* Actual transition to protected mode... */
 	setup_idt();	/* 仅初始化了一个null_idt项 */

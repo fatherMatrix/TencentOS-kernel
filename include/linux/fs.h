@@ -1660,6 +1660,11 @@ struct super_block {
 	const struct fsverity_operations *s_vop;
 #endif
 	struct hlist_bl_head	s_roots;	/* alternate root dentries for NFS */
+	/*
+	 * 链表头，链表元素是mount->mnt_instance
+	 * - 一个文件系统（super_block）可以被多次挂载，每次挂载，都会向本链表
+	 *   添加一个元素；
+	 */
 	struct list_head	s_mounts;	/* list of mounts; _not_ for fs use */
 	/* 指向块设备描述符 */
 	struct block_device	*s_bdev;
@@ -2339,6 +2344,7 @@ static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)
 		.ki_filp = filp,
 		/*
 		 * 标志转换
+		 * - 包括direct io
 		 */
 		.ki_flags = iocb_flags(filp),
 		.ki_hint = ki_hint_validate(file_write_hint(filp)),

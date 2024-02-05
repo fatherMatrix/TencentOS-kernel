@@ -339,9 +339,15 @@ static void put_super(struct super_block *sb)
 void deactivate_locked_super(struct super_block *s)
 {
 	struct file_system_type *fs = s->s_type;
+	/*
+	 * 如果s_active做减法后结果为0了，则返回true，进入if
+	 */
 	if (atomic_dec_and_test(&s->s_active)) {
 		cleancache_invalidate_fs(s);
 		unregister_shrinker(&s->s_shrink);
+		/*
+		 * xfs: kill_block_super()
+		 */
 		fs->kill_sb(s);
 
 		/*
@@ -371,6 +377,10 @@ EXPORT_SYMBOL(deactivate_locked_super);
  */
 void deactivate_super(struct super_block *s)
 {
+	/*
+	 * 如果当前s_active不等于1，则对其进行减1操作，并返回true；
+	 * 如果当前s_active等于1，则直接返回false；
+	 */
         if (!atomic_add_unless(&s->s_active, -1, 1)) {
 		down_write(&s->s_umount);
 		deactivate_locked_super(s);
@@ -397,11 +407,24 @@ static int grab_super(struct super_block *s) __releases(sb_lock)
 	s->s_count++;
 	spin_unlock(&sb_lock);
 	down_write(&s->s_umount);
+	/*
+	 * 如果s_active当前不为0，则对齐进行加1操作，并返回true；
+	 * 如果s_active当前为0，则直接返回false；
+	 *
+	 * SB_BORN表示已经初始化好的super_block，已经被其他内核路径观测到的了，
+	 * 所以要特别检查其s_active，确保其合法性。
+	 * 如果没有SB_BORN标志，则说明还没有被其他内核路径观测到，是一个本内核
+	 * 路径新分配的super_block，其s_active必定为1，不需要检查；
+	 */
 	if ((s->s_flags & SB_BORN) && atomic_inc_not_zero(&s->s_active)) {
 		put_super(s);
 		return 1;
 	}
 	up_write(&s->s_umount);
+	/*
+	 * put_super()旨在减小s_count
+	 * - 对应本函数开头的s_count++
+	 */
 	put_super(s);
 	return 0;
 }
@@ -470,6 +493,9 @@ void generic_shutdown_super(struct super_block *sb)
 			sb->s_dio_done_wq = NULL;
 		}
 
+		/*
+		 * xfs: xfs_fs_put_super()
+		 */
 		if (sop->put_super)
 			sop->put_super(sb);
 
@@ -1517,6 +1543,11 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 		 * holding an active reference.
 		 */
 		up_write(&s->s_umount);
+		/*
+		 * 对应上面的blkdev_get_by_path()中增加的引用计数；
+		 * - 这里可以推测，一个super_block被多次挂载时，其对应的
+		 *   block_device的引用计数只有一个；
+		 */
 		blkdev_put(bdev, mode);
 		down_write(&s->s_umount);
 	} else {

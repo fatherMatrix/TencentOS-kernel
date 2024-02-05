@@ -458,11 +458,20 @@ void iov_iter_init(struct iov_iter *i, unsigned int direction,
 	WARN_ON(direction & ~(READ | WRITE));
 	direction &= READ | WRITE;
 
+	/*
+	 * 关于uaccess_kernel()，要关注一下get_fs()/set_fs()；
+	 * - 要注意，这里的函数名具有误导性，这里仅仅设置软件上的访问限制，并不
+	 *   是GDT表中的那个限制；
+	 */
+
 	/* It will get better.  Eventually... */
 	if (uaccess_kernel()) {
 		i->type = ITER_KVEC | direction;
 		i->kvec = (struct kvec *)iov;
 	} else {
+		/*
+		 * 用户态发起的io走这里
+		 */
 		i->type = ITER_IOVEC | direction;
 		i->iov = iov;
 	}

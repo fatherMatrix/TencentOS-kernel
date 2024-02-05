@@ -696,6 +696,16 @@ int do_vfs_ioctl(struct file *filp, unsigned int fd, unsigned int cmd,
 		if (S_ISREG(inode->i_mode))
 			error = file_ioctl(filp, cmd, arg);
 		else
+		/*
+		 * 块设备：
+		 * - loop
+		 * - vdb
+		 * - ...
+		 *
+		 * 字符设备：
+		 * - kvm
+		 * - ...
+		 */
 			error = vfs_ioctl(filp, cmd, arg);
 		break;
 	}

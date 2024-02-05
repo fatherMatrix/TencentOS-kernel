@@ -69,7 +69,13 @@ struct fs_context;
  * 被mount文件系统的根目录和对应的超级块
  */
 struct vfsmount {
+	/*
+	 * 子树的根目录
+	 */
 	struct dentry *mnt_root;	/* root of the mounted tree */
+	/*
+	 * 子树的超级块
+	 */
 	struct super_block *mnt_sb;	/* pointer to superblock */
 	int mnt_flags;
 } __randomize_layout;

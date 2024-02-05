@@ -52,6 +52,8 @@ struct mount {
 	/* 
 	 * 挂载点对应的parent文件系统目录项，与this->mnt_mp中的m_dentry字段指向
 	 * 了相同的位置
+	 * - 但是在mount和umount过程中，mnt_mountpoint会指向被挂载文件系统的root
+	 *   目录。而mnt_mp->m_dentry则一直指向parent文件系统目录项；
 	 */
 	struct dentry *mnt_mountpoint;
 	/* 被mount文件系统的信息 */
@@ -66,6 +68,9 @@ struct mount {
 	int mnt_count;
 	int mnt_writers;
 #endif
+	/*
+	 * 维护树结构
+	 */
 	struct list_head mnt_mounts;	/* list of children, anchored here */
 	struct list_head mnt_child;	/* and going through their mnt_child */
 	/* 

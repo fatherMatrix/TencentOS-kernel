@@ -939,7 +939,7 @@ xfs_fs_destroy_inode(
 	XFS_STATS_INC(ip->i_mount, vn_remove);
 
 	/*
-	 * 组织事务，删除磁盘上的xfs_inode
+	 * 如果需要磁盘上删除的话，内部会组织事务，删除磁盘上的xfs_inode
 	 */
 	xfs_inactive(ip);
 

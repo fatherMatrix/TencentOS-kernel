@@ -179,7 +179,13 @@ xfs_reclaim_worker(
 	struct xfs_mount *mp = container_of(to_delayed_work(work),
 					struct xfs_mount, m_reclaim_work);
 
+	/*
+	 * 工作函数
+	 */
 	xfs_reclaim_inodes(mp, SYNC_TRYLOCK);
+	/*
+	 * 重新再次延迟触发本函数
+	 */
 	xfs_reclaim_work_queue(mp);
 }
 

@@ -81,7 +81,7 @@ enum ucount_type {
 
 /*
  * user_namespace遵循以下原则：
- * - user_namespace使用父子关系组成树形结构，进程需要指定树种的某个节点为本进程
+ * - user_namespace使用父子关系组成树形结构，进程需要指定树中的某个节点为本进程
  *   所在的user_namespace。即task_struct->real_cred->user_ns
  * - 每个其他类型的namespace（uts/pid/mount/network/cgroup）都需要指定当前ns所属
  *   的user_namespace。即xxx_ns->user_ns

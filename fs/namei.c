@@ -571,6 +571,13 @@ struct nameidata {
 		struct path link;		/* 表示一个符号链接的path */
 		struct delayed_call done;
 		const char *name;		/* 跳转到path的目标前，要把当前待解析的路径存到这里 */
+		/*
+		 * walk_component()解析出的dentry有两种结局：
+		 * - 非link的dentry，通过path_to_nameidata()移进到path中，此时该
+		 *   dentry->d_seq放入nameidata->seq中；
+		 * - link的dentry，在pick_link()中被放入nameidata->stack[x]->link，此时
+		 *   该dentry->d_seq放入nameidata->stack->seq中；
+		 */
 		unsigned seq;
 	} *stack, internal[EMBEDDED_LEVELS];
 	struct filename	*name; 			/* 指向文件路径名 */
@@ -1004,6 +1011,9 @@ void nd_jump_link(struct path *path)
 	nd->flags |= LOOKUP_JUMPED;
 }
 
+/*
+ * 用于放弃一个符号链接
+ */
 static inline void put_link(struct nameidata *nd)
 {
 	/*
@@ -1214,6 +1224,20 @@ const char *get_link(struct nameidata *nd)
 	if (!res) {
 		const char * (*get)(struct dentry *, struct inode *,
 				struct delayed_call *);
+		/*
+		 * 这里的inode是直接从nameidata->link_inode拿出来的，link_inode
+		 * 是在pick_link()中赋值的，赋值的入参inode是从seqcount临界区内
+		 * 读出来的。
+		 *
+		 * 那么，该inode本身的内容一定是可用的，对于非xfs的文件系统，该
+		 * inode在删除后，rcu临界区内是一直不变化的，因此是安全的；
+		 *
+		 * 对于非xfs，即便在这个小窗口内，dentry被重新链接到了新建的
+		 * inode（肯定是同路径的啦，毕竟只有同路径才可能使用相同的
+		 * dentry），新的inode肯定也不是当前的inode，因为当前的inode
+		 * 内存还没释放，slab不可能多次分配同一个内存地址。
+		 * 但对于xfs，这就有可能了！
+		 */
 		get = inode->i_op->get_link;
 		if (nd->flags & LOOKUP_RCU) {
 			res = get(NULL, inode, &last->done);
@@ -1726,6 +1750,10 @@ static struct dentry *lookup_dcache(const struct qstr *name,
 
 /*
  * Parent directory has inode locked exclusive.  This is one
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ *  如果父inode用的是共享锁，那么要将d_alloc()
+ *  替换为d_alloc_parallel()。
+ *
  * and only case when ->lookup() gets called on non in-lookup
  * dentries - as the matter of fact, this only gets called
  * when directory is guaranteed to have no in-lookup children
@@ -1745,6 +1773,9 @@ static struct dentry *__lookup_hash(const struct qstr *name,
 	if (unlikely(IS_DEADDIR(dir)))
 		return ERR_PTR(-ENOENT);
 
+	/*
+	 * 外部使用排它锁锁定了父inode，这里可以不使用d_alloc_parallel()
+	 */
 	dentry = d_alloc(base, name);
 	if (unlikely(!dentry))
 		return ERR_PTR(-ENOMEM);
@@ -2065,6 +2096,10 @@ static inline int handle_dots(struct nameidata *nd, int type)
 	return 0;
 }
 
+/*
+ * 仅负责将link放入nd->stack中
+ * - 成功放入则返回1
+ */
 static int pick_link(struct nameidata *nd, struct path *link,
 		     struct inode *inode, unsigned seq)
 {
@@ -2118,12 +2153,20 @@ enum {WALK_FOLLOW = 1, WALK_MORE = 2};
  * to do this check without having to look at inode->i_op,
  * so we keep a cache of "no, this doesn't need follow_link"
  * for the common case.
+ *
+ * 0:  path->dentry不是符号链接
+ * 1:  path->dentry是符号链接，且将其放入了nd->stack
+ * <0: 错误
  */
 static inline int step_into(struct nameidata *nd, struct path *path,
 			    int flags, struct inode *inode, unsigned seq)
 {
 	/*
-	 * 非do_last()，lookup_last()，xxx_last()时都会设置WALK_MORE标志
+	 * 最后一个路径分量（包括每层符号链接的最后一个分量）时不设置WALK_MORE
+	 * - nd->depth为0时，表示没有软链接，不需要put_link()
+	 *
+	 * put_link()操作相当于弹出了一层符号链接
+	 * - 调用step_into()前已经将这层符号链接前的name读取出来了；
 	 */
 	if (!(flags & WALK_MORE) && nd->depth)
 		put_link(nd);
@@ -2131,6 +2174,7 @@ static inline int step_into(struct nameidata *nd, struct path *path,
 	/*
 	 * 走到这里说明需要继续向下一个路径分量迈进
 	 */
+
 	if (likely(!d_is_symlink(path->dentry)) ||
 	   !(flags & WALK_FOLLOW || nd->flags & LOOKUP_FOLLOW)) {
 		/* not a symlink or should not follow */
@@ -2152,7 +2196,11 @@ static inline int step_into(struct nameidata *nd, struct path *path,
 	 * 走到这里，说明path表示一个符号链接，且需要follow该符号链接
 	 */
 
-	/* make sure that d_is_symlink above matches inode */
+	/*
+	 * make sure that d_is_symlink above matches inode
+	 *
+	 * pick_link()中为什么没有再检查了？
+	 */
 	if (nd->flags & LOOKUP_RCU) {
 		if (read_seqcount_retry(&path->dentry->d_seq, seq))
 			return -ECHILD;
@@ -2208,6 +2256,8 @@ static int walk_component(struct nameidata *nd, int flags)
 		 * 小于0的话表示从rcu-walk到ref-walk的切换出了问题，需要回到上
 		 * 层来解决；
 		 * - ENOENT会返回
+		 *
+		 * 如果成功从rcu mode切换为ref mode，则err为0；
 		 */
 		if (err < 0)
 			return err;
@@ -2531,6 +2581,9 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 
 	if (IS_ERR(name))
 		return PTR_ERR(name);
+	/*
+	 * 清洗多余的/
+	 */
 	while (*name=='/')
 		name++;
 	if (!*name)
@@ -2607,6 +2660,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		 * 此函数本身并不要求将所有路径解析完成，当发现待解析的路径已经
 		 * 是最后一个路径分量时即可退出本函数，交由lookup_last或do_last
 		 * 操作
+		 * - 但在此之前要看当前是否还有未处理的软链接
 		 */ 
 		if (!*name)
 			goto OK;
@@ -2619,6 +2673,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		do {
 			name++;
 		} while (unlikely(*name == '/'));
+
 		if (unlikely(!*name)) {
 OK:
 			/* 
@@ -2639,14 +2694,19 @@ OK:
 			/* 
 			 * 运行到这里说明有符号链接要处理，将name指向这个符号链
 			 * 接。name表示下一步要处理的路径
+			 * - nd->depth的降低被放入了walk_component -> step_into
+			 *   中。因为此处的name指向是我们后面要处理的分量，而不
+			 *   是本次要处理的分量（本次要处理的分量已经放入了
+			 *   nd->last->name中；
 			 */
 			name = nd->stack[nd->depth - 1].name;
 			/* trailing symlink, done */
 			if (!name)
 				return 0;
 			/*
-			 * 走到这里，说明nd->last还是一个符号链接的结尾，此时继续
-			 * 解析；
+			 * 走到这里，说明nd->last还是一个符号链接（第N+1层）的
+			 * 结尾，此时继续解析该结尾。
+			 *
 			 * 如果在上面返回了，表示nd->last是真正路径的最后，此时本
 			 * 函数返回，将最后一个路径分量交给xxx_last()处理；
 			 */
@@ -2670,8 +2730,9 @@ OK:
 			/* 
 			 * 读取符号连接的目标路径，因为在walk_component -> 
 			 * step_into -> pick_link中只存放了符号连接的dentry字段
-			 * 而没有解析其具体的name字段；
-			 * 这里通过get_link()方法得到该符号链接inode的目标路径；
+			 * 到nameidata->stack[x]->last中，而没有解析其具体的
+			 * name字段；这里通过get_link()方法得到该符号链接inode的
+			 * 目标路径；
 			 */
 			const char *s = get_link(nd);
 
@@ -2710,6 +2771,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	/* 
 	 * nameidata->name 是个一个 struct filename * 类型
 	 * nameidata->name->name 是一个 char * 类型
+	 * - nd->name的设置是在set_nameidata()中
 	 */
 	const char *s = nd->name->name;
 
@@ -2767,6 +2829,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 
 	/*
 	 * 为什么是mount_lock？这个全局锁是用来干嘛的？
+	 * - 防止有mount操作导致部分路径被覆盖更新
 	 */
 	nd->m_seq = read_seqbegin(&mount_lock);
 	if (*s == '/') {
@@ -2801,6 +2864,8 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 				nd->inode = nd->path.dentry->d_inode;
 				/*
 				 * 开启父节点的顺序锁临界区
+				 * - 这里的关键点是通过临时变量seq保证我们获取到了正确的
+				 *   nd->seq
 				 */
 				nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
 			} while (read_seqcount_retry(&fs->seq, seq));
@@ -2853,6 +2918,9 @@ static const char *trailing_symlink(struct nameidata *nd)
 	if (unlikely(error))
 		return ERR_PTR(error);
 	nd->flags |= LOOKUP_PARENT;
+	/*
+	 * 最后一层软链接之外的软链接会在link_path_walk()中的循环中被处理干净
+	 */
 	nd->stack[0].name = NULL;
 	s = get_link(nd);
 	return s ? s : "";
@@ -2922,7 +2990,7 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 	}
 
 	/*
-	 * link_path_walk()成功后返回0，意味着已经解析完了。
+	 * link_path_walk()成功后返回0，意味着已经解析完了。nd->depth=0
 	 * link_path_walk()返回0后才会执行lookup_last()
 	 *
 	 * lookup_last()返回值大于0意味着是个符号链接
@@ -3922,6 +3990,8 @@ no_open:
 		 *
 		 * 里面的d_splice_alias()会唤醒d_alloc_parallel()中的睡眠，并使其通过
 		 * unhash()等检查并返回；
+		 *
+		 * xfs: xfs_dir_inode_operations.xfs_vn_lookup()
 		 */
 		struct dentry *res = dir_inode->i_op->lookup(dir_inode, dentry,
 							     nd->flags);
@@ -4927,6 +4997,9 @@ retry:
 	if (error)
 		goto exit1;
 retry_deleg:
+	/*
+	 * 锁住了父inode
+	 */
 	inode_lock_nested(path.dentry->d_inode, I_MUTEX_PARENT);
 	/*
 	 * 查找待删除文件的dentry，返回时引用计数已经加一
@@ -4980,6 +5053,9 @@ exit2:
 	}
 	mnt_drop_write(path.mnt);
 exit1:
+	/*
+	 * 释放父目录的path
+	 */
 	path_put(&path);
 	if (retry_estale(error, lookup_flags)) {
 		lookup_flags |= LOOKUP_REVAL;

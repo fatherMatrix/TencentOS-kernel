@@ -210,8 +210,16 @@ static loff_t
 iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 		struct iomap_dio *dio, struct iomap *iomap)
 {
+	/*
+	 * direct io的对齐和文件系统没有关系，和block_device的
+	 * request_queue ~> logical_block_size相关。该字段反应的是块设备本身的
+	 * 物理特性；
+	 */
 	unsigned int blkbits = blksize_bits(bdev_logical_block_size(iomap->bdev));
 	unsigned int fs_block_size = i_blocksize(inode), pad;
+	/*
+	 * 内存起始地址也要参与对齐
+	 */
 	unsigned int align = iov_iter_alignment(dio->submit.iter);
 	struct iov_iter iter;
 	struct bio *bio;
@@ -220,6 +228,9 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 	int nr_pages, ret = 0;
 	size_t copied = 0;
 
+	/*
+	 * 为什么要在这里才开始做对齐检查？不能早点做？
+	 */
 	if ((pos | length | align) & ((1 << blkbits) - 1))
 		return -EINVAL;
 
@@ -383,11 +394,20 @@ iomap_dio_actor(struct inode *inode, loff_t pos, loff_t length,
 		return iomap_dio_hole_actor(length, dio);
 	case IOMAP_UNWRITTEN:
 		if (!(dio->flags & IOMAP_DIO_WRITE))
+			/*
+			 * 对于read操作，返回全0，等同于hole
+			 */
 			return iomap_dio_hole_actor(length, dio);
+		/*
+		 * 对于write操作，要考虑convert
+		 */
 		return iomap_dio_bio_actor(inode, pos, length, dio, iomap);
 	case IOMAP_MAPPED:
 		return iomap_dio_bio_actor(inode, pos, length, dio, iomap);
 	case IOMAP_INLINE:
+		/*
+		 * xfs没有这个类别，ext4有
+		 */
 		return iomap_dio_inline_actor(inode, pos, length, dio, iomap);
 	case IOMAP_DELALLOC:
 		/*
@@ -421,7 +441,8 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		const struct iomap_ops *ops, const struct iomap_dio_ops *dops)
 {
 	/*
-	 * 对于direct io，dops是 xfs_dio_write_ops
+	 * 对于direct io write，dops是 xfs_dio_write_ops
+	 * 对于direct io read，dops是 NULL
 	 */
 	struct address_space *mapping = iocb->ki_filp->f_mapping;
 	struct inode *inode = file_inode(iocb->ki_filp);
@@ -456,7 +477,8 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	 */
 	dio->i_size = i_size_read(inode);
 	/*
-	 * 对xfs，dops是 xfs_dio_write_ops ；
+	 * 对xfs direct io write，dops是 xfs_dio_write_ops ；
+	 * 对xfs direct io read，dops是 NULL；
 	 * - 其实只有一个字段，就是end_io，作为dio结束时的回调；
 	 */
 	dio->dops = dops;

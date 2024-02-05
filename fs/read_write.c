@@ -407,6 +407,9 @@ static ssize_t new_sync_read(struct file *filp, char __user *buf, size_t len, lo
 	struct iov_iter iter;
 	ssize_t ret;
 
+	/*
+	 * 这里会判定文件是不是dio
+	 */
 	init_sync_kiocb(&kiocb, filp);
 	kiocb.ki_pos = (ppos ? *ppos : 0);
 	iov_iter_init(&iter, READ, &iov, 1, len);
@@ -617,6 +620,9 @@ ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
 			ppos = &pos;
 		}
 		ret = vfs_read(f.file, buf, count, ppos);
+		/*
+		 * 更新file结构体的pos
+		 */
 		if (ret >= 0 && ppos)
 			f.file->f_pos = pos;
 		fdput_pos(f);

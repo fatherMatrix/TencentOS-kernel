@@ -158,6 +158,7 @@ typedef struct xfs_buf {
 	xfs_buf_flags_t		b_flags;	/* status flags */
 	/*
 	 * xfs_buf_lock()/xfs_buf_unlock()相关
+	 * - 初始时该字段被设置为了0，参见_xfs_buf_alloc()
 	 */
 	struct semaphore	b_sema;		/* semaphore for lockables */
 

@@ -98,6 +98,7 @@ static unsigned int d_hash_shift __read_mostly;
 
 /*
  * 哈希键默认是由parent_dentry指针和last_name计算出来的
+ * - dentry_hashtable中的dentry有可能是negative状态的；
  */
 static struct hlist_bl_head *dentry_hashtable __read_mostly;
 
@@ -370,6 +371,10 @@ static void dentry_unlink_inode(struct dentry * dentry)
 	 * dentry中关于inode的修改需要使用dentry->d_seq来保护
 	 */
 	raw_write_seqcount_begin(&dentry->d_seq);
+	/*
+	 * 清除dentry->d_inode，将dentry装换为negative状态
+	 * - 但并未将dentry从dentry_hashtable上取下
+	 */
 	__d_clear_type_and_inode(dentry);
 	/*
 	 * 一个inode对应多个dentry（每个硬链接对应一个dentry），将dentry
@@ -518,7 +523,13 @@ static void ___d_drop(struct dentry *dentry)
 void __d_drop(struct dentry *dentry)
 {
 	if (!d_unhashed(dentry)) {
+	/*
+	 * 如果还在dentry_hashtable上
+	 */
 		___d_drop(dentry);
+		/*
+		 * 从哈希表上取下
+		 */
 		dentry->d_hash.pprev = NULL;
 		write_seqcount_invalidate(&dentry->d_seq);
 	}
@@ -684,6 +695,9 @@ static inline bool retain_dentry(struct dentry *dentry)
 	if (unlikely(dentry->d_flags & DCACHE_DISCONNECTED))
 		return false;
 
+	/*
+	 * xfs所有的d_op都是NULL
+	 */
 	if (unlikely(dentry->d_flags & DCACHE_OP_DELETE)) {
 		/*
 		 * d_delete()接口返回0表示cache该dentry；
@@ -692,6 +706,11 @@ static inline bool retain_dentry(struct dentry *dentry)
 		if (dentry->d_op->d_delete(dentry))
 			return false;
 	}
+
+	/*
+	 * 最终还是减小了引用计数
+	 */
+
 	/* retain; LRU fodder */
 	dentry->d_lockref.count--;
 	if (unlikely(!(dentry->d_flags & DCACHE_LRU_LIST)))
@@ -1568,6 +1587,10 @@ int d_set_mounted(struct dentry *dentry)
 	spin_lock(&dentry->d_lock);
 	if (!d_unlinked(dentry)) {
 		ret = -EBUSY;
+		/*
+		 * 对应清除DCACHE_MOUNTED标志位的地方：
+		 * - put_mountpoint()
+		 */
 		if (!d_mountpoint(dentry)) {
 			dentry->d_flags |= DCACHE_MOUNTED;
 			ret = 0;
@@ -2104,8 +2127,11 @@ static void __d_instantiate(struct dentry *dentry, struct inode *inode)
  * of society.
  *
  * NOTE! This assumes that the inode count has been incremented
+ *       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * (or otherwise set) by the caller to indicate that it is now
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * in use by the dcache.
+ * ^^^^^^^^^^^^^^^^^^^^^
  */
  
 void d_instantiate(struct dentry *entry, struct inode * inode)
@@ -2631,7 +2657,9 @@ EXPORT_SYMBOL(d_hash_and_lookup);
 /*
  * When a file is deleted, we have two options:
  * - turn this dentry into a negative dentry
+ *   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * - unhash this dentry and free it.
+ *   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  *
  * Usually, we want to just turn this into
  * a negative dentry, but if anybody else is
@@ -2659,9 +2687,19 @@ void d_delete(struct dentry * dentry)
 	 * Are we the only user?
 	 */
 	if (dentry->d_lockref.count == 1) {
+	/*
+	 * 如果我们是dentry唯一的拥有者，那么我们可以将该dentry转变为negative状
+	 * 态，然后将其保留在内存中；
+	 * - 结果：dentry保留在dentry_hashtable中，但为negative状态
+	 */
 		dentry->d_flags &= ~DCACHE_CANT_MOUNT;
 		dentry_unlink_inode(dentry);
 	} else {
+	/*
+	 * 如果该dentry有其他的使用者，那么我们不再考虑将其保留在内存中，而是将
+	 * 其从哈希表上摘除，在稍后将其从内存中删除；
+	 * - 结果：dentry从dentry_hashtable中摘下，但保留了d_inode
+	 */
 		__d_drop(dentry);
 		spin_unlock(&dentry->d_lock);
 		spin_unlock(&inode->i_lock);

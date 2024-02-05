@@ -40,7 +40,13 @@ struct iov_iter {
 	size_t iov_offset;			/* 待处理iovec的待处理第一个字节在iovec中的偏移 */
 	size_t count;				/* iovec数组中所有元素的总字节数 */
 	union {
+		/*
+		 * 运行在用户态，用这个
+		 */
 		const struct iovec *iov;	/* iovec数组 */
+		/*
+		 * 运行在内核态，用这个
+		 */
 		const struct kvec *kvec;
 		const struct bio_vec *bvec;
 		struct pipe_inode_info *pipe;

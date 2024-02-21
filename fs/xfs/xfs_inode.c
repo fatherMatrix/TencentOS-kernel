@@ -709,6 +709,9 @@ xfs_lookup(
 	if (error)
 		goto out_unlock;
 
+	/*
+	 * 走到这里，说明磁盘上是存在目标inode的
+	 */
 	error = xfs_iget(dp->i_mount, NULL, inum, 0, 0, ipp);
 	if (error)
 		goto out_free_name;
@@ -2225,6 +2228,9 @@ xfs_iunlink_update_bucket(
 	if (old_value == new_agino)
 		return -EFSCORRUPTED;
 
+	/*
+	 * new_agino是本哈希桶中的第一个xfs_inode，直接赋值即可
+	 */
 	agi->agi_unlinked[bucket_index] = cpu_to_be32(new_agino);
 	offset = offsetof(struct xfs_agi, agi_unlinked) +
 			(sizeof(xfs_agino_t) * bucket_index);
@@ -2934,11 +2940,15 @@ xfs_iunpin_wait(
  * and hence freeing disk space requiring that we lock an AGF.
  *
  * Hence the ordering that is imposed by other parts of the code is AGI before
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * AGF. This means we cannot remove the directory entry before we drop the inode
+ * ^^^^
  * reference count and put it on the unlinked list as this results in a lock
  * order of AGF then AGI, and this can deadlock against inode allocation and
  * freeing. Therefore we must drop the link counts before we remove the
+ *          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * directory entry.
+ * ^^^^^^^^^^^^^^^^
  *
  * This is still safe from a transactional point of view - it is not until we
  * get to xfs_defer_finish() that we have the possibility of multiple

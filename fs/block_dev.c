@@ -781,6 +781,10 @@ static struct kmem_cache * bdev_cachep __read_mostly;
 
 static struct inode *bdev_alloc_inode(struct super_block *sb)
 {
+	/*
+	 * 这个slab有ctor
+	 * - 参见bdev_cache_init()
+	 */
 	struct bdev_inode *ei = kmem_cache_alloc(bdev_cachep, GFP_KERNEL);
 	if (!ei)
 		return NULL;
@@ -858,6 +862,9 @@ void __init bdev_cache_init(void)
 	int err;
 	static struct vfsmount *bd_mnt;
 
+	/*
+	 * 诶，这个slab是有ctor的
+	 */
 	bdev_cachep = kmem_cache_create("bdev_cache", sizeof(struct bdev_inode),
 			0, (SLAB_HWCACHE_ALIGN|SLAB_RECLAIM_ACCOUNT|
 				SLAB_MEM_SPREAD|SLAB_ACCOUNT|SLAB_PANIC),
@@ -919,6 +926,7 @@ struct block_device *bdget(dev_t dev)
 
 	/*
 	 * 此inode是bdev fs中的索引节点
+	 * - 参见bdev_cache_init() -> register_filesystem(&bd_type)；
 	 */
 	inode = iget5_locked(blockdev_superblock, hash(dev),
 			bdev_test, bdev_set, &dev);
@@ -983,6 +991,9 @@ void bdput(struct block_device *bdev)
 
 EXPORT_SYMBOL(bdput);
  
+/*
+ * 根据devtmpfs文件系统的inode获取对应的bdevfs中的block_device
+ */
 static struct block_device *bd_acquire(struct inode *inode)
 {
 	struct block_device *bdev;
@@ -1131,6 +1142,7 @@ static struct gendisk *bdev_get_gendisk(struct block_device *bdev, int *partno)
 {
 	/*
 	 * 这里为什么不用bdev->bd_disk呢？
+	 * - 因为bdev本身可能还没有初始化完整？
 	 */
 	struct gendisk *disk = get_gendisk(bdev->bd_dev, partno);
 

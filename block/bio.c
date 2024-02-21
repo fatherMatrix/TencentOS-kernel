@@ -697,9 +697,9 @@ static inline bool page_is_mergeable(const struct bio_vec *bv,
 	phys_addr_t page_addr = page_to_phys(page);
 
 	/*
-	 * 物理地址要紧邻
-	 * - 之所以要求物理地址，因为xfs_buf中关联的page有可能是vmalloc()或者
-	 *   vb_alloc()分配的；
+	 * BIO内存地址有多段，每段内部的物理地址要紧邻，这里设计上对BIO的要求！
+	 * - xfs_buf中关联的page有可能是vmalloc()或者vb_alloc()分配的，所以不一
+	 *   定可以成功合并；
 	 */
 	if (vec_end_addr + 1 != page_addr + off)
 		return false;
@@ -723,6 +723,8 @@ static inline bool page_is_mergeable(const struct bio_vec *bv,
 	/*
 	 * 上面都是bio_vec仅包含一个page的情况，这里似乎是在说bio_vec有可能会
 	 * 包含多个page？
+	 * - 是的，bio_vec来的来源就是iovec，iovec本身是可能包含多个连续的虚拟
+	 *   页的；参见__bio_add_page()
 	 * - bv_end / PAGE_SIZE表示bv_page指向的数据占了几个page；
 	 */
 	return (bv->bv_page + bv_end / PAGE_SIZE) == (page + off / PAGE_SIZE);
@@ -850,6 +852,10 @@ bool __bio_try_merge_page(struct bio *bio, struct page *page,
 				*same_page = false;
 				return false;
 			}
+			/*
+			 * 当且仅当两个待合并目标处于同一个页，且在该页上相邻，
+			 * 才能够进行合并；
+			 */
 			bv->bv_len += len;
 			bio->bi_iter.bi_size += len;
 			return true;
@@ -872,6 +878,9 @@ EXPORT_SYMBOL_GPL(__bio_try_merge_page);
 void __bio_add_page(struct bio *bio, struct page *page,
 		unsigned int len, unsigned int off)
 {
+	/*
+	 * 取出第一个空闲位置
+	 */
 	struct bio_vec *bv = &bio->bi_io_vec[bio->bi_vcnt];
 
 	WARN_ON_ONCE(bio_flagged(bio, BIO_CLONED));
@@ -967,8 +976,19 @@ static int __bio_iov_bvec_add_pages(struct bio *bio, struct iov_iter *iter)
 static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 {
 	unsigned short nr_pages = bio->bi_max_vecs - bio->bi_vcnt;
+	/*
+	 * entries_left表示bio_vec数组中空闲slot的数量
+	 */
 	unsigned short entries_left = bio->bi_max_vecs - bio->bi_vcnt;
+	/*
+	 * bi_io_vec是bio_vec数组的起始地址；
+	 * bi_vcnt是bio_vec数组中有效元素的个数；
+	 * 两者相加得到的bio_vec数组中第一个可用的slot
+	 */
 	struct bio_vec *bv = bio->bi_io_vec + bio->bi_vcnt;
+	/*
+	 * bio_vec的第一个字段就是page指针
+	 */
 	struct page **pages = (struct page **)bv;
 	bool same_page = false;
 	ssize_t size, left;
@@ -981,18 +1001,53 @@ static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 	 * without overwriting the temporary page array.
 	*/
 	BUILD_BUG_ON(PAGE_PTRS_PER_BVEC < 2);
+	/*
+	 * 这里的主要目的是不想再为iov_iter_get_pages()函数重新分配一个page指针
+	 * 数组，而是直接使用了bio->bi_io_vec数组中未使用的slot的尾部内存空间。
+	 *
+	 * 化简一下可能更好理解：
+	 *     pages = pages + entries_left * PAGE_PTRS_PER_BVEC - entries_left
+	 *           = bio_vec数组的结束地址 - entries_left
+	 *     又因为pages本身是一个指向指针的指针，所以这个减法导致pages前移
+	 *     entries_left个指针空间；
+	 *
+	 * +-----------+-----------+-----------+-----------+~~~~~~~~~~~+-----------+
+	 * |  bio_vec  |  bio_vec  |  bio_vec  |  bio_vec  |           |  bio_vec  |
+	 * | --------- | --------- | --------- | --------- |           | --------- |
+	 * | p | l | o | p | l | o | p | l | o | p | l | o |           | p | l | o |
+	 * | a | e | f | a | e | f | a | e | f | a | e | f |           | a | e | f |
+	 * | g | n | f | g | n | f | g | n | f | g | n | f |           | g | n | f |
+	 * | e |   |   | e |   |   | e |   |   | e |   |   |           | e |   |   |
+	 * | * |   |   | * |   |   | * |   |   | * |   |   |           | * |   |   |
+	 * +-----------+-----------+-----------+-----------+~~~~~~~~~~~+-----------+
+	 *   ^                               ^                                     ^
+	 *   |                               |                                     |
+	 *   |                               |<-- entries_left * sizeof(page *) -->|
+	 *   |                               |                                     |
+	 * old_pages                      new_pages
+	 */
 	pages += entries_left * (PAGE_PTRS_PER_BVEC - 1);
 
 	/*
 	 * 关键点：
 	 * - 通过GUP锁定用户态内存页
 	 * - 锁定后填充到pages指针数组中
+	 *
+	 * 注意：
+	 * - 这里每次仅处理iov_iter->iov数组中待处理的第一个iovec，所以每次返回
+	 *   后，offset表示这个iovec的起始地址在起始页的offset；
+	 * - pages数组中的每个元素都是一个4K页的指针。对于巨型页，GUP会依次将其
+	 *   子页放入pages数组中；
 	 */
 	size = iov_iter_get_pages(iter, pages, LONG_MAX, nr_pages, &offset);
 	if (unlikely(size <= 0))
 		return size ? size : -EFAULT;
 
 	for (left = size, i = 0; left > 0; left -= len, i++) {
+		/*
+		 * 依次处理每个page，但有些页是有相邻关系的，此时交给merge机制
+		 * 进行合并操作；
+		 */
 		struct page *page = pages[i];
 
 		len = min_t(size_t, PAGE_SIZE - offset, left);
@@ -1005,6 +1060,10 @@ static int __bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
                                 return -EINVAL;
 			__bio_add_page(bio, page, len, offset);
 		}
+		/*
+		 * 同一个iovec中对应的虚拟页肯定是连续的，所以除第一个page外，
+		 * 其它的page的offset肯定都是0；
+		 */
 		offset = 0;
 	}
 
@@ -1044,6 +1103,11 @@ int bio_iov_iter_get_pages(struct bio *bio, struct iov_iter *iter)
 		if (is_bvec)
 			ret = __bio_iov_bvec_add_pages(bio, iter);
 		else
+			/*
+			 * 内部处理最多一个iovec后就返回一次
+			 * - 由iov_iter_get_pages()中iterate_all_kinds()中的I决
+			 *   定的；
+			 */
 			ret = __bio_iov_iter_get_pages(bio, iter);
 	} while (!ret && iov_iter_count(iter) && !bio_full(bio, 0));
 

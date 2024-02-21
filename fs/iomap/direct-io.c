@@ -31,7 +31,13 @@ struct iomap_dio {
 	 * 当前只有一个成员字段：end_io；
 	 */
 	const struct iomap_dio_ops *dops;
+	/*
+	 *
+	 */
 	loff_t			i_size;
+	/*
+	 * 已进行了io操作的字节数
+	 */
 	loff_t			size;
 	/*
 	 * 引用计数，干嘛用的？
@@ -165,9 +171,16 @@ static void iomap_dio_bio_end_io(struct bio *bio)
 
 	if (atomic_dec_and_test(&dio->ref)) {
 		if (dio->wait_for_completion) {
+		/*
+		 * 同步io
+		 */
 			struct task_struct *waiter = dio->submit.waiter;
 			WRITE_ONCE(dio->submit.waiter, NULL);
 			blk_wake_io_task(waiter);
+		/*
+		 * 后面的都是异步io
+		 * - dio的异步io主要针对的是libaio和iouring
+		 */
 		} else if (dio->flags & IOMAP_DIO_WRITE) {
 			struct inode *inode = file_inode(dio->iocb->ki_filp);
 
@@ -230,6 +243,7 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 
 	/*
 	 * 为什么要在这里才开始做对齐检查？不能早点做？
+	 * - 我记得前面似乎也做了的?
 	 */
 	if ((pos | length | align) & ((1 << blkbits) - 1))
 		return -EINVAL;
@@ -265,6 +279,9 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 	iter = *dio->submit.iter;
 	iov_iter_truncate(&iter, length);
 
+	/*
+	 * 计算iov_iter指向的iovec/kvec/bvec中当前还剩余未处理的页数
+	 */
 	nr_pages = iov_iter_npages(&iter, BIO_MAX_PAGES);
 	if (nr_pages <= 0)
 		return nr_pages;
@@ -283,6 +300,9 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 			return 0;
 		}
 
+		/*
+		 * 内部会将必要字段全部设置为0
+		 */
 		bio = bio_alloc(GFP_KERNEL, nr_pages);
 		bio_set_dev(bio, iomap->bdev);
 		bio->bi_iter.bi_sector = iomap_sector(iomap, pos);
@@ -291,6 +311,9 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 		bio->bi_private = dio;
 		bio->bi_end_io = iomap_dio_bio_end_io;
 
+		/*
+		 * 将iov_iter中的page通过GUP保持到bio中
+		 */
 		ret = bio_iov_iter_get_pages(bio, &iter);
 		if (unlikely(ret)) {
 			/*
@@ -317,6 +340,10 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 				bio_set_pages_dirty(bio);
 		}
 
+		/*
+		 * bio_iov_iter_get_pages()内部操作的是一个iov_iter的副本，这里
+		 * 对dio->submit.iter进行advance操作；
+		 */
 		iov_iter_advance(dio->submit.iter, n);
 
 		dio->size += n;
@@ -630,6 +657,11 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	 */
 	dio->wait_for_completion = wait_for_completion;
 	if (!atomic_dec_and_test(&dio->ref)) {
+		/*
+		 * 异步IO会在这里直接退出
+		 * - 异步IO中会设置kiocb->ki_complete()函数指针，内部会调用到下
+		 *   面的iomap_dio_complete()；
+		 */
 		if (!wait_for_completion)
 			return -EIOCBQUEUED;
 

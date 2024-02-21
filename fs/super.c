@@ -1689,7 +1689,9 @@ int vfs_get_tree(struct fs_context *fc)
 	 * on the superblock.
 	 *
 	 * 对于传统的文件系统如ext4，这个get_tree指针指向legacy_get_tree函数。
+	 * - 其中主要是调用mount_bdev()来获取磁盘上文件系统的超级块
 	 * 对于selinuxfs和bibafs，这个get_tree指针指向get_tree_single函数。
+	 * - 这些文件系统的超级块都是内存中的
 	 */
 	error = fc->ops->get_tree(fc);
 	if (error < 0)

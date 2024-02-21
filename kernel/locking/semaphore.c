@@ -58,6 +58,9 @@ void down(struct semaphore *sem)
 	if (likely(sem->count > 0))
 		sem->count--;
 	else
+		/*
+		 * 内部睡眠前会释放自旋锁，苏醒后再重新获取自旋锁
+		 */
 		__down(sem);
 	raw_spin_unlock_irqrestore(&sem->lock, flags);
 }
@@ -216,8 +219,17 @@ static inline int __sched __down_common(struct semaphore *sem, long state,
 		if (unlikely(timeout <= 0))
 			goto timed_out;
 		__set_current_state(state);
+		/*
+		 * 睡眠之前释放自旋锁
+		 */
 		raw_spin_unlock_irq(&sem->lock);
+		/*
+		 * 睡眠
+		 */
 		timeout = schedule_timeout(timeout);
+		/*
+		 * 睡眠之后获取自旋锁
+		 */
 		raw_spin_lock_irq(&sem->lock);
 		if (waiter.up)
 			return 0;

@@ -39,13 +39,18 @@ struct iov_iter {
 	unsigned int type;
 	size_t iov_offset;			/* 待处理iovec的待处理第一个字节在iovec中的偏移 */
 	size_t count;				/* iovec数组中所有元素的总字节数 */
+	/*
+	 * 这是个数组，该数组不同元素间不要求内存地址连续；但对于某一个元素，其
+	 * page必须连续；
+	 */
 	union {
 		/*
-		 * 运行在用户态，用这个
+		 * 用户态发起的io，用这个
+		 * - 这个指针会随着迭代动态后移
 		 */
 		const struct iovec *iov;	/* iovec数组 */
 		/*
-		 * 运行在内核态，用这个
+		 * 内核态发起的io，用这个
 		 */
 		const struct kvec *kvec;
 		const struct bio_vec *bvec;
@@ -235,6 +240,9 @@ ssize_t iov_iter_get_pages(struct iov_iter *i, struct page **pages,
 			size_t maxsize, unsigned maxpages, size_t *start);
 ssize_t iov_iter_get_pages_alloc(struct iov_iter *i, struct page ***pages,
 			size_t maxsize, size_t *start);
+/*
+ * 定义在lib/iov_iter.c
+ */
 int iov_iter_npages(const struct iov_iter *i, int maxpages);
 
 const void *dup_iter(struct iov_iter *new, struct iov_iter *old, gfp_t flags);

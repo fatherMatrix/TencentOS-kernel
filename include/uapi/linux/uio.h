@@ -14,6 +14,9 @@
 #include <linux/types.h>
 
 
+/*
+ * 可以跨多个页，但这些页必须连续
+ */
 struct iovec
 {
 	void __user *iov_base;	/* BSD uses caddr_t (1003.1g requires void *) */

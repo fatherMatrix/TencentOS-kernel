@@ -1863,6 +1863,10 @@ static int gup_pte_range(pmd_t pmd, unsigned long addr, unsigned long end,
 		VM_BUG_ON(!pfn_valid(pte_pfn(pte)));
 		page = pte_page(pte);
 
+		/*
+		 * 增加page结构体的引用计数，加一
+		 * - 如果是复合页的话则先找到其首页
+		 */
 		head = try_get_compound_head(page, 1);
 		if (!head)
 			goto pte_unmap;
@@ -2085,6 +2089,10 @@ static int gup_huge_pmd(pmd_t orig, pmd_t *pmdp, unsigned long addr,
 
 	refs = 0;
 	page = pmd_page(orig) + ((addr & ~PMD_MASK) >> PAGE_SHIFT);
+	/*
+	 * 啊，所以对于巨型页来说，复合页的每个page都是被添加进了pages数组中的，
+	 * 且每个page都使nr增加了的；
+	 */
 	do {
 		pages[*nr] = page;
 		(*nr)++;

@@ -3853,7 +3853,7 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 	 * dir是父目录的dentry
 	 * - dir_inode是上了锁的；
 	 *   - 如果有O_CREAT，则上了写锁
-	 *   - 如果没有，则上了写锁
+	 *   - 如果没有，则上了读锁
 	 */
 	struct dentry *dir = nd->path.dentry;
 	struct inode *dir_inode = dir->d_inode;
@@ -4104,6 +4104,9 @@ static int do_last(struct nameidata *nd,
 		 * - 没有的话会走到下面的lookup_open
 		 */
 		error = lookup_fast(nd, &path, &inode, &seq);
+		/*
+		 * 返回值大于0表示成功在内存中找到dentry
+		 */
 		if (likely(error > 0))
 			goto finish_lookup;
 
@@ -4121,6 +4124,8 @@ static int do_last(struct nameidata *nd,
 		 * This will *only* deal with leaving RCU mode - LOOKUP_JUMPED
 		 * has been cleared when we got to the last component we are
 		 * about to look up
+		 *
+		 * 退出rcu临界区
 		 */
 		error = complete_walk(nd);
 		if (error)
@@ -4131,6 +4136,11 @@ static int do_last(struct nameidata *nd,
 		if (unlikely(nd->last.name[nd->last.len]))
 			return -EISDIR;
 	}
+
+	/*
+	 * 能走到这里，说明dentry是negative的
+	 * - 且此时已经从rcu mode成功切换到了ref walk
+	 */
 
 	if (open_flag & (O_CREAT | O_TRUNC | O_WRONLY | O_RDWR)) {
 		error = mnt_want_write(nd->path.mnt);
@@ -4923,6 +4933,9 @@ int vfs_unlink(struct inode *dir, struct dentry *dentry, struct inode **delegate
 	 * 锁定待删除的inode
 	 */
 	inode_lock(target);
+	/*
+	 * 如果dentry是一个挂载点，即其上挂载有其他文件系统，则返回-EBUSY
+	 */
 	if (is_local_mountpoint(dentry))
 		error = -EBUSY;
 	else {

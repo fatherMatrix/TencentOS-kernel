@@ -640,6 +640,7 @@ out_destroy:
 /*
  * Look up an inode by number in the given file system.
  * The inode is looked up in the cache held in each AG.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * If the inode is found in the cache, initialise the vfs inode
  * if necessary.
  *

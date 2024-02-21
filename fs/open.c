@@ -776,7 +776,7 @@ static int do_dentry_open(struct file *f,
 	 *   i_mapping(&bdevfs inode.i_data），但到这里的时候这件事还未发生；
 	 * - devtmpfs inode->i_mapping设置为bdevfs inode->i_mapping字段发生在：
 	 *   blkdev_open() -> bd_acquire()中；blkdev_open()就是下面调用的open
-	 *   函数指针；
+	 *   函数指针；其逆过程发生在bd_forget()中；
 	 * - file->f_mapping的设置在blkdev_open()中的bd_acquire()之后，直接拷贝
 	 *   devtmpfs inode->i_mapping，此时devtmpfs inode->i_mapping已经是
 	 *   &bdevfs inode->i_data了；

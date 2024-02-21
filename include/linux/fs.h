@@ -768,7 +768,10 @@ struct inode {
 		const unsigned int i_nlink;
 		unsigned int __i_nlink;
 	};
-	/* 设备标识符 */
+	/*
+	 * 设备标识符
+	 * - 仅当inode表示一个设备文件时，该字段才有意义；其余情况该字段为0
+	 */
 	dev_t			i_rdev;
 	/*
 	 * inode对应文件的大小，以字节为单位
@@ -804,8 +807,10 @@ struct inode {
 
 	/*
 	 * 链接到全局索引节点哈希表inode_hashtable，用于inode的快速查找
-	 *
-	 * 哈希键通过superblock和索引节点号计算
+	 * - 哈希键通过superblock和索引节点号计算
+	 * - xfs没有使用这个字段，这个字段自己连接自己。xfs中inode内嵌在
+	 *   xfs_inode中，且xfs_inode插入了xfs_mount中per-ag的哈希表中；
+	 * - ext4使用了此字段
 	 */
 	struct hlist_node	i_hash;
 	/*

@@ -220,6 +220,9 @@ struct bdi_writeback {
 struct backing_dev_info {
 	u64 id;
 	struct rb_node rb_node; /* keyed by ->id */
+	/*
+	 * 将backing_dev_info链入bdi_list全局链表
+	 */
 	struct list_head bdi_list;
 	unsigned long ra_pages;	/* max readahead in PAGE_SIZE units */
 	unsigned long io_pages;	/* max allowed IO size */

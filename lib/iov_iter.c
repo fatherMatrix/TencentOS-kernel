@@ -14,17 +14,18 @@
 /*
  * 进入时的参数：
  *    i: iov_iter
- *    n: bytes
- *  __v: iovec
+ *    n: bytes，总的字节数，参见iov_iter_init()
+ *  __v: iovec，一个栈上临时结构体
  *  __p: iovec *
  * skip: i->iov_offset
  * STEP: 精挑细选的内存拷贝函数，copy_from_user/memcpy/memcpy_from_page三选一
+ *       - 也有可能是其它函数，这是个通用迭代框架
  */
 #define iterate_iovec(i, n, __v, __p, skip, STEP) {	\
 	size_t left;					\
 	size_t wanted = n;				\
 	__p = i->iov;					\
-	__v.iov_len = min(n, __p->iov_len - skip);	\    /* 这里说明最多只拷贝一页内的数据 */
+	__v.iov_len = min(n, __p->iov_len - skip);	\
 	if (likely(__v.iov_len)) {			\
 		__v.iov_base = __p->iov_base + skip;	\
 		left = (STEP);				\
@@ -1325,14 +1326,31 @@ ssize_t iov_iter_get_pages(struct iov_iter *i,
 	if (unlikely(iov_iter_is_discard(i)))
 		return -EFAULT;
 
+	/*
+	 * v是一个在栈上的临时iovec结构体，表示iov_iter指向的一个segment
+	 */
 	iterate_all_kinds(i, maxsize, v, ({
 		unsigned long addr = (unsigned long)v.iov_base;
+		/*
+		 * len表示包含上第一个页中iov_base前面的尺寸的总长度
+		 *
+		 * +----------+----------+----------+----------+----------+
+		 * |   PAGE   |   PAGE   |   PAGE   |   PAGE   |   PAGE   |
+		 * +----------+----------+----------+----------+----------+
+		 * ^    ^                                      ^
+		 * |    |<--------------- iov_len ------------>|
+		 * |  iov_base                                 |
+		 * |<------------------ len ------------------>|
+		 */
 		size_t len = v.iov_len + (*start = addr & (PAGE_SIZE - 1));
 		int n;
 		int res;
 
 		if (len > maxpages * PAGE_SIZE)
 			len = maxpages * PAGE_SIZE;
+		/*
+		 * addr对齐到len对应的起始位置
+		 */
 		addr &= ~(PAGE_SIZE - 1);
 		n = DIV_ROUND_UP(len, PAGE_SIZE);
 		res = get_user_pages_fast(addr, n,
@@ -1340,6 +1358,12 @@ ssize_t iov_iter_get_pages(struct iov_iter *i,
 				pages);
 		if (unlikely(res < 0))
 			return res;
+		/*
+		 * 这里说明，一次仅处理iov_iter->iov数组中的一个元素，处理完一个
+		 * iovec就返回一次；
+		 * - 返回值为iov_iter指向的iovec数组中的第一个待处理segment被pin
+		 *   到内存中的page所包含的字节数；
+		 */
 		return (res == n ? len : res * PAGE_SIZE) - *start;
 	0;}),({
 		/* can't be more than PAGE_SIZE */

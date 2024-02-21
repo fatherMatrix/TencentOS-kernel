@@ -1469,6 +1469,10 @@ EXPORT_SYMBOL(igrab);
 struct inode *ilookup5_nowait(struct super_block *sb, unsigned long hashval,
 		int (*test)(struct inode *, void *), void *data)
 {
+	/*
+	 * 有一些文件系统的inode根本就没有插入到inode_hashtable中
+	 * - 比如xfs
+	 */
 	struct hlist_head *head = inode_hashtable + hash(sb, hashval);
 	struct inode *inode;
 

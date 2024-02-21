@@ -4604,6 +4604,7 @@ xfs_bmapi_write(
 		} else if (isnullstartblock(bma.got.br_startblock)) {
 			/*
 			 * 在btree树中存在对应的extent，但是其对应的磁盘位置为特殊值
+			 * - 比如延迟分配的extent
 			 */
 			wasdelay = true;
 		}

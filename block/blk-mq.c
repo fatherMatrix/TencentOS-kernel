@@ -2875,6 +2875,8 @@ EXPORT_SYMBOL(blk_mq_init_queue);
 /*
  * Helper for setting up a queue with mq ops, given queue depth, and
  * the passed in mq ops flags.
+ *
+ * 这个就是分配一个单队列
  */
 struct request_queue *blk_mq_init_sq_queue(struct blk_mq_tag_set *set,
 					   const struct blk_mq_ops *ops,

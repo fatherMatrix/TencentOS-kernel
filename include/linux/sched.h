@@ -327,7 +327,14 @@ struct sched_info {
 # define SCHED_CAPACITY_SCALE		(1L << SCHED_CAPACITY_SHIFT)
 
 struct load_weight {
+	/*
+	 * 调度实体的权重
+	 */
 	unsigned long			weight;
+	/*
+	 * inverse weight
+	 * - 权重的中间计算结果
+	 */
 	u32				inv_weight;
 };
 
@@ -737,8 +744,26 @@ struct task_struct {
 #endif
 	int				on_rq;
 
+	/*
+	 * 动态优先级，调度器依赖的优先级
+	 * - 有些情况下需要暂时提高进程的优先级
+	 */
 	int				prio;
+	/*
+	 * 静态优先级，在进程启动时分配
+	 * - 内核不存储nice值，取而代之的是static_prio。NICE_TO_PRIO()可以将nice
+	 *   值转换成static_prio。
+	 * - 之所以称为静态优先级是因为它不会随着时间而改变，用户可以通过nice()
+	 *   或sched_setscheduler()等系统调用来修改该值；
+	 */
 	int				static_prio;
+	/*
+	 * 基于static_prio和调度策略计算出的优先级
+	 * - 进程在创建时会继承父进程的normal_prio
+	 * - 对于普通进程，normal_prio等同于static_prio
+	 * - 对于实时进程，会根据rt_priority重新计算normal_prio
+	 *   > 详见effective_prio()
+	 */
 	int				normal_prio;
 	unsigned int			rt_priority;
 

@@ -2604,6 +2604,9 @@ static inline vm_fault_t vmf_insert_page(struct vm_area_struct *vma,
 	return VM_FAULT_NOPAGE;
 }
 
+/*
+ * 仅在SPARC架构上，io_remap_pfn_range()才有不同于remap_pfn_range()的实现；
+ */
 #ifndef io_remap_pfn_range
 static inline int io_remap_pfn_range(struct vm_area_struct *vma,
 				     unsigned long addr, unsigned long pfn,

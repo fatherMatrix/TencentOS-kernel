@@ -2914,6 +2914,9 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 					  subtype, strlen(subtype));
 	if (!err && name)
 		err = vfs_parse_fs_string(fc, "source", name, strlen(name));
+	/*
+	 * data字段是options
+	 */
 	if (!err)
 		err = parse_monolithic_mount_data(fc, data);
 	/*

@@ -709,6 +709,8 @@ static inline bool retain_dentry(struct dentry *dentry)
 
 	/*
 	 * 最终还是减小了引用计数
+	 *
+	 * 减小引用计数后将该dentry放到dcache中；
 	 */
 
 	/* retain; LRU fodder */
@@ -995,7 +997,7 @@ void dput(struct dentry *dentry)
 		rcu_read_unlock();
 
 		/*
-		 * 返回true表示缓存该dentry；
+		 * 返回true表示缓存该dentry到dcache；
 		 * 返回false表示立即删除该dentry；
 		 */
 		if (likely(retain_dentry(dentry))) {
@@ -1349,6 +1351,10 @@ long prune_dcache_sb(struct super_block *sb, struct shrink_control *sc)
 	LIST_HEAD(dispose);
 	long freed;
 
+	/*
+	 * 所谓dcache就是指super_block->s_dentry_lru，该链表上的dentry都是通过
+	 * d_lru_add()添加上去的；
+	 */
 	freed = list_lru_shrink_walk(&sb->s_dentry_lru, sc,
 				     dentry_lru_isolate, &dispose);
 	shrink_dentry_list(&dispose);

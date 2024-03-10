@@ -106,6 +106,9 @@ static unsigned long super_cache_scan(struct shrinker *shrink,
 	sc->nr_to_scan = inodes + 1;
 	freed += prune_icache_sb(sb, sc);
 
+	/*
+	 * xfs: xfs_fs_free_cached_objects()
+	 */
 	if (fs_objects) {
 		sc->nr_to_scan = fs_objects + 1;
 		freed += sb->s_op->free_cached_objects(sb, sc);
@@ -1568,6 +1571,9 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 		bdev->bd_super = s;
 	}
 
+	/*
+	 * 增加引用计数
+	 */
 	return dget(s->s_root);
 
 error_s:

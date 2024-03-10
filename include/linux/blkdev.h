@@ -449,6 +449,8 @@ struct request_queue {
 	/*
 	 * backing_dev_info是随request queue的分配一起分配的
 	 * block_device中也有一个backing_dev_info，和这个是什么关系？
+	 * - block_device中的backing_dev_info的来源是这里；
+	 *   - 参见__blkdev_get()
 	 */ 
 	struct backing_dev_info	*backing_dev_info;
 

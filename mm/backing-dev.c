@@ -271,6 +271,9 @@ void wb_wakeup_delayed(struct bdi_writeback *wb)
 
 	timeout = msecs_to_jiffies(dirty_writeback_interval * 10);
 	spin_lock_bh(&wb->work_lock);
+	/*
+	 * wb_workfn()
+	 */
 	if (test_bit(WB_registered, &wb->state))
 		queue_delayed_work(bdi_wq, &wb->dwork, timeout);
 	spin_unlock_bh(&wb->work_lock);

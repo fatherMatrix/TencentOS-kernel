@@ -345,6 +345,12 @@ reread:
 		 * and properly verified.
 		 */
 		xfs_buf_relse(bp);
+		/*
+		 * 第一次读super block的时候只能猜测其尺寸，这里通过读上来的内容
+		 * 修正其尺寸并重新读取。
+		 * - 一定要重新读，是因为第一次无法对其进行verify，第二次确定了
+		 *   其尺寸后可以进行verify；
+		 */
 		sector_size = sbp->sb_sectsize;
 		buf_ops = loud ? &xfs_sb_buf_ops : &xfs_sb_quiet_buf_ops;
 		goto reread;

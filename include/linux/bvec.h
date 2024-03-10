@@ -33,6 +33,7 @@ struct bvec_iter {
 						   sectors */
 	/*
 	 * 总的字节数
+	 * - 在bio_iov_iter_get_pages()中被更新
 	 */
 	unsigned int		bi_size;	/* residual I/O count */
 

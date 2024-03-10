@@ -182,6 +182,8 @@ struct bdi_writeback {
 	struct list_head work_list;
 	/*
 	 * 处理任务的函数
+	 * - dowrk执行的函数是wb_workfn()
+	 *   > 参见wb_init()
 	 */
 	struct delayed_work dwork;	/* work item used for writeback */
 
@@ -244,6 +246,7 @@ struct backing_dev_info {
 
 	/*
 	 * 封装了工作队列和要回写的inode链表，即工作和工人
+	 * - 这个默认的wb在不涉及cgroup时使用，参见__inode_attach_wb()
 	 */
 	struct bdi_writeback wb;  /* the root writeback info for this bdi */
 	/*

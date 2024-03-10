@@ -647,6 +647,10 @@ int
 dma_common_get_sgtable(struct device *dev, struct sg_table *sgt, void *cpu_addr,
 		dma_addr_t dma_addr, size_t size, unsigned long attrs);
 
+/*
+ * 只能在开中断的情况下调用
+ * - 参见: Documentation/DMA-API.txt
+ */
 static inline void *dma_alloc_coherent(struct device *dev, size_t size,
 		dma_addr_t *dma_handle, gfp_t gfp)
 {

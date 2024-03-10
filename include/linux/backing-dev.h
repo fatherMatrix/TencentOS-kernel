@@ -168,6 +168,9 @@ static inline struct backing_dev_info *inode_to_bdi(struct inode *inode)
 
 	sb = inode->i_sb;
 #ifdef CONFIG_BLOCK
+	/*
+	 * bdevfs中的inode都对应着一个block_device
+	 */
 	if (sb_is_blkdev_sb(sb))
 		return I_BDEV(inode)->bd_bdi;
 #endif

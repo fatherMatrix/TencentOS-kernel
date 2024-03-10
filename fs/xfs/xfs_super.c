@@ -694,8 +694,12 @@ xfs_close_devices(
  *	(3) logical volume with data, log, and realtime subvolumes.
  *
  * We only have to handle opening the log and realtime volumes here if
+ *                                    ^^^     ^^^^^^^^^^^^^^^^
  * they are present.  The data subvolume has already been opened by
+ *                        ^^^^^^^^^^^^^^
  * get_sb_bdev() and is stored in sb->s_bdev.
+ * ^^^^^^^^^^^^^
+ * 这里应该是sget() -> set_bdev_super()
  */
 STATIC int
 xfs_open_devices(
@@ -985,8 +989,16 @@ xfs_fs_dirty_inode(
 	struct xfs_mount		*mp = ip->i_mount;
 	struct xfs_trans		*tp;
 
+	/*
+	 * 如果没有SB_LAZYTIME标志，则返回；
+	 */
 	if (!(inode->i_sb->s_flags & SB_LAZYTIME))
 		return;
+	/*
+	 * 走到这里，说明inode一定有SB_LAZYTIME标志
+	 * - 也就是说，xfs_fs_dirty_inode()只承接SB_LAZYTIME时的任务
+	 */
+
 	if (flag != I_DIRTY_SYNC || !(inode->i_state & I_DIRTY_TIME))
 		return;
 
@@ -1639,6 +1651,9 @@ xfs_fs_fill_super(
 	if (silent)
 		flags |= XFS_MFSI_QUIET;
 
+	/*
+	 * 如果logdev和daxdev不和数据部分在一个设备上，则打开其余的设备；
+	 */
 	error = xfs_open_devices(mp);
 	if (error)
 		goto out_free_fsname;
@@ -1658,6 +1673,9 @@ xfs_fs_fill_super(
 		goto out_destroy_counters;
 	}
 
+	/*
+	 * 读取文件系统磁盘上的超级块
+	 */
 	error = xfs_readsb(mp, flags);
 	if (error)
 		goto out_free_stats;

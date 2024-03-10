@@ -1019,6 +1019,8 @@ xfs_buf_readahead_map(
 /*
  * Read an uncached buffer from disk. Allocates and returns a locked
  * buffer containing the disk contents or nothing.
+ *
+ * 本函数似乎保证了是同步读
  */
 int
 xfs_buf_read_uncached(
@@ -1044,6 +1046,11 @@ xfs_buf_read_uncached(
 	bp->b_flags |= XBF_READ;
 	bp->b_ops = ops;
 
+	/*
+	 * 同步还是异步呢？
+	 * - 如果是异步，要在xfs_buf->bp_flags中手动添加XBF_ASYNC标志
+	 * - 默认是同步
+	 */
 	xfs_buf_submit(bp);
 	if (bp->b_error) {
 		int	error = bp->b_error;
@@ -1055,6 +1062,11 @@ xfs_buf_read_uncached(
 	return 0;
 }
 
+/*
+ * xfs_buf_get()的简化版本
+ * - 不需要查找cache
+ * - 分配的尺寸不需要考虑小于PAGE_SIZE
+ */
 xfs_buf_t *
 xfs_buf_get_uncached(
 	struct xfs_buftarg	*target,
@@ -1528,6 +1540,7 @@ next_chunk:
 	 	 * 确保对虚地址的修改在物理内存上可见；
 	 	 * - 应该是与架构相关，arm、x86上都是空操作，parisc上有内容；
 	 	 * - 与VIVT或某些VIPT（index超出PAGE_SIZE的情况）的缓存别名相关；
+		 *   > 当VIPT的index < 12bit时，无缓存别名问题，性能最高（intel，amd）
 	 	 * - PIPT架构无缓存别名问题；
 	 	 */
 		if (xfs_buf_is_vmapped(bp)) {

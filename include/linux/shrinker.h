@@ -58,8 +58,14 @@ struct shrink_control {
  * @flags determine the shrinker abilities, like numa awareness
  */
 struct shrinker {
+	/*
+	 * 返回可释放对象的数量
+	 */
 	unsigned long (*count_objects)(struct shrinker *,
 				       struct shrink_control *sc);
+	/*
+	 * 释放对象，并返回成功释放的对象数量
+	 */
 	unsigned long (*scan_objects)(struct shrinker *,
 				      struct shrink_control *sc);
 
@@ -68,6 +74,9 @@ struct shrinker {
 	unsigned flags;
 
 	/* These are for internal use */
+	/*
+	 * 作为链表元素将shrinker加入全局链表shrinker_list
+	 */
 	struct list_head list;
 #ifdef CONFIG_MEMCG
 	/* ID in shrinker_idr */

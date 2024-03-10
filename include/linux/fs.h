@@ -575,6 +575,8 @@ struct block_device {
 	struct request_queue *  bd_queue;
 	/*
 	 * bdi系统
+	 * - 第一次设置在slab分配时的ctor函数init_once()中；
+	 * - 第二次设置在__blkdev_get()中，将其设置为gendisk->queue->backing_dev_info
 	 */
 	struct backing_dev_info *bd_bdi;
 	/*
@@ -802,6 +804,9 @@ struct inode {
 	unsigned long		i_state;
 	struct rw_semaphore	i_rwsem;
 
+	/*
+	 * 该字段含义详见__mark_inode_dirty()注释最后一段
+	 */
 	unsigned long		dirtied_when;	/* jiffies of first dirtying */
 	unsigned long		dirtied_time_when;
 
@@ -814,9 +819,7 @@ struct inode {
 	 */
 	struct hlist_node	i_hash;
 	/*
-	 * 链接到bdi_writeback的b_io链表，等待BDI回写
-	 *
-	 * 说明此inode是dirty的
+	 * 链接到bdi_writeback的b_io/b_dirty/b_dirty_time/...链表，用于回写控制
 	 */
 	struct list_head	i_io_list;	/* backing dev IO list */
 #ifdef CONFIG_CGROUP_WRITEBACK
@@ -1627,7 +1630,10 @@ struct super_block {
 	 * - 2 ** s_blocksize_bits = s_blocksize
 	 */
 	unsigned char		s_blocksize_bits;
-	/* 以byte为单位的块大小 */
+	/*
+	 * 以byte为单位的块大小
+	 * - xfs中，该字段来源于xfs_mount->m_sb.sb_blocksize
+	 */
 	unsigned long		s_blocksize;
 	/* 文件的最长长度 */
 	loff_t			s_maxbytes;	/* Max file size */
@@ -1734,6 +1740,7 @@ struct super_block {
 	 *   inode的生成是文件系统特定的，都是在文件系统特定函数中调用，比如
 	 *   ext4_lookup和ext4_fill_super以及init_special_inode()中；在这些地方
 	 *   我们是有机会自定义inode的i_op和i_fop字段的。
+	 *   - xfs: xfs_setup_existing_inode() -> xfs_setup_iops()
 	 */
 	const struct dentry_operations *s_d_op; /* default d_op for dentries */
 
@@ -2371,15 +2378,18 @@ static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)
  *
  * I_DIRTY_SYNC		Inode is dirty, but doesn't have to be written on
  *			fdatasync().  i_atime is the usual cause.
- *			fdatasync()时不回写inode元数据，因为此时inode中改变的都
- *			是时间等不是很重要的数据。
+ *			- fdatasync()时不回写inode元数据，因为此时inode中改变的
+ *			  都是时间等不是很重要的数据。
  * I_DIRTY_DATASYNC	Data-related inode changes pending. We keep track of
  *			these changes separately from I_DIRTY_SYNC so that we
  *			don't have to write inode on fdatasync() when only
  *			mtime has changed in it.
- *			fdatasync()时要回写inode元数据，因为此时inode中改变的有
- *			可能包含关键数据比如文件长度等。
+ *			- fdatasync()时要回写inode元数据，因为此时inode中改变的
+ *			  有可能包含关键数据比如文件长度等。
  * I_DIRTY_PAGES	Inode has dirty pages.  Inode itself may be clean.
+ * 			- 有脏页要回写，但可能没有改变inode的元数据（如果改变了
+ * 			  inode元数据，比如长度等，会通过I_DIRTY_DATASYNC标志反
+ * 			  应出来）
  * I_NEW		Serves as both a mutex and completion notification.
  *			New inodes set I_NEW.  If two processes both create
  *			the same inode, one of them will release its inode and

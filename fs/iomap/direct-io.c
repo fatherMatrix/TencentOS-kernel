@@ -305,6 +305,10 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 		 */
 		bio = bio_alloc(GFP_KERNEL, nr_pages);
 		bio_set_dev(bio, iomap->bdev);
+		/*
+		 * 配置磁盘地址
+		 * - 内存端地址在下面的bio_iov_iter_get_pages()中配置
+		 */
 		bio->bi_iter.bi_sector = iomap_sector(iomap, pos);
 		bio->bi_write_hint = dio->iocb->ki_hint;
 		bio->bi_ioprio = dio->iocb->ki_ioprio;

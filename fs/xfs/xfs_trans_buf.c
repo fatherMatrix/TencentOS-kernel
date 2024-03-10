@@ -322,6 +322,9 @@ xfs_trans_read_buf_map(
 	if (!bp) {
 		if (!(flags & XBF_TRYLOCK))
 			return -ENOMEM;
+		/*
+		 * flags中设置了XBF_TRYLOCK
+		 */
 		return tp ? 0 : -EAGAIN;
 	}
 

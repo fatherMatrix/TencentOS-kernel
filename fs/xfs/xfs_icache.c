@@ -410,7 +410,7 @@ xfs_iget_cache_hit(
 	 *	     instead of polling for it.
 	 *
 	 * 如果被标记了XFS_INEW（另一个xfs_ialloc）或者被标记了
-	 * XFS_IRECLAIN（unlink路径），则返回重试；
+	 * XFS_IRECLAIM（unlink路径），则返回重试；
 	 * - recycle和unlink谁设置了这个XFS_RECLAIM标识，谁就获取了对该
 	 *   xfs_inode的最终处理权。并且，两个路径中，只要看到xfs_inode
 	 *   已经有这个标志了，就会放弃，把该xfs_inode让给对方。
@@ -546,6 +546,9 @@ xfs_iget_cache_miss(
 	xfs_agino_t		agino = XFS_INO_TO_AGINO(mp, ino);
 	int			iflags;
 
+	/*
+	 * 在内存中分配xfs_inode的内存；
+	 */
 	ip = xfs_inode_alloc(mp, ino);
 	if (!ip)
 		return -ENOMEM;
@@ -741,6 +744,10 @@ again:
 	return 0;
 
 out_error_or_again:
+	/*
+	 * xfs_icache_inode_is_allocated()会设置XFS_IGET_INCORE标志；
+	 * xfs_vn_lookup()不会设置XFS_IGET_INCORE标志；
+	 */
 	if (!(flags & XFS_IGET_INCORE) && error == -EAGAIN) {
 		delay(1);
 		goto again;

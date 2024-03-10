@@ -197,6 +197,10 @@ static void set_task_reclaim_state(struct task_struct *task,
 	task->reclaim_state = rs;
 }
 
+/*
+ * 参见sget() -> register_shrinker_prepared()
+ * - 链表元素是shrinker->list
+ */
 static LIST_HEAD(shrinker_list);
 static DECLARE_RWSEM(shrinker_rwsem);
 
@@ -490,6 +494,9 @@ static unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
 	if (!(shrinker->flags & SHRINKER_NUMA_AWARE))
 		nid = 0;
 
+	/*
+	 * 计算可释放对象的数量
+	 */
 	freeable = shrinker->count_objects(shrinker, shrinkctl);
 	if (freeable == 0 || freeable == SHRINK_EMPTY)
 		return freeable;
@@ -498,6 +505,8 @@ static unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
 	 * copy the current shrinker scan count into a local variable
 	 * and zero it so that other concurrent shrinker invocations
 	 * don't also do this scanning work.
+	 *
+	 * 内存节点上次记录的延迟到下一次扫描的对象数量
 	 */
 	nr = atomic_long_xchg(&shrinker->nr_deferred[nid], 0);
 
@@ -572,6 +581,9 @@ static unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
 
 		shrinkctl->nr_to_scan = nr_to_scan;
 		shrinkctl->nr_scanned = nr_to_scan;
+		/*
+		 * 回收内存
+		 */
 		ret = shrinker->scan_objects(shrinker, shrinkctl);
 		if (ret == SHRINK_STOP)
 			break;

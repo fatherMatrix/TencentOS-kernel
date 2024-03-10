@@ -639,6 +639,14 @@ static void evict(struct inode *inode)
 	 *
 	 * 既然决定要删除了？还在这里等他写完，是不是没有什么意义？
 	 * - 这里是释放内存中的inode，不是在磁盘上删除
+	 *   > 如果是do_unlinkat() ~> evict_inode()这样调用过来的呢？
+	 *
+	 * - prune_icache_sb()路径上似乎没有对inode本身做回写操作？
+	 *   > 首先，xfs本身是不需要回写inode的，这从其super_operations中没有设
+	 *     置.write_inode函数指针即可猜测。实际上，xfs的inode元数据回写是由
+	 *     AIL机制完成的。
+	 *   > 对于其他的文件系统，比如ext4，猜测其在evict_inode()中进行了某些
+	 *     操作。
 	 */
 	inode_wait_for_writeback(inode);
 
@@ -650,11 +658,27 @@ static void evict(struct inode *inode)
 		op->evict_inode(inode);
 	} else {
 		/*
-		 * xfs走这里
+		 * xfs走这里 -- iput()路径
+		 * x 如果这个inode没有在磁盘上被删除，那么在调用evict()之前是调
+		 *   用了write_inode_now()且同步等待了的；那么这里再调用这个的意
+		 *   义是什么呢？
+		 * x 如果这个inode已经在磁盘上被删除了，那么我们应该直接将page
+		 *   cache释放即可，为什么还要回写呢？
+		 *
+		 * ---------------------------  ANS  --------------------------
+		 *
+		 * - 这里并不是回写页，回写页已经在前面做好了，这里是将这些页从
+		 *   pagecahe中删除；
+		 *
+		 * ============================================================
+		 *
+		 * xfs走这里 -- prune_icache_sb()路径
+		 *
 		 */
 		truncate_inode_pages_final(&inode->i_data);
 		/*
-		 * 设置inode的I_FREEZING | I_CLEAR标志
+		 * 设置inode的I_FREEING | I_CLEAR标志
+		 * - 其实在进入evict()之前，inode就已经被标记上I_FREEING标志了
 		 */
 		clear_inode(inode);
 	}
@@ -671,6 +695,7 @@ static void evict(struct inode *inode)
 	spin_lock(&inode->i_lock);
 	/*
 	 * 这个wakeup的作用？
+	 * - 确保这个东西的等端不会在inode被destroy后等到天荒地老
 	 */
 	wake_up_bit(&inode->i_state, __I_NEW);
 	BUG_ON(inode->i_state != (I_FREEING | I_CLEAR));
@@ -697,6 +722,10 @@ static void dispose_list(struct list_head *head)
 		inode = list_first_entry(head, struct inode, i_lru);
 		list_del_init(&inode->i_lru);
 
+		/*
+		 * 对于正常的iput()流程，在调用evict()之前是有机会被拦截从而防
+		 * 入icache的；在这里就直接调用evict()了；
+		 */
 		evict(inode);
 		cond_resched();
 	}
@@ -857,6 +886,9 @@ static enum lru_status inode_lru_isolate(struct list_head *item,
 		spin_unlock(lru_lock);
 		if (remove_inode_buffers(inode)) {
 			unsigned long reap;
+			/*
+			 * 这里和evict()中的truncate_inode_pages_final()关系是？
+			 */
 			reap = invalidate_mapping_pages(&inode->i_data, 0, -1);
 			if (current_is_kswapd())
 				__count_vm_events(KSWAPD_INODESTEAL, reap);
@@ -871,6 +903,11 @@ static enum lru_status inode_lru_isolate(struct list_head *item,
 	}
 
 	WARN_ON(inode->i_state & I_NEW);
+	/*
+	 * 这里设置上之后，vfs对fs的要求是要等inode被完全释放后才能分配新的
+	 * inode；
+	 * - 参见I_CLEAR的注释
+	 */
 	inode->i_state |= I_FREEING;
 	list_lru_isolate_move(lru, &inode->i_lru, freeable);
 	spin_unlock(&inode->i_lock);
@@ -1438,6 +1475,9 @@ struct inode *igrab(struct inode *inode)
 		__iget(inode);
 		spin_unlock(&inode->i_lock);
 	} else {
+	/*
+	 * 走到这里，说明inode->i_state被设置了I_FREEING或者I_WILL_FREE
+	 */
 		spin_unlock(&inode->i_lock);
 		/*
 		 * Handle the case where s_op->clear_inode is not been
@@ -1707,7 +1747,20 @@ static void iput_final(struct inode *inode)
 
 	if (!drop && (sb->s_flags & SB_ACTIVE)) {
 	/*
-	 * 进到这里，说明drop是0，即inode->i_nlink不是0且inode本身是hashed状态
+	 * 进到这里，说明两点：
+	 * - drop是0，即inode->i_nlink != 0，且inode本身是hashed状态
+	 * - super_block还带有SB_ACTIVE标志
+	 *
+	 * --------------------------------------------------------------------
+	 *
+	 * - 哦，inode最后一次iput()时如果文件没有被删除，那么会将其放入icache；
+	 *   但前提是该文件没有被删除。
+	 * - 如果文件已经被删除（i_nlink == 0）导致的iput()，才会走到后面的
+	 *   evict流程。
+	 *
+	 * 此时如果没有了dentry，那么怎么再找回？
+	 * - dentry_hashtable的key是{parent dentry地址, dname}
+	 * - inode_hashtable的key是{super_block地址, ino}，所以不需要dentry存在
 	 */
 		inode_add_lru(inode);
 		spin_unlock(&inode->i_lock);
@@ -1715,14 +1768,18 @@ static void iput_final(struct inode *inode)
 	}
 
 	/*
-	 * 如果不需要drop，则进行回写
-	 * - inode->i_nlink不是0且inode本身是hashed状态
+	 * 进入到这里，说明：
+	 * - drop是0，即inode->i_nlink != 0，且inode本身是hashed状态
+	 * - 但super_block没有了SB_ACTIVE标志
 	 */
 	if (!drop) {
 		inode->i_state |= I_WILL_FREE;
 		spin_unlock(&inode->i_lock);
 		/*
 		 * 回写
+		 * - 同步等待，返回前已经将inode回写到盘上
+		 * - 如果是从prune_icache_sb()中调用evict()，那么什么时候去回写
+		 *   inode本身呢？
 		 */
 		write_inode_now(inode, 1);
 		spin_lock(&inode->i_lock);
@@ -1789,12 +1846,14 @@ retry:
 			 * - ext4: 调用了ext4_dirty_inode()，生成了jbd2日志，唤
 			 *   醒了对应的回写线程
 			 * - xfs: xfs_fs_dirty_inode()
+			 * - 并不等待回写完成
 			 */
 			mark_inode_dirty_sync(inode);
 			goto retry;
 		}
 		/*
 		 * 走到这里的话，inode->i_lock是保持着的
+		 * - 且必定没有I_DIRTY_TIME
 		 */
 		iput_final(inode);
 	}
@@ -1869,6 +1928,10 @@ int generic_update_time(struct inode *inode, struct timespec64 *time, int flags)
 	if (flags & S_MTIME)
 		inode->i_mtime = *time;
 	if ((flags & (S_ATIME | S_CTIME | S_MTIME)) &&
+	/*
+	 * 如果设置了SB_LAZYTIME（mount选项lazytime），则不单独更新[a|c|m]time，
+	 * 而是当有其他写操作的时候顺路更新；
+	 */
 	    !(inode->i_sb->s_flags & SB_LAZYTIME))
 		dirty = true;
 
@@ -1890,6 +1953,9 @@ static int update_time(struct inode *inode, struct timespec64 *time, int flags)
 {
 	int (*update_time)(struct inode *, struct timespec64 *, int);
 
+	/*
+	 * xfs: xfs_vn_update_time()
+	 */
 	update_time = inode->i_op->update_time ? inode->i_op->update_time :
 		generic_update_time;
 

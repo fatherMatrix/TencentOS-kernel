@@ -1072,6 +1072,7 @@ end_io:
  * bio happens to be merged with someone else, and may resubmit the bio to
  * a lower device by calling into generic_make_request recursively, which
  * means the bio should NOT be touched after the call to ->make_request_fn.
+ *       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  */
 blk_qc_t generic_make_request(struct bio *bio)
 {
@@ -1142,6 +1143,12 @@ blk_qc_t generic_make_request(struct bio *bio)
 			/* Create a fresh bio_list for all subordinate requests */
 			bio_list_on_stack[1] = bio_list_on_stack[0];
 			bio_list_init(&bio_list_on_stack[0]);
+			/*
+			 * 通过blk_queue_make_request()设置：
+			 * - 正常io：blk_mq_make_request()
+			 * - zram: zram_make_request()
+			 * -
+			 */
 			ret = q->make_request_fn(q, bio);
 
 			blk_queue_exit(q);

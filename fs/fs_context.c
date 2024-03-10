@@ -141,6 +141,9 @@ int vfs_parse_fs_param(struct fs_context *fc, struct fs_parameter *param)
 		 */
 		return ret;
 
+	/*
+	 * 传统模式下：legacy_parse_param()
+	 */
 	if (fc->ops->parse_param) {
 		ret = fc->ops->parse_param(fc, param);
 		if (ret != -ENOPARAM)
@@ -298,6 +301,10 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 	if (!init_fs_context)
 		init_fs_context = legacy_init_fs_context;
 
+	/*
+	 * legacy_init_fs_context()中会分配fs_context->fs_private
+	 * - 对legacy来说，fs_private是struct legacy_fs_context
+	 */
 	ret = init_fs_context(fc);
 	if (ret < 0)
 		goto err_fc;

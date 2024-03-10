@@ -379,7 +379,7 @@ void truncate_inode_pages_range(struct address_space *mapping,
 			pagevec_add(&locked_pvec, page);
 		}
 		/*
-		 * locked_pvec中已经是加了锁的page了，对齐进行操作；
+		 * locked_pvec中已经是加了锁的page了，对其进行操作；
 		 */
 		for (i = 0; i < pagevec_count(&locked_pvec); i++)
 			truncate_cleanup_page(mapping, locked_pvec.pages[i]);
@@ -497,7 +497,11 @@ EXPORT_SYMBOL(truncate_inode_pages_range);
 void truncate_inode_pages(struct address_space *mapping, loff_t lstart)
 {
 	/*
-	 * 回写
+	 * 这里不是回写，回写在标记I_FREEING之前已经做了，这里只是将page cache
+	 * 中的页都释放掉：
+	 * - 等其回写完成（如果还在回写的话）
+	 * - 取消其到用户空间的映射（如果有的话）
+	 * - ... ...
 	 */
 	truncate_inode_pages_range(mapping, lstart, (loff_t)-1);
 }

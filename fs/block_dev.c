@@ -1686,6 +1686,10 @@ static int __blkdev_get(struct block_device *bdev, fmode_t mode, int for_part)
 			set_init_blocksize(bdev);
 		}
 
+		/*
+		 * block_device结构体在通过slab分配时，会通过设置的ctor函数
+		 * init_once()将bd_bdi字段设置为noop_backing_dev_info；
+		 */
 		if (bdev->bd_bdi == &noop_backing_dev_info)
 			bdev->bd_bdi = bdi_get(disk->queue->backing_dev_info);
 	} else {

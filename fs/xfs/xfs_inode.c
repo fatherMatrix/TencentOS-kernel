@@ -1933,10 +1933,16 @@ xfs_inactive(
 		 * Note: don't bother with iolock here since lockdep complains
 		 * about acquiring it in reclaim context. We have the only
 		 * reference to the inode at this point anyways.
+		 *
+		 * 这里可能会引入io操作，是日志io，即便inode进来时已经时clean的
+		 * 了，这里也是有可能有io的；
 		 */
 		if (xfs_can_free_eofblocks(ip, true))
 			xfs_free_eofblocks(ip);
 
+		/*
+		 * 如果该inode被清除的原因并不是文件被删除了，则直接在这里返回
+		 */
 		return;
 	}
 

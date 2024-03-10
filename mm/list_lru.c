@@ -206,6 +206,9 @@ unsigned long list_lru_count_node(struct list_lru *lru, int nid)
 }
 EXPORT_SYMBOL_GPL(list_lru_count_node);
 
+/*
+ * inode_lru_isolate()
+ */
 static unsigned long
 __list_lru_walk_one(struct list_lru_node *nlru, int memcg_idx,
 		    list_lru_walk_cb isolate, void *cb_arg,
@@ -229,6 +232,9 @@ restart:
 			break;
 		--*nr_to_walk;
 
+		/*
+		 * inode_lru_isolate()
+		 */
 		ret = isolate(item, l, &nlru->lock, cb_arg);
 		switch (ret) {
 		case LRU_REMOVED_RETRY:

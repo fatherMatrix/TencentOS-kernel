@@ -45,6 +45,9 @@ struct subsys_private {
 	 */
 	struct klist klist_drivers;
 	struct blocking_notifier_head bus_notifier;
+	/*
+	 * 在bus_register()中被初始化为1，表示允许driver自动探测设备
+	 */
 	unsigned int drivers_autoprobe:1;
 	/*
 	 * 反指回总线

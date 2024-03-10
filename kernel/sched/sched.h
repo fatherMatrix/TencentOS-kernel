@@ -1786,7 +1786,8 @@ struct sched_class {
 	/*
 	 * 下一优先级的调度类
 	 *
-	 * 调度类优先级顺序： stop_sched_class -> dl_sched_class -> rt_sched_class -> fair_sched_class -> idle_sched_class
+	 * 调度类优先级顺序：
+	 * - stop_sched_class -> dl_sched_class -> rt_sched_class -> fair_sched_class -> idle_sched_class
 	 */
 	const struct sched_class *next;
 

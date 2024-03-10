@@ -138,6 +138,9 @@ static bool inode_io_list_move_locked(struct inode *inode,
 	if (head != &wb->b_dirty_time)
 		return wb_io_lists_populated(wb);
 
+	/*
+	 * head == &wb->b_dirty_time时一直返回false
+	 */
 	wb_io_lists_depopulated(wb);
 	return false;
 }
@@ -287,6 +290,10 @@ void __inode_attach_wb(struct inode *inode, struct page *page)
 		}
 	}
 
+	/*
+	 * 诶，如果inode不受cgroup的控制，那么久使用bdi内嵌的wb；
+	 * - bdi内还有一个wb链表，给cgroup的情况使用
+	 */
 	if (!wb)
 		wb = &bdi->wb;
 
@@ -1351,6 +1358,9 @@ static int write_inode(struct inode *inode, struct writeback_control *wbc)
 {
 	int ret;
 
+	/*
+	 * xfs: write_inode == NULL
+	 */
 	if (inode->i_sb->s_op->write_inode && !is_bad_inode(inode)) {
 		trace_writeback_write_inode_start(inode, wbc);
 		ret = inode->i_sb->s_op->write_inode(inode, wbc);
@@ -1502,6 +1512,8 @@ __writeback_single_inode(struct inode *inode, struct writeback_control *wbc)
 
 	/*
 	 * 这里写的是inode对应文件包含的数据内容，不是inode本身
+	 * - inode本身什么时候回写？
+	 * - 下面
 	 */
 	ret = do_writepages(mapping, wbc);
 
@@ -1511,6 +1523,8 @@ __writeback_single_inode(struct inode *inode, struct writeback_control *wbc)
 	 * I/O completion. We don't do it for sync(2) writeback because it has a
 	 * separate, external IO completion path and ->sync_fs for guaranteeing
 	 * inode metadata is written back correctly.
+	 *
+	 * 确保上面的do_writepages()全部写完；
 	 */
 	if (wbc->sync_mode == WB_SYNC_ALL && !wbc->for_sync) {
 		int err = filemap_fdatawait(mapping);
@@ -1522,6 +1536,8 @@ __writeback_single_inode(struct inode *inode, struct writeback_control *wbc)
 	 * If the inode has dirty timestamps and we need to write them, call
 	 * mark_inode_dirty_sync() to notify the filesystem about it and to
 	 * change I_DIRTY_TIME into I_DIRTY_SYNC.
+	 *
+	 * 如果inode本身的时间也需要更新，则回写inode本身；
 	 */
 	if ((inode->i_state & I_DIRTY_TIME) &&
 	    (wbc->sync_mode == WB_SYNC_ALL || wbc->for_sync ||
@@ -1562,8 +1578,15 @@ __writeback_single_inode(struct inode *inode, struct writeback_control *wbc)
 	 * Don't write the inode if only I_DIRTY_PAGES was set
 	 *
 	 * 上面do_writepages()写的是数据，这里写inode；
+	 * - 单只有I_DIRTY_PAGES时不写，因为此时inode源数据本身没有被更新过，只
+	 *   是有脏页而已；
 	 */
 	if (dirty & ~I_DIRTY_PAGES) {
+		/*
+		 * xfs没有这个函数，怎么办？
+		 * - xfs delayed log机制中的AIL部分使得xfs不需要这个函数
+		 *   > 参见：upstream 8a9c9980f24f6d86e0ec0150ed35fba45d0c9f88
+		 */
 		int err = write_inode(inode, wbc);
 		if (ret == 0)
 			ret = err;
@@ -1604,6 +1627,7 @@ static int writeback_single_inode(struct inode *inode,
 		 * away under us.
 		 *
 		 * 里面会释放掉上面获取的inode->i_lock自旋锁。
+		 * - 等待I_SYNC标志清空
 		 */
 		__inode_wait_for_writeback(inode);
 	}
@@ -2326,15 +2350,28 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 	/*
 	 * Don't do this for I_DIRTY_PAGES - that doesn't actually
 	 * dirty the inode itself
+	 * - 哇，所以有没有脏数据和inode脏不脏是两码事！
 	 */
 	if (flags & (I_DIRTY_INODE | I_DIRTY_TIME)) {
 		trace_writeback_dirty_inode_start(inode, flags);
 
+		/*
+		 * xfs: xfs_fs_dirty_inode()
+		 * ext4: ext4_dirty_inode()
+		 */
 		if (sb->s_op->dirty_inode)
 			sb->s_op->dirty_inode(inode, flags);
 
 		trace_writeback_dirty_inode(inode, flags);
 	}
+
+	/*
+	 * 诶，感觉->dirty_inode()就是用来处理I_DIRTY_TIME的？
+	 * - I_DIRTY_TIME会在上面的sb->s_op->dirty_inode()处理
+	 * - 如果有I_DIRTY_INODE了，那么肯定要回写，I_DIRTY_TIME就没那么重要了？
+	 *   > 感觉I_DIRTY_SYNC是I_DIRTY_TIME的超集
+	 * - I_DIRTY_INODE = I_DIRTY_SYNC | I_DIRTY_DATASYNC
+	 */
 	if (flags & I_DIRTY_INODE)
 		flags &= ~I_DIRTY_TIME;
 	dirtytime = flags & I_DIRTY_TIME;
@@ -2345,7 +2382,14 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 	 */
 	smp_mb();
 
+	/*
+	 * 本函数调用者试图置位的flags已经在inode->i_state中存在了，返回即可
+	 */
 	if (((inode->i_state & flags) == flags) ||
+	/*
+	 * dirtytime为真表示调用者只想更新时间，不想干其他的；那么如果inode已经
+	 * 被标记上了作为超集的I_DIRTY_INODE，那我们就更不用管了，直接返回即可；
+	 */
 	    (dirtytime && (inode->i_state & I_DIRTY_INODE)))
 		return;
 
@@ -2353,15 +2397,32 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 		block_dump___mark_inode_dirty(inode);
 
 	spin_lock(&inode->i_lock);
+	/*
+	 * 加锁后重新验证一次
+	 */
 	if (dirtytime && (inode->i_state & I_DIRTY_INODE))
 		goto out_unlock_inode;
 	if ((inode->i_state & flags) != flags) {
+		/*
+		 * 这里was_dirty为0，表示本次mark_inode_dirty_sync()之前没有
+		 * dirty标志；如果为1，表示前面已经有mark_inode_dirty_sync()给
+		 * inode配置了dirty标志；
+		 *
+		 * I_DIRTY = I_DIRTY_INODE | I_DIRTY_PAGES
+		 *         = I_DIRTY_SYNC | I_DIRTY_DATASYNC | I_DIRTY_PAGES
+		 */
 		const int was_dirty = inode->i_state & I_DIRTY;
 
+		/*
+		 * 将inode关联到bdi_writeback
+		 */
 		inode_attach_wb(inode, NULL);
 
 		if (flags & I_DIRTY_INODE)
 			inode->i_state &= ~I_DIRTY_TIME;
+		/*
+		 * 给inode置位上mark_inode_dirty_sync()本次调用者的意图flags
+		 */
 		inode->i_state |= flags;
 
 		/*
@@ -2369,6 +2430,9 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 		 * update its dirty state. Once the flush worker is done with
 		 * the inode it will place it on the appropriate superblock
 		 * list, based upon its state.
+		 *
+		 * 从delaying_queue移动到dispatch_queue的inode会带有此标志；
+		 * - 参见move_expired_inodes()
 		 */
 		if (inode->i_state & I_SYNC_QUEUED)
 			goto out_unlock_inode;
@@ -2376,6 +2440,9 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 		/*
 		 * Only add valid (hashed) inodes to the superblock's
 		 * dirty list.  Add blockdev inodes as well.
+		 *
+		 * 只有hashed inode才能加入到super_block的dirty list，但
+		 * blockdev inode不受此限制；
 		 */
 		if (!S_ISBLK(inode->i_mode)) {
 			if (inode_unhashed(inode))
@@ -2387,12 +2454,20 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 		/*
 		 * If the inode was already on b_dirty/b_io/b_more_io, don't
 		 * reposition it (that would break b_dirty time-ordering).
+		 *
+		 * NOTE：was_dirty为0恰恰表示这个inode在本次调用
+		 *       mark_inode_dirty_sync()前没有dirty标志，那么本次调用就
+		 *       有义务触发相关writeback操作；
 		 */
 		if (!was_dirty) {
 			struct bdi_writeback *wb;
 			struct list_head *dirty_list;
 			bool wakeup_bdi = false;
 
+			/*
+			 * 获取inode的bdi_writeback
+			 * - 返回时bdi_writeback->list_lock是持有的
+			 */
 			wb = locked_inode_to_wb_and_lock_list(inode);
 
 			WARN(bdi_cap_writeback_dirty(wb->bdi) &&
@@ -2406,19 +2481,34 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 			if (inode->i_state & I_DIRTY)
 				dirty_list = &wb->b_dirty;
 			else
+			/*
+			 * 只想修改时间，I_DIRTY_TIME
+			 */
 				dirty_list = &wb->b_dirty_time;
 
+			/*
+			 * 将inode挂到wb的dirty list上
+			 * - 只有inode被挂入b_dirty而不是b_dirty_time，且是该
+			 *   bdi_writeback的第一个inode时，才返回true；
+			 */
 			wakeup_bdi = inode_io_list_move_locked(inode, wb,
 							       dirty_list);
 
+			/*
+			 * 放锁
+			 */
 			spin_unlock(&wb->list_lock);
 			trace_writeback_dirty_inode_enqueue(inode);
 
 			/*
 			 * If this is the first dirty inode for this bdi,
+			 *                ^^^^^^^^^^^^^^^^^
+			 *            first dirty time inode不会唤醒
 			 * we have to wake-up the corresponding bdi thread
 			 * to make sure background write-back happens
 			 * later.
+			 *
+			 * first dirty time inode什么时候触发回写呢？
 			 */
 			if (bdi_cap_writeback_dirty(wb->bdi) && wakeup_bdi)
 				wb_wakeup_delayed(wb);

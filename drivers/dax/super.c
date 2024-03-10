@@ -59,6 +59,9 @@ EXPORT_SYMBOL(bdev_dax_pgoff);
 #if IS_ENABLED(CONFIG_FS_DAX)
 struct dax_device *fs_dax_get_by_bdev(struct block_device *bdev)
 {
+	/*
+	 * 如果该设备不是dax device，则返回NULL
+	 */
 	if (!blk_queue_dax(bdev->bd_queue))
 		return NULL;
 	return fs_dax_get_by_host(bdev->bd_disk->disk_name);

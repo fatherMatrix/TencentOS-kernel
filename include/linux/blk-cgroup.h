@@ -791,6 +791,10 @@ bool __blkcg_punt_bio_submit(struct bio *bio);
 
 static inline bool blkcg_punt_bio_submit(struct bio *bio)
 {
+	/*
+	 * 该标志主要用于共享的kthread提交bio时，避免因blkcg压制而同步等待，从而
+	 * 阻塞该共享kthread上的其它任务；
+	 */
 	if (bio->bi_opf & REQ_CGROUP_PUNT)
 		return __blkcg_punt_bio_submit(bio);
 	else

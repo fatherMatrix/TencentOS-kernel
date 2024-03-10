@@ -634,6 +634,10 @@ int __close_fd(struct files_struct *files, unsigned fd)
 	file = fdt->fd[fd];
 	if (!file)
 		goto out_unlock;
+	/*
+	 * 强制清空fd数组中的对应位置
+	 * - 此时文件并未关闭
+	 */
 	rcu_assign_pointer(fdt->fd[fd], NULL);
 	__put_unused_fd(files, fd);
 	/*

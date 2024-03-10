@@ -172,6 +172,8 @@ static inline unsigned int isa_virt_to_bus(volatile void *address)
  * are forbidden in portable PCI drivers.
  *
  * Allow them on x86 for legacy drivers, though.
+ *
+ * x86架构上，总线地址等同于物理地址
  */
 #define virt_to_bus virt_to_phys
 #define bus_to_virt phys_to_virt

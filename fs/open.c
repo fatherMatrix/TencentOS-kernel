@@ -1297,6 +1297,9 @@ int filp_close(struct file *filp, fl_owner_t id)
 		return 0;
 	}
 
+	/*
+	 * xfs: NULL
+	 */
 	if (filp->f_op->flush)
 		retval = filp->f_op->flush(filp, id);
 

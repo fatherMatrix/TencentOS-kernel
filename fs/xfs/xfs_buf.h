@@ -77,6 +77,9 @@ typedef unsigned int xfs_buf_flags_t;
  * alignment constraints.
  */
 typedef struct xfs_buftarg {
+	/*
+	 * bt_bdev的设备号
+	 */
 	dev_t			bt_dev;
 	struct block_device	*bt_bdev;
 	struct dax_device	*bt_daxdev;

@@ -36,6 +36,8 @@ xfs_trans_ijoin(
 	 * 获取inode对应的xfs_inode_log_item_t，如果没有就在此处创建一个。
 	 * - 对inode->i_itemp的访问是安全的，因为在进入xfs_trans_ijoin()前已经
 	 *   获取了inode的互斥锁；
+	 * - 这里准备的xfs_log_item并没有分配对应的log vector等内存。原因是这里
+	 *   我们并不知道要分配多少。
 	 */
 	if (ip->i_itemp == NULL)
 		xfs_inode_item_init(ip, ip->i_mount);

@@ -321,6 +321,9 @@ struct xfs_cil_ctx {
  */
 struct xfs_cil {
 	struct xlog		*xc_log;
+	/*
+	 * 链表头，链表元素是xfs_log_item->li_cil
+	 */
 	struct list_head	xc_cil;
 	spinlock_t		xc_cil_lock;
 
@@ -328,6 +331,9 @@ struct xfs_cil {
 	 * xfs_log_commit_cil()中使用了这个信号量
 	 */
 	struct rw_semaphore	xc_ctx_lock ____cacheline_aligned_in_smp;
+	/*
+	 * checkpoint context
+	 */
 	struct xfs_cil_ctx	*xc_ctx;
 
 	spinlock_t		xc_push_lock ____cacheline_aligned_in_smp;

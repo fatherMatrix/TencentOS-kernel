@@ -557,6 +557,9 @@ xfs_bmbt_init_cursor(
 	cur->bc_tp = tp;
 	cur->bc_mp = mp;
 	cur->bc_nlevels = be16_to_cpu(ifp->if_broot->bb_level) + 1;
+	/*
+	 * btree类型
+	 */
 	cur->bc_btnum = XFS_BTNUM_BMAP;
 	cur->bc_blocklog = mp->m_sb.sb_blocklog;
 	cur->bc_statoff = XFS_STATS_CALC_INDEX(xs_bmbt_2);

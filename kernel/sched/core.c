@@ -2705,6 +2705,9 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 	 *
 	 * This ensures that tasks getting woken will be fully ordered against
 	 * their previous state and preserve Program Order.
+	 *
+	 * 等待p->on_cpu变为0
+	 * - 更新端在finsh_task()
 	 */
 	smp_cond_load_acquire(&p->on_cpu, !VAL);
 
@@ -2716,6 +2719,9 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		atomic_dec(&task_rq(p)->nr_iowait);
 	}
 
+	/*
+	 * 为进程p选择一个新的rq，这个rq有可能是新的cpu了
+	 */
 	cpu = select_task_rq(p, p->wake_cpu, SD_BALANCE_WAKE, wake_flags);
 	if (task_cpu(p) != cpu) {
 		wake_flags |= WF_MIGRATED;

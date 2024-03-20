@@ -141,6 +141,8 @@ static inline int xfs_bmapi_whichfork(int bmapi_flags)
 
 /*
  * Special values for xfs_bmbt_irec_t br_startblock field.
+ * - DELAYSTARTBLOCK的值为-1，自然符合isnullstartblock()
+ *   > 参见xfs_trim_extent()
  */
 #define	DELAYSTARTBLOCK		((xfs_fsblock_t)-1LL)
 #define	HOLESTARTBLOCK		((xfs_fsblock_t)-2LL)

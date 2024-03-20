@@ -1156,6 +1156,13 @@ trans_cancel:
 
 /*
  * Read in extents from a btree-format inode.
+ *                        ^^^^^^^^^^^^
+ * 仅仅是XFS_DINODE_FMT_BTREE才会进入本函数，原因参见__xfs_bunmapi()中调用本函
+ * 数处的注释，非常重要！
+ *
+ * 要注意，xfs_ifork->if_root这棵树的建立，并不是完全一个node一个node地拷贝磁盘
+ * 上的btree，而是找到磁盘btree的最左leaf node，然后通过链表遍历所有leaf node，
+ * 对每一个leaf node，执行向xfs_ifork->if_root这棵内存树的插入操作；
  */
 int
 xfs_iread_extents(
@@ -1192,6 +1199,7 @@ xfs_iread_extents(
 	 * - 诶，如果我这棵树就一个叶子结点怎么办？
 	 *
 	 * xfs_ifork->if_broot不会为NULL吗？
+	 * - 不会，参见本函数注释处的参见！
 	 */
 	level = be16_to_cpu(block->bb_level);
 	if (unlikely(level == 0)) {
@@ -1225,6 +1233,10 @@ xfs_iread_extents(
 		block = XFS_BUF_TO_BLOCK(bp);
 		if (level == 0)
 			break;
+		/*
+		 * m_bmap_dmxr中的1号元素表示internal node的record数量
+		 * - 因为上面的level > 0，所以这里肯定是internal node
+		 */
 		pp = XFS_BMBT_PTR_ADDR(mp, block, 1, mp->m_bmap_dmxr[1]);
 		bno = be64_to_cpu(*pp);
 		XFS_WANT_CORRUPTED_GOTO(mp,
@@ -1234,8 +1246,6 @@ xfs_iread_extents(
 
 	/*
 	 * Here with bp and block set to the leftmost leaf node in the tree.
-	 *
-	 * 怎么确保这个时候xfs_ifork->if_root都加载进来了？
 	 */
 	i = 0;
 	xfs_iext_first(ifp, &icur);
@@ -1262,6 +1272,7 @@ xfs_iread_extents(
 		/*
 		 * Read-ahead the next leaf block, if any.
 		 * - 叶子节点的左右兄弟应该是用于链表指针了；
+		 *   > 是的，没错！
 		 */
 		nextbno = be64_to_cpu(block->bb_u.l.bb_rightsib);
 		if (nextbno != NULLFSBLOCK)
@@ -1564,6 +1575,9 @@ xfs_bmap_one_block(
 
 /*
  * Convert a delayed allocation to a real allocation.
+ *
+ * 仔细观察本函数，会发现delayed extents确实只是在incore btree上有记录，在磁盘
+ * 上是没有记录的；
  */
 STATIC int				/* error */
 xfs_bmap_add_extent_delay_real(
@@ -4186,6 +4200,7 @@ xfs_bmapi_reserve_delalloc(
 	got->br_startoff = aoff;
 	/*
 	 * 这里记录的好像是数量而不是起始块号
+	 * - 编码表示是一个delayed block
 	 */
 	got->br_startblock = nullstartblock(indlen);
 	got->br_blockcount = alen;
@@ -4193,6 +4208,11 @@ xfs_bmapi_reserve_delalloc(
 
 	/*
 	 * 向incore btree插入extent
+	 * - 什么时候写入磁盘呢？
+	 *   > delayed extents是不会写入磁盘的，在buffer io开始时分配delayed
+	 *     extents，在xfs_vm_writepage()中将delayed extents转换为real
+	 *     extents。如果有未被转换为real的extents，会在xfs_file_iomap_end()
+	 *     中被删掉；
 	 */
 	xfs_bmap_add_extent_hole_delay(ip, whichfork, icur, got);
 
@@ -4251,6 +4271,8 @@ xfs_bmapi_allocate(
 		bma->length = XFS_FILBLKS_MIN(bma->length, MAXEXTLEN);
 		/*
 		 * 在eof前的hole中
+		 * - 此时got中存储的是hole后面紧挨的extent，此处的意思是分配的
+		 *   extent末位应和后面的extent连接起来；
 		 */
 		if (!bma->eof)
 			bma->length = XFS_FILBLKS_MIN(bma->length,
@@ -4981,6 +5003,11 @@ xfs_bmap_split_indlen(
 	return stolen;
 }
 
+/*
+ * 与xfs_bmap_del_extent_real()可知：
+ * - delay extents仅存在于xfs_ifork->if_root这棵内存树中，不在磁盘上
+ *   > 不会有问题吗？断电时怎么办？
+ */
 int
 xfs_bmap_del_extent_delay(
 	struct xfs_inode	*ip,
@@ -5219,6 +5246,11 @@ xfs_bmap_del_extent_real(
 	ifp = XFS_IFORK_PTR(ip, whichfork);
 	ASSERT(del->br_blockcount > 0);
 	xfs_iext_get_extent(ifp, icur, &got);
+	/*
+	 * 传进来的del和这里的got都是对应icur的xfs_bmbt_irec，不同之处在与入参
+	 * del可能被trim过，trim的来源是我们要unmap的[start, end)
+	 * - 即got是del的超集
+	 */
 	ASSERT(got.br_startoff <= del->br_startoff);
 	del_endoff = del->br_startoff + del->br_blockcount;
 	got_endoff = got.br_startoff + got.br_blockcount;
@@ -5234,6 +5266,10 @@ xfs_bmap_del_extent_real(
 	 * btree format, then reject it.  The calling code will then swap blocks
 	 * around instead.  We have to do this now, rather than waiting for the
 	 * conversion to btree format, since the transaction will be dirty then.
+	 *
+	 * tp->t_blk_res == 0 是什么情况？
+	 * 如果这次删除使得extents数量增加，且这个增加触发了从extents list
+	 * 到extents btree的转变，则拒绝！
 	 */
 	if (tp->t_blk_res == 0 &&
 	    XFS_IFORK_FORMAT(ip, whichfork) == XFS_DINODE_FMT_EXTENTS &&
@@ -5274,6 +5310,9 @@ xfs_bmap_del_extent_real(
 
 	del_endblock = del->br_startblock + del->br_blockcount;
 	if (cur) {
+		/*
+		 * 找到got表示的extent，并将xfs_btree_cur定位到该extent
+		 */
 		error = xfs_bmbt_lookup_eq(cur, &got, &i);
 		if (error)
 			goto done;
@@ -5289,6 +5328,8 @@ xfs_bmap_del_extent_real(
 	case BMAP_LEFT_FILLING | BMAP_RIGHT_FILLING:
 		/*
 		 * Matches the whole extent.  Delete the entry.
+		 * - 要删除的部分占据了所在的整个extents，直接将该extents完全删
+		 *   除即可，无其他麻烦事；
 		 */
 		xfs_iext_remove(ip, icur, state);
 		xfs_iext_prev(ifp, icur);
@@ -5463,6 +5504,7 @@ __xfs_bunmapi(
 	xfs_fsblock_t		sum;
 	/*
 	 * len的初始值设置为*rlen
+	 * - 这里的单位是fsblock
 	 */
 	xfs_filblks_t		len = *rlen;	/* length to unmap in file */
 	xfs_fileoff_t		max_len;
@@ -5495,12 +5537,29 @@ __xfs_bunmapi(
 	 * Guesstimate how many blocks we can unmap without running the risk of
 	 * blowing out the transaction with a mix of EFIs and reflink
 	 * adjustments.
+	 *
+	 * EFI: extent free intent
+	 * EFD: extent free done
 	 */
 	if (tp && xfs_is_reflink_inode(ip) && whichfork == XFS_DATA_FORK)
 		max_len = min(len, xfs_refcount_max_unmap(tp->t_log_res));
 	else
 		max_len = len;
 
+	/*
+	 * 诶，上面保证XFS_IFORK_FORMAT(ip, whichfork)是XFS_DINODE_FMT_EXTENTS
+	 * 或者XFS_DINODE_FMT_EXTENTS，为啥这里只判断XFS_IFEXTENTS呢？
+	 * - XFS_DINODE_FMT_EXTENTS和XFS_DINODE_FMT_BTREE都是对应XFS_IFEXTENTS
+	 * - 参见xfs_iformat_fork() +-> xfs_iformat_extents()
+	 *                          |-> xfs_iformat_btree()
+	 *
+	 * 又xfs_iread_extents()中仅处理XFS_DINODE_FMT_BTREE，否则就会直接报错？
+	 * - 如果是XFS_DINODE_FMT_EXTENTS，会直接在xfs_iformat_extents()中读完
+	 *   并置位XFS_IFEXTENTS；
+	 * - 如果没有XFS_IFEXTENTS，又是XFS_DINODE_FMT_EXTENTS或者XFS_DINODE_FMT_BTREE
+	 *   之一，那么只能是XFS_DINODE_FMT_BTREE。因为在xfs_iformat_btree()中
+	 *   只读了btree的root节点上来，也没有职位XFS_IFEXTENTS；
+	 */
 	if (!(ifp->if_flags & XFS_IFEXTENTS) &&
 	    (error = xfs_iread_extents(tp, ip, whichfork)))
 		return error;
@@ -5515,6 +5574,8 @@ __xfs_bunmapi(
 	/*
 	 * 返回false后进入if，返回false后说明end之前没有extent了，自然也就没有
 	 * 需要unmap的东西了；
+	 * - 上面通过xfs_iread_extents()保证了iextents都在内存中了；
+	 * - 这里找的是start小于end的extents
 	 */
 	if (!xfs_iext_lookup_extent_before(ip, ifp, &end, &icur, &got)) {
 		*rlen = 0;
@@ -5530,10 +5591,16 @@ __xfs_bunmapi(
 
 	logflags = 0;
 	if (ifp->if_flags & XFS_IFBROOT) {
+	/*
+	 * 当前inode的extents处于btree状态
+	 */
 		ASSERT(XFS_IFORK_FORMAT(ip, whichfork) == XFS_DINODE_FMT_BTREE);
 		cur = xfs_bmbt_init_cursor(mp, tp, ip, whichfork);
 		cur->bc_private.b.flags = 0;
 	} else
+	/*
+	 * 当前inode的extents处于list状态
+	 */
 		cur = NULL;
 
 	if (isrt) {
@@ -5552,6 +5619,9 @@ __xfs_bunmapi(
 		/*
 		 * Is the found extent after a hole in which end lives?
 		 * Just back up to the previous extent, if so.
+		 *
+		 * 第一次进入这个循环时，不会进入下面的if；
+		 * 进入下面的if仅可能是while循环后又过来；
 		 */
 		if (got.br_startoff > end &&
 		    !xfs_iext_prev_extent(ifp, &icur, &got)) {
@@ -5561,6 +5631,9 @@ __xfs_bunmapi(
 		/*
 		 * Is the last block of this extent before the range
 		 * we're supposed to delete?  If so, we're done.
+		 *
+		 * 我们是从后向前unmap extents的，如果当前的这个extent已经在
+		 * start之前了，说明我们已经完成了；
 		 */
 		end = XFS_FILEOFF_MIN(end,
 			got.br_startoff + got.br_blockcount - 1);
@@ -5588,7 +5661,8 @@ __xfs_bunmapi(
 		if (got.br_startoff < start) {
 		/*
 		 * 进入到这里，说明start位于got.br_startoff开始的extent中；
-		 * - 将其trim到与[start, end)相同
+		 * - 将其trim到与[start, end)相同。因为我们只需要unmap掉start之
+		 *   后的extents，之前的我们不关心；从end开始之后的我们也不关心
 		 */
 			del.br_startoff = start;
 			del.br_blockcount -= start - got.br_startoff;

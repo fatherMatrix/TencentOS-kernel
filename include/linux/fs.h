@@ -523,6 +523,7 @@ struct block_device {
 	/*
 	 * bdevfs inode
 	 * - 非devtmpfs inode
+	 * - 来源于bdev_inode->vfs_inode，参见bdget()
 	 */
 	struct inode *		bd_inode;	/* will die */
 	/*
@@ -2165,6 +2166,7 @@ static inline ssize_t call_read_iter(struct file *file, struct kiocb *kio,
 {
 	/*
 	 * xfs: xfs_file_read_iter()
+	 * ext4: ext4_file_read_iter()
 	 */
 	return file->f_op->read_iter(kio, iter);
 }

@@ -679,6 +679,9 @@ restart:
 		goto restart;
 	}
 
+	/*
+	 * 增加了引用计数的
+	 */
 	dqp->q_nrefs++;
 	mutex_unlock(&qi->qi_tree_lock);
 
@@ -853,6 +856,9 @@ xfs_qm_dqget_inode(
 {
 	struct xfs_mount	*mp = ip->i_mount;
 	struct xfs_quotainfo	*qi = mp->m_quotainfo;
+	/*
+	 * 通过type确定quota对应的树
+	 */
 	struct radix_tree_root	*tree = xfs_dquot_tree(qi, type);
 	struct xfs_dquot	*dqp;
 	xfs_dqid_t		id;
@@ -868,6 +874,9 @@ xfs_qm_dqget_inode(
 	id = xfs_qm_id_for_quotatype(ip, type);
 
 restart:
+	/*
+	 * 在树上查找
+	 */
 	dqp = xfs_qm_dqget_cache_lookup(mp, qi, tree, id);
 	if (dqp) {
 		*O_dqpp = dqp;
@@ -882,6 +891,9 @@ restart:
 	 * we re-acquire the lock.
 	 */
 	xfs_iunlock(ip, XFS_ILOCK_EXCL);
+	/*
+	 * 缓存中没有查到，去磁盘上读
+	 */
 	error = xfs_qm_dqread(mp, id, type, can_alloc, &dqp);
 	xfs_ilock(ip, XFS_ILOCK_EXCL);
 	if (error)

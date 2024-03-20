@@ -335,6 +335,9 @@ static void destroy_inode(struct inode *inode)
 	/*
 	 * 释放inode的其他资源
 	 * - 包括writeback等
+	 *   > 这些资源回收之后，->destroy_inode()中的io操作怎么办？
+	 *     - ext4中，__destroy_inode()后不再有io操作；
+	 *     - xfs中，还有io操作
 	 */
 	__destroy_inode(inode);
 	if (ops->destroy_inode) {
@@ -647,6 +650,10 @@ static void evict(struct inode *inode)
 	 *     AIL机制完成的。
 	 *   > 对于其他的文件系统，比如ext4，猜测其在evict_inode()中进行了某些
 	 *     操作。
+	 * --------------------------------------------------------------------
+	 * 要明白一点，对于有日志系统的文件系统来说，是不需要回写inode metadata
+	 * 操作的，因为日志系统中，事务提交后，inode metadata区域已经被更新了；
+	 * 比如，在xfs中，inode metadata的回写就是通过AIL部分自动完成的；
 	 */
 	inode_wait_for_writeback(inode);
 
@@ -695,7 +702,7 @@ static void evict(struct inode *inode)
 	spin_lock(&inode->i_lock);
 	/*
 	 * 这个wakeup的作用？
-	 * - 确保这个东西的等端不会在inode被destroy后等到天荒地老
+	 * - 参见：ext4_iget() -> iget_locked() -> wait_on_inode()
 	 */
 	wake_up_bit(&inode->i_state, __I_NEW);
 	BUG_ON(inode->i_state != (I_FREEING | I_CLEAR));
@@ -981,7 +988,50 @@ repeat:
 			continue;
 		if (inode->i_sb != sb)
 			continue;
+		/*
+		 * 此处的spin_lock成功时的分析：
+		 * 1. 此时会导致下面的__iget()成功，从而iput()侧的
+		 *    atomic_dec_and_lock()不可能使引用计数减小到0，iput()立即
+		 *    退出；
+		 * 2. 此时本处观测的inode->i_state中有FREEING标记，等待__I_NEW
+		 *    并repeat，直到iput()端执行到remove_inode_hash()，导致哈希
+		 *    表里再也差不到，本处退出；
+		 * 3. 与2相同
+		 * 4. 不可能。因为在整个find_inode_fast()中我们都持有
+		 *    inode_hash_lock，走到这里时，iput()侧没有机会将inode从哈
+		 *    希表里删除；
+		 * 5. 与4相同。
+		 *
+		 * 关键点：inode_hash_lock保证整个find_inode_fast()逻辑要么在
+		 * remove_inode_hash之前，要么在remove_inode_hash之后。
+		 *
+		 * iput
+		 *   --------------------------------------- 1
+		 *   atomic_dec_and_lock
+		 *     iput_final
+		 *       inode->i_state |= I_FREEING
+		 *       spin_unlock
+		 *       ----------------------------------- 2
+		 *       evict
+		 *         --------------------------------- 3
+		 *         remove_inode_hash
+		 *         --------------------------------- 4
+		 *         spin_lock
+		 *         wake_up_bit(__I_NEW)
+		 *         spin_unlock
+		 *         --------------------------------- 5
+		 */
 		spin_lock(&inode->i_lock);
+		/*
+		 * 诶，所以非xfs也是要等待I_FREEING|I_WILL_FREE标志的，只不过下
+		 * 面的__wait_on_freeing_inode()是使用__I_NEW这个标志来等的；
+		 *
+		 * 运行到这里的时候，会不会evict()中已经把wake_up_bit(__I_NEW)执
+		 * 行过了，导致下面的wait永远醒不了呢？
+		 * - 不可能，如果wake_up_bit()都已经走过了，那么肯定也运行了
+		 *   remove_inode_hash()，从而我们就不可能在哈希表里找到该inode
+		 *   了，也就不会进入本处的循环了；
+		 */
 		if (inode->i_state & (I_FREEING|I_WILL_FREE)) {
 			__wait_on_freeing_inode(inode);
 			goto repeat;
@@ -1313,6 +1363,7 @@ again:
 	spin_lock(&inode_hash_lock);
 	/*
 	 * 在inode_hashtable中查找目标inode，在返回前会增加其引用计数
+	 * - 如果成功增加引用计数并返回，那么evict路径是不可能继续释放的；
 	 */
 	inode = find_inode_fast(sb, head, ino);
 	spin_unlock(&inode_hash_lock);
@@ -1838,6 +1889,8 @@ retry:
 		if (inode->i_nlink && (inode->i_state & I_DIRTY_TIME)) {
 			/*
 			 * 保证回写过程中inode不会被从内存中释放
+			 * - 那对应的引用计数释放是在哪里呢？
+			 *   > goto retry后会重新减，这里是恢复上面的减法。
 			 */
 			atomic_inc(&inode->i_count);
 			spin_unlock(&inode->i_lock);
@@ -2233,6 +2286,9 @@ EXPORT_SYMBOL(inode_needs_sync);
  * It doesn't matter if I_NEW is not set initially, a call to
  * wake_up_bit(&inode->i_state, __I_NEW) after removing from the hash list
  * will DTRT.
+ *
+ * 不管这个时候I_NEW到底有没有，我强行睡眠等待其消除，那么只有下一个
+ * wake_up_bit(__I_NEW)可以唤醒我；
  */
 static void __wait_on_freeing_inode(struct inode *inode)
 {

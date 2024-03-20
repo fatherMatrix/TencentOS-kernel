@@ -164,7 +164,7 @@ typedef uint32_t	xfs_dqid_t;
 #define	XFS_WORDMASK	((1 << XFS_WORDLOG) - 1)
 
 /*
- * 标识一个B+树某个叶子结点中的第pos个记录
+ * 用于在xfs_ifork->if_root这棵btree上遍历
  */
 struct xfs_iext_cursor {
 	struct xfs_iext_leaf	*leaf;
@@ -195,6 +195,11 @@ typedef struct xfs_bmbt_irec
 	 * 长度，以块为单位
 	 */
 	xfs_filblks_t	br_blockcount;	/* number of blocks */
+	/*
+	 * extent状态
+	 * - XFS_EXT_NORM
+	 * - XFS_EXT_UNWRITTEN，对应XFS_BMAPI_PREALLOC
+	 */
 	xfs_exntst_t	br_state;	/* extent state */
 } xfs_bmbt_irec_t;
 

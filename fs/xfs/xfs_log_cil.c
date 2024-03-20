@@ -532,6 +532,9 @@ xlog_cil_insert_items(
 		 * - 后面这个链表会直接从CIL中摘除，转换后放到Checkpoint Context
 		 *   的链表中，彼时链表元素是xfs_log_vec；
 		 *   > 参见：文档 3.3.3 Checkpoints
+		 *
+		 * CIL中的元素什么时候处理呢？
+		 * - xfs_log_force_lsn() ~> xlog_cil_push()
 		 */
 		if (!list_is_last(&lip->li_cil, &cil->xc_cil))
 			list_move_tail(&lip->li_cil, &cil->xc_cil);
@@ -1142,7 +1145,10 @@ xfs_log_commit_cil(
 	 */
 	xlog_cil_alloc_shadow_bufs(log, tp);
 
-	/* lock out background commit */
+	/*
+	 * lock out background commit
+	 * - 互斥端在xlog_cil_push()
+	 */
 	down_read(&cil->xc_ctx_lock);
 
 	/*

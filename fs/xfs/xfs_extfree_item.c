@@ -317,6 +317,7 @@ static const struct xfs_item_ops xfs_efd_item_ops = {
 
 /*
  * Allocate an "extent free done" log item that will hold nextents worth of
+ *              ^^^^^^^^^^^^^^^^ EFD
  * extents.  The caller must use all nextents extents, because we are not
  * flexible about this at all.
  */
@@ -589,6 +590,7 @@ const struct xfs_defer_op_type xfs_agfl_free_defer_type = {
 
 /*
  * Process an extent free intent item that was recovered from
+ *            ^^^^^^^^^^^^^^^^^^ EFI
  * the log.  We need to free the extents that it describes.
  */
 int

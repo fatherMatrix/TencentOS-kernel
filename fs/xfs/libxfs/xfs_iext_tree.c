@@ -417,6 +417,10 @@ xfs_iext_leaf_key(
 	struct xfs_iext_leaf	*leaf,
 	int			n)
 {
+	/*
+	 * 返回的是leaf node中某个record的start offset
+	 * - 这刚好是xfs_ifork->if_root树的key
+	 */
 	return leaf->recs[n].lo & XFS_IEXT_STARTOFF_MASK;
 }
 
@@ -911,6 +915,13 @@ xfs_iext_remove(
 
 	/*
 	 * 在incore btree中删除cur->leaf叶节点中cur->pos位置的record
+	 * - nr_entries表示cur->leaf中有几个元素
+	 *   > 第三个参数是一个确定不为空的record，作为查找的起始点，但并不影响
+	 *     最后计数的结果。将第三个参数设置为0总能得到正确结果；
+	 * - 将后边的元素前挪，每个元素是一个record，整体相当于删除了一个record
+	 *
+	 * NOTE：这里隐含了一个动作，即xfs_iext_cursor此时指向了被删除record的后
+	 *       面一个record，相当于cursor后移了；
 	 */
 	nr_entries = xfs_iext_leaf_nr_entries(ifp, leaf, cur->pos) - 1;
 	for (i = cur->pos; i < nr_entries; i++)
@@ -927,6 +938,10 @@ xfs_iext_remove(
 				leaf);
 		offset = xfs_iext_leaf_key(leaf, 0);
 	} else if (cur->pos == nr_entries) {
+	/*
+	 * 如果删除的元素是一个leaf node中的最后一个元素的话，则要修正cur到下一
+	 * 个leaf node
+	 */
 		if (ifp->if_height > 1 && leaf->next)
 			cur->leaf = leaf->next;
 		else
@@ -961,11 +976,14 @@ xfs_iext_remove(
  *
  * If there is no extent covering bno, but there is an extent after it (e.g.
  * it lies in a hole) return that extent in *gotp and its cursor in *cur
- * instead. 这种情况也返回true；
+ * instead.
+ * - 这种情况也返回true；
  *
  * If bno is beyond the last extent return false, and return an invalid
- *                                                              ^^^^^^^
- * cursor value. 此时gotp也是非法的；
+ * cursor value.
+ * - 这种情况返回false；
+ * - 此时xfs_iext_cursor和gotp是非法的；
+ * - 但此时的xfs_iext_cursor可以用于xfs_iext_prev_extent()；
  *
  * 这里似乎假设b+树都在内存里，怎么保证呢？
  * - 本函数调用前，都检查了XFS_IFEXTENTS标志，如果没有该标志，则全部读入并设置
@@ -982,7 +1000,7 @@ xfs_iext_lookup_extent(
 	XFS_STATS_INC(ip->i_mount, xs_look_exlist);
 
 	/*
-	 * 从b+树里找到包含offset的叶子结点；
+	 * 从b+树里找到包含offset、或者包含最大的小于offset的entry的叶子结点；
 	 * - 返回的是xfs_iext_leaf结构体；
 	 */
 	cur->leaf = xfs_iext_find_level(ifp, offset, 1);
@@ -1026,6 +1044,8 @@ found:
 /*
  * Returns the last extent before end, and if this extent doesn't cover
  * end, update end to the end of the extent.
+ *
+ * 这里所谓before end，指的是extent的start小于end
  */
 bool
 xfs_iext_lookup_extent_before(
@@ -1048,8 +1068,11 @@ xfs_iext_lookup_extent_before(
 	/*
 	 * 走到这里有两种情况：
 	 * - *end - 1处于eof之前的hole中
+	 *   > xfs_iext_lookup_extent()返回true，但gtop->br_startoff > *end - 1
 	 * - *end - 1处于eof之后
-	 *   > 这种情况是不是不存在，因为*end肯定都是存在的？
+	 *   > xfs_iext_lookup_extent()返回false，gtop中的值非法
+	 *
+	 * 对于这里的两种情况，我们都需要去搜索前一个extent以满足本函数的语义；
 	 */
 	if (!xfs_iext_prev_extent(ifp, cur, gotp))
 		return false;

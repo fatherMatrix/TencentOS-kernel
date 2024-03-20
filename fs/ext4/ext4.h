@@ -953,6 +953,10 @@ enum {
  * fourth extended file system inode data in memory
  */
 struct ext4_inode_info {
+	/*
+	 * 来源是ext4_inode->i_block，指引数据块的位置
+	 * - 具体解释方式依赖于文件类型
+	 */
 	__le32	i_data[15];	/* unconverted */
 	__u32	i_dtime;
 	ext4_fsblk_t	i_file_acl;
@@ -1402,6 +1406,11 @@ struct ext4_sb_info {
 	loff_t s_bitmap_maxbytes;	/* max bytes for bitmap files */
 	struct buffer_head * s_sbh;	/* Buffer containing the super block */
 	struct ext4_super_block *s_es;	/* Pointer to the super block in the buffer */
+	/*
+	 * 用于存放ext4_group_desc指针数组
+	 * - 猜测该数组中每个元素指向一个block的数据，每个block中包含多个
+	 *   ext4_group_desc，参见ext4_get_group_desc()
+	 */
 	struct buffer_head * __rcu *s_group_desc;
 	unsigned int s_mount_opt;
 	unsigned int s_mount_opt2;

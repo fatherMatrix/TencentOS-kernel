@@ -142,6 +142,9 @@ typedef struct xfs_mount {
 	struct xfs_inode	*m_rbmip;	/* pointer to bitmap inode */
 	struct xfs_inode	*m_rsumip;	/* pointer to summary inode */
 	struct xfs_inode	*m_rootip;	/* pointer to root directory */
+	/*
+	 * xfs中quota机制各类id -> xfs_dquota的搜索树
+	 */
 	struct xfs_quotainfo	*m_quotainfo;	/* disk quota information */
 	xfs_buftarg_t		*m_ddev_targp;	/* saves taking the address */
 	xfs_buftarg_t		*m_logdev_targp;/* ptr to log device */
@@ -158,6 +161,9 @@ typedef struct xfs_mount {
 	uint			m_blockmask;	/* sb_blocksize-1 */
 	uint			m_blockwsize;	/* sb_blocksize in words */
 	uint			m_blockwmask;	/* blockwsize-1 */
+	/*
+	 * 下面的这种，0号元素是leaf node，1号元素是internal node
+	 */
 	uint			m_alloc_mxr[2];	/* max alloc btree records */
 	uint			m_alloc_mnr[2];	/* min alloc btree records */
 	uint			m_bmap_dmxr[2];	/* max bmap btree records */
@@ -181,7 +187,7 @@ typedef struct xfs_mount {
 	bool			m_finobt_nores; /* no per-AG finobt resv. */
 	uint			m_qflags;	/* quota status flags */
 	/*
-	 * transaction的预留空间数量
+	 * transaction的预留空间数量及是否是XFS_TRANS_PERM_LOG_RES
 	 * 参见：xfs_trans_init() -> xfs_trans_resv_calc()
 	 */
 	struct xfs_trans_resv	m_resv;		/* precomputed res values */

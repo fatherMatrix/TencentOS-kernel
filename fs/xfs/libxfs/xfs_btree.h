@@ -188,6 +188,9 @@ union xfs_btree_cur_private {
 /*
  * Btree cursor structure.
  * This collects all information needed by the btree code in one place.
+ *
+ * 用于在通用的btree上遍历
+ * - xfs_iext_cursor是在xfs_ifork->if_root这棵树上遍历
  */
 typedef struct xfs_btree_cur
 {
@@ -429,6 +432,9 @@ void xfs_btree_log_recs(struct xfs_btree_cur *, struct xfs_buf *, int, int);
  */
 static inline int xfs_btree_get_numrecs(struct xfs_btree_block *block)
 {
+	/*
+	 * 从block header中读取record个数
+	 */
 	return be16_to_cpu(block->bb_numrecs);
 }
 

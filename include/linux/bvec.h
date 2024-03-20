@@ -17,6 +17,10 @@
  */
 struct bio_vec {
 	struct page	*bv_page;
+	/*
+	 * 据观察，这个bv_len是可以超出PAGE_SIZE的，表示这个片段是多个页；
+	 * - 但要求这几个页物理地址上连续
+	 */
 	unsigned int	bv_len;
 	unsigned int	bv_offset;
 };

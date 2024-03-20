@@ -67,7 +67,7 @@ struct xfs_log_item {
 	/* delayed logging */
 
 	/*
-	 * 链接进CIL
+	 * 作为链表元素链接进xfs_cil->xc_cil链表
 	 */
 	struct list_head		li_cil;		/* CIL pointers */
 	/*

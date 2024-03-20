@@ -352,6 +352,8 @@ done:
 	/*
 	 * Don't worry about the dquots that we may have attached before any
 	 * error - they'll get detached later if it has not already been done.
+	 *
+	 * 什么时候detach呢？
 	 */
 	ASSERT(xfs_isilocked(ip, XFS_ILOCK_EXCL));
 	return error;

@@ -202,6 +202,10 @@ xfs_trans_reserve(
 	if (resp->tr_logres > 0) {
 		bool	permanent = false;
 
+		/*
+		 * 要么是ticket为NULL，第一次来分配；
+		 * 要么是已经分配过的
+		 */
 		ASSERT(tp->t_log_res == 0 ||
 		       tp->t_log_res == resp->tr_logres);
 		ASSERT(tp->t_log_count == 0 ||
@@ -292,8 +296,8 @@ undo_blocks:
 int
 xfs_trans_alloc(
 	struct xfs_mount	*mp,
-	struct xfs_trans_res	*resp,
-	uint			blocks,
+	struct xfs_trans_res	*resp,		/* 元数据区 */
+	uint			blocks,		/* 数据区block */
 	uint			rtextents,
 	uint			flags,
 	struct xfs_trans	**tpp)
@@ -338,8 +342,11 @@ xfs_trans_alloc(
 	/*
 	 * 给当前事务保留资源
 	 * - user data block
+	 *   > 磁盘上的数据区
 	 * - log space block
+	 *   > 磁盘上的日志区
 	 * - iclog的空间是循环使用的，不需要申请，这个写满了用下一个；
+	 *   > 内存里的log buffer
 	 */
 	error = xfs_trans_reserve(tp, resp, blocks, rtextents);
 	if (error) {
@@ -1039,6 +1046,9 @@ __xfs_trans_commit(
 	 */
 	if (tp->t_flags & XFS_TRANS_SB_DIRTY)
 		xfs_trans_apply_sb_deltas(tp);
+	/*
+	 * 处理本次事务引发的dquota
+	 */
 	xfs_trans_apply_dquot_deltas(tp);
 
 	/*

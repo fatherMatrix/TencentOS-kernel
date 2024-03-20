@@ -14,6 +14,10 @@
  */
 
 typedef __s64			xfs_off_t;	/* <file offset> type */
+/*
+ * xfs_ino_t是xfs的全局ino
+ * - xfs_agino_t是xfs_ino_t对应到特定AG的ino
+ */
 typedef unsigned long long	xfs_ino_t;	/* <inode> type */
 /*
  * 绝对磁盘sector号

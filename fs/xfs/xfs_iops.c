@@ -665,6 +665,9 @@ xfs_setattr_nonsize(
 		 */
 		ASSERT(udqp == NULL);
 		ASSERT(gdqp == NULL);
+		/*
+		 * 到这里后，uid/gid表示的都是chown的目标uid/gid了
+		 */
 		error = xfs_qm_vop_dqalloc(ip, xfs_kuid_to_uid(uid),
 					   xfs_kgid_to_gid(gid),
 					   xfs_get_projid(ip),
@@ -703,6 +706,9 @@ xfs_setattr_nonsize(
 		    ((XFS_IS_UQUOTA_ON(mp) && !uid_eq(iuid, uid)) ||
 		     (XFS_IS_GQUOTA_ON(mp) && !gid_eq(igid, gid)))) {
 			ASSERT(tp);
+			/*
+			 * 这里本意是对chown的目标id对应的dquota进行操作
+			 */
 			error = xfs_qm_vop_chown_reserve(tp, ip, udqp, gdqp,
 						NULL, capable(CAP_FOWNER) ?
 						XFS_QMOPT_FORCE_RES : 0);
@@ -733,6 +739,9 @@ xfs_setattr_nonsize(
 			if (XFS_IS_QUOTA_RUNNING(mp) && XFS_IS_UQUOTA_ON(mp)) {
 				ASSERT(mask & ATTR_UID);
 				ASSERT(udqp);
+				/*
+				 * 这里的ip->i_udquot是chown前的id对应的
+				 */
 				olddquot1 = xfs_qm_vop_chown(tp, ip,
 							&ip->i_udquot, udqp);
 			}
@@ -758,12 +767,18 @@ xfs_setattr_nonsize(
 	if (mask & (ATTR_ATIME|ATTR_CTIME|ATTR_MTIME))
 		xfs_setattr_time(ip, iattr);
 
+	/*
+	 * 标记需要log的字段
+	 */
 	xfs_trans_log_inode(tp, ip, XFS_ILOG_CORE);
 
 	XFS_STATS_INC(mp, xs_ig_attrchg);
 
 	if (mp->m_flags & XFS_MOUNT_WSYNC)
 		xfs_trans_set_sync(tp);
+	/*
+	 * 提交日志
+	 */
 	error = xfs_trans_commit(tp);
 
 	xfs_iunlock(ip, XFS_ILOCK_EXCL);

@@ -128,6 +128,10 @@ static int read_pages(struct address_space *mapping, struct file *filp,
 	 */ 
 	blk_start_plug(&plug);
 
+	/*
+	 * ext4: ext4_readpages()
+	 * xfs: xfs_vm_readpages()
+	 */
 	if (mapping->a_ops->readpages) {
 		ret = mapping->a_ops->readpages(filp, mapping, pages, nr_pages);
 		/* Clean up the remaining pages */
@@ -138,6 +142,10 @@ static int read_pages(struct address_space *mapping, struct file *filp,
 	for (page_idx = 0; page_idx < nr_pages; page_idx++) {
 		struct page *page = lru_to_page(pages);
 		list_del(&page->lru);
+		/*
+		 * ext4: ext4_readpage()
+		 * xfs: xfs_vm_readpage()
+		 */
 		if (!add_to_page_cache_lru(page, mapping, page->index, gfp))
 			mapping->a_ops->readpage(filp, page);
 		put_page(page);

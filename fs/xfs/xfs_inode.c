@@ -1203,6 +1203,7 @@ xfs_create(
 
 	/*
 	 * project id是用来干什么的？
+	 * - xfs quota机制中能够以project为单位来进行限额
 	 */
 	prid = xfs_get_initial_prid(dp);
 
@@ -1553,7 +1554,9 @@ xfs_itruncate_clear_reflink_flags(
  * data fork, and does not modify the inode size, which is left to the caller.
  *
  * The transaction passed to this routine must have made a permanent log
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * reservation of at least XFS_ITRUNCATE_LOG_RES.  This routine may commit the
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * given transaction and start new ones, so make sure everything involved in
  * the transaction is tidy before calling here.  Some transaction will be
  * returned to the caller to be committed.  The incoming transaction must
@@ -1749,6 +1752,10 @@ xfs_inactive_truncate(
 	struct xfs_trans	*tp;
 	int			error;
 
+	/*
+	 * M_RES(mp)->tr_itruncate中指定了XFS_TRANS_PERM_LOG_RES标志
+	 * - 该标志会在xfs_trans_reserve()中合入xfs_trans->t_flags
+	 */
 	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_itruncate, 0, 0, 0, &tp);
 	if (error) {
 		ASSERT(XFS_FORCED_SHUTDOWN(mp));
@@ -1894,7 +1901,7 @@ xfs_inactive_ifree(
  * now be truncated.  Also, we clear all of the read-ahead state
  * kept for the inode here since the file is now closed.
  *
- * 删除磁盘上的xfs_inode
+ * 如果需要删除磁盘上的xfs_inode，在这里做；
  */
 void
 xfs_inactive(
@@ -1955,6 +1962,10 @@ xfs_inactive(
 	     ip->i_d.di_nextents > 0 || ip->i_delayed_blks > 0))
 		truncate = 1;
 
+	/*
+	 * 该inode都要删除了，还attach其dquota干嘛呢？
+	 * - 哦，释放inode当然要减小其已使用的quota呀！
+	 */
 	error = xfs_qm_dqattach(ip);
 	if (error)
 		return;

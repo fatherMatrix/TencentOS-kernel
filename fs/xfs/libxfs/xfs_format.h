@@ -859,6 +859,8 @@ typedef struct xfs_agi {
 	/*
 	 * Hash table of inodes which have been unlinked but are
 	 * still being referenced.
+	 *
+	 * 这是agino？
 	 */
 	__be32		agi_unlinked[XFS_AGI_UNLINKED_BUCKETS];
 	/*
@@ -986,7 +988,7 @@ typedef struct xfs_timestamp {
  * padding field for v3 inodes.
  *
  * xfs inode磁盘数据结构
- * - 内存数据结构是xfs_inode
+ * - 内存数据结构是xfs_icdinode及xfs_inode
  */
 #define	XFS_DINODE_MAGIC		0x494e	/* 'IN' */
 typedef struct xfs_dinode {
@@ -1045,6 +1047,10 @@ typedef struct xfs_dinode {
 /*
  * 紧跟在xfs_dinode_t后的是data fork，attr fork
  * - cow fork在哪里
+ *   > cow fork是一个纯内存的fork，不在磁盘上存在
+ * - data fork有两种类型：
+ *   > XFS_DINODE_FMT_EXTENTS
+ *   > XFS_DINODE_FMT_BTREE
  */
 
 #define XFS_DINODE_CRC_OFF	offsetof(struct xfs_dinode, di_crc)
@@ -1127,6 +1133,9 @@ typedef enum xfs_dinode_fmt {
 
 /*
  * Return pointers to the data or attribute forks.
+ *
+ * 因为xfs_dinode只是一个header，dfork和afork的数据紧跟在后面，因此需要使用这些
+ * 宏进行转换；其中cow fork应该是一个仅在内存中存在的结构，并不会出现在磁盘上；
  */
 #define XFS_DFORK_DPTR(dip) \
 	((char *)dip + xfs_dinode_size(dip->di_version))

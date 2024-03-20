@@ -927,6 +927,7 @@ struct block_device *bdget(dev_t dev)
 	/*
 	 * 此inode是bdev fs中的索引节点
 	 * - 参见bdev_cache_init() -> register_filesystem(&bd_type)；
+	 * - 参见bdev_inode
 	 */
 	inode = iget5_locked(blockdev_superblock, hash(dev),
 			bdev_test, bdev_set, &dev);

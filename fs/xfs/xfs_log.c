@@ -438,6 +438,11 @@ xfs_log_regrant(
 
 	trace_xfs_log_regrant(log, tic);
 
+	/*
+	 * 保证磁盘上的log space中有足够的空间
+	 * - 如果空间不够，可以触发AIL冲刷将log space中的日志写到数据区，以释放
+	 *   log space的空间；
+	 */
 	error = xlog_grant_head_check(log, &log->l_write_head, tic,
 				      &need_bytes);
 	if (error)
@@ -496,7 +501,7 @@ xfs_log_reserve(
 	*ticp = tic;
 
 	/*
-	 * 检查log space的空闲空间，必要时将log buffer已经落盘的log对应的
+	 * 检查磁盘上log space的空闲空间，必要时将log buffer已经落盘的log对应的
 	 * item写入metadata region中以释放log space的空间；
 	 * - 因为一旦写入metadata region，log space中的日志就再无作用了；
 	 */

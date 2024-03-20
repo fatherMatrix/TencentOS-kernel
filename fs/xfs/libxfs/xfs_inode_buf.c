@@ -664,6 +664,9 @@ xfs_iread(
 	 */
 	if (dip->di_mode) {
 		xfs_inode_from_disk(ip, dip);
+		/*
+		 * 根据磁盘上的数据配置xfs_ifork
+		 */
 		error = xfs_iformat_fork(ip, dip);
 		if (error)  {
 #ifdef DEBUG

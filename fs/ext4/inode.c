@@ -4623,7 +4623,14 @@ static int __ext4_get_inode_loc(struct inode *inode,
 	    inode->i_ino > le32_to_cpu(EXT4_SB(sb)->s_es->s_inodes_count))
 		return -EFSCORRUPTED;
 
+	/*
+	 * ext4中，inode依次排列，通过ino可以确定其所属的block group
+	 * - xfs中也是类似的，通过xfs_ino_t右移特定位得到AG
+	 */
 	iloc->block_group = (inode->i_ino - 1) / EXT4_INODES_PER_GROUP(sb);
+	/*
+	 * 获取block group对应的ext4_group_desc
+	 */
 	gdp = ext4_get_group_desc(sb, iloc->block_group, NULL);
 	if (!gdp)
 		return -EIO;
@@ -4871,6 +4878,12 @@ static inline u64 ext4_inode_peek_iversion(const struct inode *inode)
 		return inode_peek_iversion(inode);
 }
 
+/*
+ * 所以这种iget()系列的函数都是去寻找一个一定存在的ino，在调用iget()系列前，都是
+ * 判断该ino存在或者ialloc()过的；
+ * - ext4如此
+ * - xfs如此
+ */
 struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 			  ext4_iget_flags flags, const char *function,
 			  unsigned int line)
@@ -4939,6 +4952,9 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 	if (!(inode->i_state & I_NEW))
 		return inode;
 
+	/*
+	 * ext4的inode是ext4_inode_info，其内嵌vfs inode
+	 */
 	ei = EXT4_I(inode);
 	iloc.bh = NULL;
 
@@ -5079,7 +5095,9 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 	ei->i_last_alloc_group = ~0;
 	/*
 	 * NOTE! The in-memory inode i_data array is in little-endian order
+	 *       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * even on big-endian machines: we do NOT byteswap the block numbers!
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 */
 	for (block = 0; block < EXT4_N_BLOCKS; block++)
 		ei->i_data[block] = raw_inode->i_block[block];

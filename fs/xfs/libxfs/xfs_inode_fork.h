@@ -24,6 +24,10 @@ struct xfs_ifork {
 	int			if_height;	/* height of the extent tree */
 	union {
 		/*
+		 * 对于XFS_DINODE_FMT_EXTENTS和XFS_DINODE_FMT_BTREE，用这个存储
+		 * - 参见xfs_iformat_fork() +-> xfs_iformat_extents()
+		 *                          |-> xfs_iformat_btree()
+		 *
 		 * 类型是xfs_iext_node/xfs_iext_leaf
 		 * - 这里是用于映射文件偏移与磁盘偏移的extent btree，所以可以全
 		 *   部读入内存，尺寸并不大；
@@ -31,6 +35,10 @@ struct xfs_ifork {
 		 * - 用完全内存格式的b+树重新组织并保存了if_broot的b+树；
 		 */
 		void		*if_root;	/* extent tree root */
+		/*
+		 * 对于XFS_DINODE_FMT_LOCAL，用这个存储
+		 * - 参见xfs_iformat_fork() -> xfs_init_local_fork()
+		 */
 		char		*if_data;	/* inline file data */
 	} if_u1;
 	/*
@@ -42,9 +50,23 @@ struct xfs_ifork {
 
 /*
  * Per-fork incore inode flags.
+ * - XFS_IFINLINE对应XFS_DINODE_FMT_LOCAL
+ * - XFS_IFEXTENTS对应XFS_DINODE_FMT_EXTENTS和XFS_DINODE_FMT_BTREE
+ *   > 这两个的区分靠下面的XFS_IFBROOT
+ * 参见：xfs_iformat_fork() +-> xfs_iformat_extents()
+ *                          |-> xfs_iformat_btree()
+ *
+ * 要看看xfs_iread_extents()的注释，非常重要！
  */
 #define	XFS_IFINLINE	0x01	/* Inline data is read in */
 #define	XFS_IFEXTENTS	0x02	/* All extent pointers are read in */
+/*
+ * extents有两种形式，一种是extent-list，一种是extent-btree；
+ * - 有该标志表示当前的extents处于btree状态，反之处于list状态
+ * - 该标志位的作用与XFS_IFORK_FORMAT()宏重复，后期全部整合到了
+ *   xfs_ifork->if_format中
+ *   > 参见：upstream f7e67b20ecbbcb9180c888a5c4fde267935e075f
+ */
 #define	XFS_IFBROOT	0x04	/* i_broot points to the bmap b-tree root */
 
 /*

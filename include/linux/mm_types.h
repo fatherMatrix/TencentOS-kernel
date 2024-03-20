@@ -69,6 +69,7 @@ struct mem_cgroup;
 struct page {
 	/*
 	 * - PG_slab表示页数语SLUB分配器
+	 * - set_page_zone()/page_zonenum()
 	 */
 	unsigned long flags;		/* Atomic flags, some possibly
 					 * updated asynchronously */
@@ -100,6 +101,9 @@ struct page {
 			 *   其含义本质上依赖于vma->pgoff的含义；
 			 * - 参见__page_set_anon_rmap()和insert_vm_struct()
 			 * 如果是pcp中的页，则表示其迁移类型
+			 * - index用来表示migrate type只能是当page处于伙伴系统
+			 *   中时才能用，free_page()时先查一次位图，更新到index
+			 *   中。
 			 */
 			pgoff_t index;		/* Our offset within mapping. */
 			/**

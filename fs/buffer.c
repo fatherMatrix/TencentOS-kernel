@@ -203,6 +203,10 @@ __find_get_block_slow(struct block_device *bdev, sector_t block)
 	int all_mapped = 1;
 	static DEFINE_RATELIMIT_STATE(last_warned, HZ, 1);
 
+	/*
+	 * 求出第block个文件系统块处于第几个page中
+	 * - 主要针对文件系统块和PAGE_SIZE不相等的情况
+	 */
 	index = block >> (PAGE_SHIFT - bd_inode->i_blkbits);
 	page = find_get_page_flags(bd_mapping, index, FGP_ACCESSED);
 	if (!page)
@@ -213,6 +217,10 @@ __find_get_block_slow(struct block_device *bdev, sector_t block)
 		goto out_unlock;
 	head = page_buffers(page);
 	bh = head;
+	/*
+	 * 诶，这里似乎仅关注block号，那size呢？
+	 * - 猜测：对于一个特定的文件系统来说，只会用同一个block size来读盘
+	 */
 	do {
 		if (!buffer_mapped(bh))
 			all_mapped = 0;
@@ -866,12 +874,21 @@ link_dev_buffers(struct page *page, struct buffer_head *head)
 {
 	struct buffer_head *bh, *tail;
 
+	/*
+	 * 获取buffer_head链表的尾巴
+	 */
 	bh = head;
 	do {
 		tail = bh;
 		bh = bh->b_this_page;
 	} while (bh);
+	/*
+	 * 将尾巴的链接指针指向头
+	 */
 	tail->b_this_page = head;
+	/*
+	 * 将page->private指向head
+	 */
 	attach_page_buffers(page, head);
 }
 
@@ -900,6 +917,9 @@ init_page_buffers(struct page *page, struct block_device *bdev,
 	sector_t end_block = blkdev_max_block(I_BDEV(bdev->bd_inode), size);
 
 	do {
+		/*
+		 * buffer_mapped()参见BUFFER_FNS宏
+		 */
 		if (!buffer_mapped(bh)) {
 			bh->b_end_io = NULL;
 			bh->b_private = NULL;
@@ -910,6 +930,10 @@ init_page_buffers(struct page *page, struct block_device *bdev,
 			if (block < end_block)
 				set_buffer_mapped(bh);
 		}
+		/*
+		 * 外部确定了block size和该page对应的第一个buffer_head的size是
+		 * 相同的。但这里似乎假定了第N个buffer_head的size也是block size；
+		 */
 		block++;
 		bh = bh->b_this_page;
 	} while (bh != head);
@@ -929,6 +953,10 @@ static int
 grow_dev_page(struct block_device *bdev, sector_t block,
 	      pgoff_t index, int size, int sizebits, gfp_t gfp)
 {
+	/*
+	 * bdevfs中的inode，非devtmpfs中的inode
+	 * - 参见bdev_inode
+	 */
 	struct inode *inode = bdev->bd_inode;
 	struct page *page;
 	struct buffer_head *bh;
@@ -952,18 +980,29 @@ grow_dev_page(struct block_device *bdev, sector_t block,
 
 	if (page_has_buffers(page)) {
 		bh = page_buffers(page);
+		/*
+		 * 这里是假定了一个page对应的多个buffer_head的size是相同的吗？
+		 */
 		if (bh->b_size == size) {
 			end_block = init_page_buffers(page, bdev,
 						(sector_t)index << sizebits,
 						size);
 			goto done;
 		}
+		/*
+		 * 走到这里，说明该page现有buffer_head的size和目标size不相同，
+		 * 所以要销毁现有的buffer_head，以便于下面给该page关联正确的
+		 * buffer_head
+		 */
 		if (!try_to_free_buffers(page))
 			goto failed;
 	}
 
 	/*
 	 * Allocate some buffers for this page
+	 * - 一个page的多个buffer_head的size还真是相同的耶
+	 * - 并没有设置每个buffer_head的blocknr
+	 * - 也没有设置每个buffer_head的state
 	 */
 	bh = alloc_page_buffers(page, size, true);
 
@@ -973,7 +1012,13 @@ grow_dev_page(struct block_device *bdev, sector_t block,
 	 * run under the page lock.
 	 */
 	spin_lock(&inode->i_mapping->private_lock);
+	/*
+	 * 链接page和buffer_head list
+	 */
 	link_dev_buffers(page, bh);
+	/*
+	 * 设置上面alloc_page_buffers()中没有设置的字段
+	 */
 	end_block = init_page_buffers(page, bdev, (sector_t)index << sizebits,
 			size);
 	spin_unlock(&inode->i_mapping->private_lock);
@@ -995,11 +1040,17 @@ grow_buffers(struct block_device *bdev, sector_t block, int size, gfp_t gfp)
 	pgoff_t index;
 	int sizebits;
 
+	/*
+	 * 一个PAGE_SIZE包含2^sizebits个size
+	 */
 	sizebits = -1;
 	do {
 		sizebits++;
 	} while ((size << sizebits) < PAGE_SIZE);
 
+	/*
+	 * block是第几个page
+	 */
 	index = block >> sizebits;
 
 	/*
@@ -1022,7 +1073,11 @@ static struct buffer_head *
 __getblk_slow(struct block_device *bdev, sector_t block,
 	     unsigned size, gfp_t gfp)
 {
-	/* Size must be multiple of hard sectorsize */
+	/*
+	 * Size must be multiple of hard sectorsize
+	 *
+	 * 所以buffer_head的size是不能大于PAGE_SIZE的
+	 */
 	if (unlikely(size & (bdev_logical_block_size(bdev)-1) ||
 			(size < 512 || size > PAGE_SIZE))) {
 		printk(KERN_ERR "getblk(): invalid block size %d requested\n",
@@ -1262,10 +1317,20 @@ lookup_bh_lru(struct block_device *bdev, sector_t block, unsigned size)
 	unsigned int i;
 
 	check_irqs_on();
+	/*
+	 * SMP: local_irq_disable()
+	 * UP: preempt_disable()
+	 */
 	bh_lru_lock();
 	for (i = 0; i < BH_LRU_SIZE; i++) {
 		struct buffer_head *bh = __this_cpu_read(bh_lrus.bhs[i]);
 
+		/*
+		 * 缓存的buffer_head匹配的原则：
+		 * - b_blocknr相等，标志起始块号
+		 * - b_bdev相等，标志块设备
+		 * - b_size相等，标志长度
+		 */
 		if (bh && bh->b_blocknr == block && bh->b_bdev == bdev &&
 		    bh->b_size == size) {
 			if (i) {
@@ -1293,11 +1358,17 @@ lookup_bh_lru(struct block_device *bdev, sector_t block, unsigned size)
 struct buffer_head *
 __find_get_block(struct block_device *bdev, sector_t block, unsigned size)
 {
+	/*
+	 * 现在per-cpu的buffer_head lru中查找
+	 */
 	struct buffer_head *bh = lookup_bh_lru(bdev, block, size);
 
 	if (bh == NULL) {
 		/* __find_get_block_slow will mark the page accessed */
 		bh = __find_get_block_slow(bdev, block);
+		/*
+		 * 填写per-cpu的buffer_head lru
+		 */
 		if (bh)
 			bh_lru_install(bh);
 	} else

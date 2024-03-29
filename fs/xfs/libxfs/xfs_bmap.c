@@ -5540,6 +5540,9 @@ __xfs_bunmapi(
 	 *
 	 * EFI: extent free intent
 	 * EFD: extent free done
+	 *
+	 * 这里在高版本有修复，参见：upstream 4ed6435cc369cce722966983f6e07b872562276f
+	 * - 这段代码引入：upstream e1a4e37cc7b665b6804fba812aca2f4d7402c249
 	 */
 	if (tp && xfs_is_reflink_inode(ip) && whichfork == XFS_DATA_FORK)
 		max_len = min(len, xfs_refcount_max_unmap(tp->t_log_res));

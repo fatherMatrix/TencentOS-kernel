@@ -2265,6 +2265,7 @@ static int mpage_submit_page(struct mpage_da_data *mpd, struct page *page)
  * @bh - buffer head we want to add to the extent
  *
  * The function is used to collect contig. blocks in the same state. If the
+ *                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * buffer doesn't require mapping for writeback and we haven't started the
  * extent of buffers to map yet, the function returns 'true' immediately - the
  * caller can write the buffer right away. Otherwise the function returns true
@@ -2276,7 +2277,10 @@ static bool mpage_add_bh_to_extent(struct mpage_da_data *mpd, ext4_lblk_t lblk,
 {
 	struct ext4_map_blocks *map = &mpd->map;
 
-	/* Buffer that doesn't need mapping for writeback? */
+	/*
+	 * Buffer that doesn't need mapping for writeback?
+	 * - 这里应该指的是不需要执行mapping这个动作
+	 */
 	if (!buffer_dirty(bh) || !buffer_mapped(bh) ||
 	    (!buffer_delay(bh) && !buffer_unwritten(bh))) {
 		/* So far no extent to map => we write the buffer right away */
@@ -2686,6 +2690,9 @@ static int mpage_prepare_extent_to_map(struct mpage_da_data *mpd)
 			if (mpd->map.m_len > 0 && mpd->next_page != page->index)
 				goto out;
 
+			/*
+			 * 锁住该page
+			 */
 			lock_page(page);
 			/*
 			 * If the page is no longer dirty, or its mapping no
@@ -2757,6 +2764,9 @@ static int ext4_writepages(struct address_space *mapping,
 	if (!mapping->nrpages || !mapping_tagged(mapping, PAGECACHE_TAG_DIRTY))
 		goto out_writepages;
 
+	/*
+	 * 对于journal mode，已经把数据做了日志，这里可以直接写数据区；
+	 */
 	if (ext4_should_journal_data(inode)) {
 		ret = generic_writepages(mapping, wbc);
 		goto out_writepages;

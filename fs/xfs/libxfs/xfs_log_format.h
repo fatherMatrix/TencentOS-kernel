@@ -52,6 +52,9 @@ typedef uint32_t xlog_tid_t;
 
 /* get lsn fields */
 #define CYCLE_LSN(lsn) ((uint)((lsn)>>32))
+/*
+ * lsn本身是64位，这里截断高32的cycle，留下的就是本cycle中的block bno
+ */
 #define BLOCK_LSN(lsn) ((uint)(lsn))
 
 /* this is used in a spot where we might otherwise double-endian-flip */
@@ -133,6 +136,10 @@ struct xfs_unmount_log_format {
 #define XLOG_START_TRANS	0x01	/* Start a new transaction */
 #define XLOG_COMMIT_TRANS	0x02	/* Commit this transaction */
 #define XLOG_CONTINUE_TRANS	0x04	/* Cont this trans into new region */
+/*
+ * 文档中的注释：
+ * - This transaction started in a previous log record.
+ */
 #define XLOG_WAS_CONT_TRANS	0x08	/* Cont this trans into new region */
 #define XLOG_END_TRANS		0x10	/* End a continued transaction */
 #define XLOG_UNMOUNT_TRANS	0x20	/* Unmount a filesystem transaction */
@@ -159,19 +166,38 @@ typedef struct xlog_op_header {
 #define XLOG_FMT XLOG_FMT_LINUX_LE
 #endif
 
+/*
+ * 每个log record有一个header
+ * - iclog/log buffer对应一个log record
+ */
 typedef struct xlog_rec_header {
 	__be32	  h_magicno;	/* log record (LR) identifier		:  4 */
 	__be32	  h_cycle;	/* write cycle of log			:  4 */
 	__be32	  h_version;	/* LR version				:  4 */
+	/*
+	 * 来源是iclog->ic_offset + roundoff
+	 */
 	__be32	  h_len;	/* len in bytes; should be 64-bit aligned: 4 */
 	/*
-	 * 这个log buffer中第一个transaction的lsn？
+	 * 这个log buffer中第一个transaction的lsn
+	 * - 参见：xlog_state_get_iclog_space()
 	 */
 	__be64	  h_lsn;	/* lsn of this LR			:  8 */
+	/*
+	 * AIL中最小、最老的
+	 */
 	__be64	  h_tail_lsn;	/* lsn of 1st LR w/ buffers not committed: 8 */
 	__le32	  h_crc;	/* crc of log record                    :  4 */
+	/*
+	 * 来源是xlog->l_prev_block
+	 * - 参见：xlog_state_switch_iclogs()
+	 */
 	__be32	  h_prev_block; /* block number to previous LR		:  4 */
 	__be32	  h_num_logops;	/* number of log operations in this LR	:  4 */
+	/*
+	 * 抽样保存每个数据BB中的前4字节
+	 * - 参见：xlog_pack_data()
+	 */
 	__be32	  h_cycle_data[XLOG_HEADER_CYCLE_SIZE / BBSIZE];
 	/* new fields */
 	__be32    h_fmt;        /* format of log record                 :  4 */

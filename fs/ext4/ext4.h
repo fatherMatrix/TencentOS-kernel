@@ -143,6 +143,9 @@ enum SHIFT_DIRECTION {
 /* Use blocks from reserved pool */
 #define EXT4_MB_USE_RESERVED		0x2000
 
+/*
+ * 表示一次块分配的具体请求
+ */
 struct ext4_allocation_request {
 	/* target inode for block we're allocating */
 	struct inode *inode;
@@ -154,7 +157,11 @@ struct ext4_allocation_request {
 	ext4_lblk_t lleft;
 	/* the closest logical allocated block to the right */
 	ext4_lblk_t lright;
-	/* phys. target (a hint) */
+	/*
+	 * phys. target (a hint)
+	 *
+	 * 目标物理块号，属于启发式优化，目的在于保证数据的局部性
+	 */
 	ext4_fsblk_t goal;
 	/* phys. block for the closest logical allocated block to the left */
 	ext4_fsblk_t pleft;
@@ -179,8 +186,17 @@ struct ext4_allocation_request {
 				 EXT4_MAP_UNWRITTEN | EXT4_MAP_BOUNDARY)
 
 struct ext4_map_blocks {
+	/*
+	 * 文件系统物理块号
+	 */
 	ext4_fsblk_t m_pblk;
+	/*
+	 * 文件逻辑块号
+	 */
 	ext4_lblk_t m_lblk;
+	/*
+	 * 长度，单位为block
+	 */
 	unsigned int m_len;
 	unsigned int m_flags;
 };
@@ -956,6 +972,8 @@ struct ext4_inode_info {
 	/*
 	 * 来源是ext4_inode->i_block，指引数据块的位置
 	 * - 具体解释方式依赖于文件类型
+	 *   > extents tree方式，存储一个ext4_extent_header和ext4_extent_idx
+	 *   > inline方式，存储15个块号
 	 */
 	__le32	i_data[15];	/* unconverted */
 	__u32	i_dtime;
@@ -1038,10 +1056,16 @@ struct ext4_inode_info {
 
 	/* mballoc */
 	atomic_t i_prealloc_active;
+	/*
+	 * 链表头，链表元素是ext4_prealloc_space->pa_inode_list
+	 */
 	struct list_head i_prealloc_list;
 	spinlock_t i_prealloc_lock;
 
-	/* extents status tree */
+	/*
+	 * extents status tree
+	 * - 将i_data中的磁盘数据缓存到内存中的内存形式，类比xfs_ifork.if_root
+	 */
 	struct ext4_es_tree i_es_tree;
 	rwlock_t i_es_lock;
 	struct list_head i_es_list;

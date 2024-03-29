@@ -4036,7 +4036,7 @@ no_open:
 		 * 其中会调用d_instantiate_new将dentry和inode联系起来
 		 *
 		 * 对于xfs: xfs_vn_create()
-		 * 对于ext4： ext4_create() -> ext4_new_inode() -> super_block.sops.alloc_inode()
+		 * 对于ext4: ext4_create() -> ext4_new_inode() -> super_block.sops.alloc_inode()
 		 */
 		error = dir_inode->i_op->create(dir_inode, dentry, mode,
 						open_flag & O_EXCL);

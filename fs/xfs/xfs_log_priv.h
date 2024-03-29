@@ -155,7 +155,13 @@ typedef struct xlog_ticket {
 	struct task_struct *t_task;	 /* task that owns this ticket */
 	xlog_tid_t	   t_tid;	 /* transaction identifier	 : 4  */
 	atomic_t	   t_ref;	 /* ticket reference count       : 4  */
+	/*
+	 * 当前剩余量？
+	 */
 	int		   t_curr_res;	 /* current reservation in bytes : 4  */
+	/*
+	 * 总量？
+	 */
 	int		   t_unit_res;	 /* unit reservation in bytes    : 4  */
 	char		   t_ocnt;	 /* original count		 : 1  */
 	char		   t_cnt;	 /* current count		 : 1  */
@@ -218,6 +224,11 @@ typedef struct xlog_in_core {
 	 */
 	u32			ic_size;
 	u32			ic_io_size;
+	/*
+	 * 看注释应该是log->l_iclog_size - log->l_iclog_hsize后的数据区域中写入
+	 * 的字节数
+	 * - 即ic_datap指向ic_offset为0的位置
+	 */
 	u32			ic_offset;
 	unsigned short		ic_state;
 	/*
@@ -292,8 +303,8 @@ struct xfs_cil_ctx {
 	 */
 	struct list_head	iclog_entry;
 	/*
-	 * 一个CIL可能对应多个xfs_cil_ctx，committing用于将自己链接进xfs_cil的
-	 * xc_committing链表；
+	 * 当xlog_cil_push()被调用后，当前的xfs_cil_ctx会通过本字段将自己链接进
+	 * xfs_cil的xc_committing链表，等待后续的依次处理；
 	 */
 	struct list_head	committing;	/* ctx committing list */
 	struct work_struct	discard_endio_work;
@@ -323,8 +334,12 @@ struct xfs_cil {
 	struct xlog		*xc_log;
 	/*
 	 * 链表头，链表元素是xfs_log_item->li_cil
+	 * - 6. Transaction commit就是将xfs_log_item插入这个链表
 	 */
 	struct list_head	xc_cil;
+	/*
+	 * 保护xc_cil链表
+	 */
 	spinlock_t		xc_cil_lock;
 
 	/*
@@ -333,23 +348,28 @@ struct xfs_cil {
 	struct rw_semaphore	xc_ctx_lock ____cacheline_aligned_in_smp;
 	/*
 	 * checkpoint context
+	 * - 当前接受事务提交的context，同一时刻只有一个
+	 * - 当本context被要求push到iclog中时，本context被挂到xc_committing链表
+	 *   中，xc_ctx指向一个新的context
 	 */
 	struct xfs_cil_ctx	*xc_ctx;
 
 	spinlock_t		xc_push_lock ____cacheline_aligned_in_smp;
 	/*
-	 * 要求CIL push到的最新的lsn
+	 * 要求CIL push到iclog的最新的lsn
 	 */
 	xfs_lsn_t		xc_push_seq;
 	/*
 	 * 链表元素是xc_cil_ctx->committing
-	 * - checkpoint context在被push到log buffer之前，会先挂到CIL的这个链表
-	 *   上；
+	 * - checkpoint context在被xlog_cil_push()到真正写入log buffer之前，会先
+	 *   挂到CIL的这个链表上；
 	 */
 	struct list_head	xc_committing;
 	wait_queue_head_t	xc_commit_wait;
 	/*
 	 * 来源是CIL目前关联的xfs_cil_ctx->sequence
+	 * - 每次xlog_cil_push()中新建xfs_cil_ctx时都会随之更新本字段
+	 * - 目前关联的xfs_cil_ctx保存在本结构体xc_ctx中
 	 */
 	xfs_lsn_t		xc_current_sequence;
 	struct work_struct	xc_push_work;
@@ -434,20 +454,34 @@ struct xlog {
 	uint			l_flags;
 	uint			l_quotaoffs_flag; /* XFS_DQ_*, for QUOTAOFFs */
 	struct list_head	*l_buf_cancel_table;
+	/*
+	 * l_iclog_hsize = l_iclog_heads << BBSHIFT
+	 * - 参见xlog_alloc_log() -> xlog_get_iclog_buffer_size()
+	 * - 一个header占一个sector吗？
+	 */
 	int			l_iclog_hsize;  /* size of iclog header */
 	int			l_iclog_heads;  /* # of iclog header sectors */
 	uint			l_sectBBsize;   /* sector size in BBs (2^n) */
 	/*
-	 * xlog_in_core->ic_data的分配尺寸
+	 * 表示每个iclog buffer的尺寸，来源是xfs_mount->m_logbsize
+	 * - xlog_in_core->ic_data的分配尺寸
+	 * - 参见xlog_get_iclog_buffer_size()
 	 */
 	int			l_iclog_size;	/* size of log in bytes */
+	/*
+	 * 表示iclog buffer的数量，来源为mp->m_logbufs
+	 * - 参见xlog_get_iclog_buffer_size()
+	 */
 	int			l_iclog_bufs;	/* number of iclog buffers */
 	xfs_daddr_t		l_logBBstart;   /* start block of log */
 	/*
-	 * xlog的字节长度和basic block长度
-	 * - 这里指的是log space的长度吧？
+	 * disk log space的字节长度
 	 */
 	int			l_logsize;      /* size of log in bytes */
+	/*
+	 * disk log space的BB个数
+	 * - Basic Block
+	 */
 	int			l_logBBsize;    /* size of log in BB chunks */
 
 	/* The following block of fields are changed while holding icloglock */
@@ -465,6 +499,11 @@ struct xlog {
 	 */
 	xlog_in_core_t		*l_iclog;       /* head log queue	*/
 	spinlock_t		l_icloglock;    /* grab to change iclog state */
+	/*
+	 * 下面这个东西是log buffer/iclog的，还是disk log space的？
+	 * - 卧槽，看l_curr_block和xlog->l_logBBsize做比较，猜测应该是disk log
+	 *   > 参见xlog_state_switch_iclogs()
+	 */
 	int			l_curr_cycle;   /* Cycle number of log writes */
 	int			l_prev_cycle;   /* Cycle number before last
 						 * block increment */
@@ -477,9 +516,18 @@ struct xlog {
 	 * contending with other hot objects, place each of them on a separate
 	 * cacheline.
 	 */
-	/* lsn of last LR on disk */ /* 已经写到disk上的log space的最大lsn */
+	/*
+	 * lsn of last LR on disk
+	 * - 已经写到disk上的log space的最大lsn
+	 *   > 最大表示最后一个写入disk的lsn，最新的lsn
+	 */
 	atomic64_t		l_last_sync_lsn ____cacheline_aligned_in_smp;
-	/* lsn of 1st LR with unflushed * buffers */ /* 在iclog中等待写到磁盘metadata region上的最小的lsn */
+	/*
+	 * lsn of 1st LR with unflushed * buffers
+	 * - 在iclog中等待写到磁盘metadata region上的（AIL中的）最小的lsn 
+	 *   > 最小的表示AIL中最老的
+	 * - 参见：xlog_assign_tail_lsn_locked()
+	 */
 	atomic64_t		l_tail_lsn ____cacheline_aligned_in_smp;
 
 	/*

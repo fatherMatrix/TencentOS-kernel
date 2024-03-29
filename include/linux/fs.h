@@ -1695,6 +1695,7 @@ struct super_block {
 	/*
  	 * 指向属于具体文件系统的超级块信息：
  	 * xfs: xfs_mount
+	 * ext4: ext4_sb_info
  	 *
 	 * Keep s_fs_info, s_time_gran, s_fsnotify_mask, and
 	 * s_fsnotify_marks together for cache efficiency. They are frequently

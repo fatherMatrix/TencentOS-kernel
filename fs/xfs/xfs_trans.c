@@ -1053,6 +1053,7 @@ __xfs_trans_commit(
 
 	/*
 	 * 对应文档3.3.8 Life Cycle Chanages中delayed log部分6. Transaction Commit
+	 * - commit_lsn是本xfs_trans提交到的xfs_cil_ctx的sequence
 	 */
 	xfs_log_commit_cil(mp, tp, &commit_lsn, regrant);
 

@@ -1238,6 +1238,9 @@ static void mntput_no_expire(struct mount *mnt)
 			if (!task_work_add(task, &mnt->mnt_rcu, true))
 				return;
 		}
+		/*
+		 * 什么情况会走到这里？完全没想明白
+		 */
 		if (llist_add(&mnt->mnt_llist, &delayed_mntput_list))
 			schedule_delayed_work(&delayed_mntput_work, 1);
 		return;
@@ -1644,12 +1647,22 @@ static int do_umount(struct mount *mnt, int flags)
 
 	event++;
 	if (flags & MNT_DETACH) {
+		/*
+		 * 不管当前vfsmount的引用计数是多少，都可以从mount tree上取下来，
+		 * 后续路径遍历就看不到这个挂载了；
+		 */
 		if (!list_empty(&mnt->mnt_list))
 			umount_tree(mnt, UMOUNT_PROPAGATE);
 		retval = 0;
 	} else {
+		/*
+		 * 处理该vfsmount的孩子们
+		 */
 		shrink_submounts(mnt);
 		retval = -EBUSY;
+		/*
+		 * 处理该vfsmount自己
+		 */
 		if (!propagate_mount_busy(mnt, 2)) {
 			if (!list_empty(&mnt->mnt_list))
 				umount_tree(mnt, UMOUNT_PROPAGATE|UMOUNT_SYNC);
@@ -1743,6 +1756,10 @@ int ksys_umount(char __user *name, int flags)
 	if (!(flags & UMOUNT_NOFOLLOW))
 		lookup_flags |= LOOKUP_FOLLOW;
 
+	/*
+	 * 返回时vfsmount是增加了引用计数的
+	 * - 所以umount()可以进行的要求是该vfsmount的引用计数为2；
+	 */
 	retval = user_path_mountpoint_at(AT_FDCWD, name, lookup_flags, &path);
 	if (retval)
 		goto out;

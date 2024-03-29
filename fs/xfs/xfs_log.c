@@ -1383,6 +1383,9 @@ xlog_get_iclog_buffer_size(
 	 */
 	log->l_iclog_heads =
 		DIV_ROUND_UP(mp->m_logbsize, XLOG_HEADER_CYCLE_SIZE);
+	/*
+	 *
+	 */
 	log->l_iclog_hsize = log->l_iclog_heads << BBSHIFT;
 }
 
@@ -1441,6 +1444,10 @@ xlog_alloc_log(
 	struct xfs_mount	*mp,
 	struct xfs_buftarg	*log_target,
 	xfs_daddr_t		blk_offset,
+	/*
+	 * 这个是disk log space的BB块数
+	 * - 参见本函数调用者的注释
+	 */
 	int			num_bblks)
 {
 	struct xlog		*log;
@@ -1470,6 +1477,10 @@ xlog_alloc_log(
 	/* log->l_tail_lsn = 0x100000000LL; cycle = 1; current block = 0 */
 	xlog_assign_atomic_lsn(&log->l_tail_lsn, 1, 0);
 	xlog_assign_atomic_lsn(&log->l_last_sync_lsn, 1, 0);
+	/*
+	 * log->l_curr_block不需要初始化？
+	 * - 分配内存时为0
+	 */
 	log->l_curr_cycle  = 1;	    /* 0 is bad since this is initial value */
 
 	xlog_grant_head_init(&log->l_reserve_head);
@@ -1514,6 +1525,8 @@ xlog_alloc_log(
 	 * done this way so that we can use different sizes for machines
 	 * with different amounts of memory.  See the definition of
 	 * xlog_in_core_t in xfs_log_priv.h for details.
+	 *
+	 * 循环创建所有的log buffer
 	 */
 	ASSERT(log->l_iclog_size >= 4096);
 	for (i = 0; i < log->l_iclog_bufs; i++) {
@@ -1743,9 +1756,18 @@ xlog_pack_data(
 
 	dp = iclog->ic_datap;
 	for (i = 0; i < BTOBB(size); i++) {
+		/*
+		 * 这个数组就这么长
+		 */
 		if (i >= (XLOG_HEADER_CYCLE_SIZE / BBSIZE))
 			break;
+		/*
+		 * 先把iclog->ic_datap中的每个BB的前4字节保存
+		 */
 		iclog->ic_header.h_cycle_data[i] = *(__be32 *)dp;
+		/*
+		 * 已保存的位置全部填充cycle_lsn
+		 */
 		*(__be32 *)dp = cycle_lsn;
 		dp += BBSIZE;
 	}
@@ -2001,6 +2023,10 @@ xlog_sync(
 
 	ASSERT(atomic_read(&iclog->ic_refcnt) == 0);
 
+	/*
+	 * 计算当前iclog已使用的尺寸
+	 * - 单位是字节
+	 */
 	count = xlog_calc_iclog_size(log, iclog, &roundoff);
 
 	/* move grant heads by roundoff in sync */
@@ -2019,6 +2045,9 @@ xlog_sync(
 	XFS_STATS_INC(log->l_mp, xs_log_writes);
 	XFS_STATS_ADD(log->l_mp, xs_log_blocks, BTOBB(count));
 
+	/*
+	 * 通过lsn获取当前的bno
+	 */
 	bno = BLOCK_LSN(be64_to_cpu(iclog->ic_header.h_lsn));
 
 	/* Do we need to split this write into 2 parts? */
@@ -2369,6 +2398,9 @@ xlog_write_setup_copy(
 	still_to_copy = space_required - *bytes_consumed;
 	*copy_off = *bytes_consumed;
 
+	/*
+	 * 可以一次拷贝完
+	 */
 	if (still_to_copy <= space_available) {
 		/* write of region completes here */
 		*copy_len = still_to_copy;
@@ -2542,6 +2574,11 @@ xlog_write(
 		 * iclog返回出我们应该向哪个iclog写入；
 		 * log_offset返回出我们应该向iclog的什么位置开始写；
 		 * - 这个位置是从iclog->ic_datap开始算；
+		 *
+		 * 返回之前内部将iclog->ic_offset增加了len；
+		 *
+		 * contwr表示是不是需要next iclog一起来承载数据
+		 * - 如果需要，则xlog->l_iclog是已经更新到next iclog的
 		 */
 		error = xlog_state_get_iclog_space(log, len, &iclog, ticket,
 						   &contwr, &log_offset);
@@ -2549,6 +2586,11 @@ xlog_write(
 			return error;
 
 		ASSERT(log_offset <= iclog->ic_size - 1);
+		/*
+		 * 虽然上面的xlog_state_get_iclog_space()中已经将ic_offset增加了
+		 * len，但此处我们依然可以通过log_offset得到增加len前的位置。这
+		 * 个位置就是我们要开始写数据的位置；
+		 */
 		ptr = iclog->ic_datap + log_offset;
 
 		/* start_lsn is the first lsn written to. That's all we need. */
@@ -2574,12 +2616,18 @@ xlog_write(
 				goto next_lv;
 			}
 
+			/*
+			 * 取出一个xfs_log_vec中的一个xfs_log_iovec
+			 */
 			reg = &vecp[index];
 			ASSERT(reg->i_len % sizeof(int32_t) == 0);
 			ASSERT((unsigned long)ptr % sizeof(int32_t) == 0);
 
 			/*
 			 * 在transaction的log buffer中添加xfs_op_header
+			 * - 写XLOG_START_TRANS
+			 * - 每次xlog_cil_push()仅会写一次XLOG_START_TRANS
+			 *   > 内部会控制仅写一次
 			 */
 			start_rec_copy = xlog_write_start_rec(ptr, ticket);
 			if (start_rec_copy) {
@@ -2588,6 +2636,11 @@ xlog_write(
 						   start_rec_copy);
 			}
 
+			/*
+			 * 写入第2个xfs_op_header
+			 * - 这个xfs_op_header是log vector开始写的第一个header；
+			 *   > 每个xfs_op_header都对应了一个xfs_log_iovec
+			 */
 			ophdr = xlog_write_setup_ophdr(log, ptr, ticket, flags);
 			if (!ophdr)
 				return -EIO;
@@ -2595,12 +2648,28 @@ xlog_write(
 			xlog_write_adv_cnt(&ptr, &len, &log_offset,
 					   sizeof(struct xlog_op_header));
 
+			/*
+			 * 判定这个xfs_log_iovec可以拷贝多少到iclog
+			 * - 因为这里存在一个可能要写部分到next iclog的情况
+			 *   > 如果是这种情况，我们需要多写一个op header
+			 *     > 这个多出来的op header是写到next iclog中的
+			 *
+			 * copy_off是此xfs_log_iovec已经被拷贝进iclog的字节数；
+			 * copy_len是此xfs_log_iovec本次需拷贝进iclog的字节数；
+			 * partial_copy表示本次拷贝是不是部分拷贝；
+			 * partial_copy_len表示：
+			 * - partical_copy: 本次拷贝后已经被拷贝进iclog的字节数；
+			 * - non partical copy: 0
+			 */
 			len += xlog_write_setup_copy(ticket, ophdr,
 						     iclog->ic_size-log_offset,
 						     reg->i_len,
 						     &copy_off, &copy_len,
 						     &partial_copy,
 						     &partial_copy_len);
+			/*
+			 * debug code
+			 */
 			xlog_verify_dest_ptr(log, ptr);
 
 			/*
@@ -2617,8 +2686,17 @@ xlog_write(
 				xlog_write_adv_cnt(&ptr, &len, &log_offset,
 						   copy_len);
 			}
+			/*
+			 * 本次总的拷贝字节数
+			 */
 			copy_len += start_rec_copy + sizeof(xlog_op_header_t);
 			record_cnt++;
+			/*
+			 * 如果contwr为0，我们已经在xlog_state_get_iclog_space
+			 * 中增加了xlog_in_core->ic_offset。将data_cnt设置为0
+			 * 以避免在xlog_write_copy_finish()
+			 *         -> xlog_state_finish_copy()中重复增加offset
+			 */
 			data_cnt += contwr ? copy_len : 0;
 
 			error = xlog_write_copy_finish(log, iclog, flags,
@@ -3207,6 +3285,7 @@ restart:
 
 	/*
 	 * 每个log record（log buffer）都以xlog_rec_header开头
+	 * - 每个xlog_rec_header可能包含多个xfs_trans
 	 */
 	head = &iclog->ic_header;
 
@@ -3219,6 +3298,9 @@ restart:
 	 * must be written.
 	 */
 	if (log_offset == 0) {
+	/*
+	 * 第一次写这个iclog，要计算出其lsn
+	 */
 		ticket->t_curr_res -= log->l_iclog_hsize;
 		xlog_tic_add_region(ticket,
 				    log->l_iclog_hsize,
@@ -3424,6 +3506,9 @@ xlog_state_release_iclog(
 		sync++;
 		iclog->ic_state = XLOG_STATE_SYNCING;
 		iclog->ic_header.h_tail_lsn = cpu_to_be64(tail_lsn);
+		/*
+		 * debug代码
+		 */
 		xlog_verify_tail_lsn(log, iclog, tail_lsn);
 		/* cycle incremented when incrementing curr_block */
 	}
@@ -3458,6 +3543,9 @@ xlog_state_switch_iclogs(
 	ASSERT(iclog->ic_state == XLOG_STATE_ACTIVE);
 	if (!eventual_size)
 		eventual_size = iclog->ic_offset;
+	/*
+	 * 标记本iclog需要同步
+	 */
 	iclog->ic_state = XLOG_STATE_WANT_SYNC;
 	iclog->ic_header.h_prev_block = cpu_to_be32(log->l_prev_block);
 	log->l_prev_block = log->l_curr_block;

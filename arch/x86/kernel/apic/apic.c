@@ -1979,6 +1979,10 @@ void __init enable_IR_x2apic(void)
 		return;
 	}
 
+	/*
+	 * 开启x2apic需要先开启irq remapping？
+	 * - 意味着要先开启iommu
+	 */
 	ir_stat = irq_remapping_prepare();
 	if (ir_stat < 0 && !x2apic_supported())
 		return;

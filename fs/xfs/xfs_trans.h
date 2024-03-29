@@ -100,10 +100,17 @@ struct xfs_log_item {
 struct xfs_item_ops {
 	unsigned flags;
 	void (*iop_size)(struct xfs_log_item *, int *, int *);
+	/*
+	 * 将object的修改format到memory buffer/log vector中
+	 */
 	void (*iop_format)(struct xfs_log_item *, struct xfs_log_vec *);
 	void (*iop_pin)(struct xfs_log_item *);
 	void (*iop_unpin)(struct xfs_log_item *, int remove);
 	uint (*iop_push)(struct xfs_log_item *, struct list_head *);
+	/*
+	 * 将xfs_log_item提交到CIL后调用本回调
+	 * - 可以用来做6. Transaction commit中的unlock item这一步
+	 */
 	void (*iop_committing)(struct xfs_log_item *, xfs_lsn_t commit_lsn);
 	void (*iop_release)(struct xfs_log_item *);
 	xfs_lsn_t (*iop_committed)(struct xfs_log_item *, xfs_lsn_t);

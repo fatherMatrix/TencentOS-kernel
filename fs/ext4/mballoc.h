@@ -101,7 +101,15 @@ struct ext4_free_data {
 };
 
 struct ext4_prealloc_space {
+	/*
+	 * per inode prealloc
+	 * - 作为链表元素链入ext4_inode_info->i_prealloc_list链表
+	 */
 	struct list_head	pa_inode_list;
+	/*
+	 * 预分配空间同时也会挂在ext4_group_info的bb_prealloc_list链表上，用于初
+	 * 始化buddy bitmap的之前给block bitmap置上对应的已使用标记
+	 */
 	struct list_head	pa_group_list;
 	union {
 		struct list_head pa_tmp_list;
@@ -125,6 +133,9 @@ enum {
 };
 
 struct ext4_free_extent {
+	/*
+	 * 要分配的起始逻辑块号
+	 */
 	ext4_lblk_t fe_logical;
 	ext4_grpblk_t fe_start;	/* In cluster units */
 	ext4_group_t fe_group;
@@ -159,7 +170,10 @@ struct ext4_allocation_context {
 	/* goal request (normalized ac_o_ex) */
 	struct ext4_free_extent ac_g_ex;
 
-	/* the best found extent */
+	/*
+	 * the best found extent
+	 * - 最终的分配结果
+	 */
 	struct ext4_free_extent ac_b_ex;
 
 	/* copy of the best found extent taken before preallocation efforts */

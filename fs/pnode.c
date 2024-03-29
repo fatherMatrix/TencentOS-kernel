@@ -378,6 +378,8 @@ int propagate_mount_busy(struct mount *mnt, int refcnt)
 	 * quickly check if the current mount can be unmounted.
 	 * If not, we don't have to go checking for all other
 	 * mounts
+	 *
+	 * 如果该挂载点上还有其他挂载，或者其引用计数大于1，则不能卸载
 	 */
 	if (!list_empty(&mnt->mnt_mounts) || do_refcount_check(mnt, refcnt))
 		return 1;

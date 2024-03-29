@@ -110,6 +110,7 @@ struct page {
 			 * @private: Mapping-private opaque data.
 			 * Usually used for buffer_heads if PagePrivate.
 			 *                  ^^^^^^^^^^^^    ^^^^^^^^^^^
+			 *         iomap:   iomap_page     page_has_private()
 			 *
 			 * Used for swp_entry_t if PageSwapCache.
 			 *          ^^^^^^^^^^^    ^^^^^^^^^^^^^

@@ -126,7 +126,7 @@ typedef struct xfs_mount {
 	struct xfs_ino_geometry	m_ino_geo;	/* inode geometry */
 	int			m_logbufs;	/* number of log buffers */
 	/*
-	 * log buffer的尺寸
+	 * 每个log buffer的尺寸
 	 * - 在xlog_get_iclog_buffer_size()中赋值给了xlog->l_iclog_size
 	 */
 	int			m_logbsize;	/* size of each log buffer */

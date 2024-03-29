@@ -193,6 +193,10 @@ xfs_defer_create_intents(
 
 	list_for_each_entry(dfp, &tp->t_dfops, dfp_list) {
 		ops = defer_op_types[dfp->dfp_type];
+		/*
+		 * xfs_refcount_update_defer_type
+		 * ... ...
+		 */
 		dfp->dfp_intent = ops->create_intent(tp, dfp->dfp_count);
 		trace_xfs_defer_create_intent(tp->t_mountp, dfp);
 		list_sort(tp->t_mountp, &dfp->dfp_work, ops->diff_items);
@@ -369,9 +373,15 @@ xfs_defer_finish_noroll(
 
 	trace_xfs_defer_finish(*tp, _RET_IP_);
 
-	/* Until we run out of pending work to finish... */
+	/*
+	 * Until we run out of pending work to finish...
+	 * - 每次循环roll一次，每次roll仅处理一个xfs_defer_pending
+	 */
 	while (!list_empty(&dop_pending) || !list_empty(&(*tp)->t_dfops)) {
-		/* log intents and pull in intake items */
+		/*
+		 * log intents and pull in intake items
+		 * - 这里生成的是intent items
+		 */
 		xfs_defer_create_intents(*tp);
 		/*
 		 * 将(*tp)->t_dfops移入dop_pending
@@ -385,7 +395,10 @@ xfs_defer_finish_noroll(
 		if (error)
 			goto out;
 
-		/* Log an intent-done item for the first pending item. */
+		/*
+		 * Log an intent-done item for the first pending item.
+		 * - 这里生成的是done items
+		 */
 		dfp = list_first_entry(&dop_pending, struct xfs_defer_pending,
 				       dfp_list);
 		ops = defer_op_types[dfp->dfp_type];
@@ -541,6 +554,11 @@ xfs_defer_add(
 	 */
 	list_add_tail(li, &dfp->dfp_work);
 	dfp->dfp_count++;
+
+	/*
+	 * defer ops什么时候被处理呢？
+	 * - 猜测是commit的时候？在commit之前对象都是被lock的。
+	 */
 }
 
 /*

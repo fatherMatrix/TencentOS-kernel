@@ -26,12 +26,15 @@ struct xfs_log_vec {
 	struct xfs_log_vec	*lv_next;	/* next lv in build list */
 	int			lv_niovecs;	/* number of iovecs in lv */
 	/*
-	 * 这个是文档中的log vector
+	 * 这个是文档中的log vector数组
+	 * - 紧跟在本结构体后面，有对齐
+	 * - 一个xfs_log_iovec对应一个xlog_op_header
 	 */
 	struct xfs_log_iovec	*lv_iovecp;	/* iovec array */
 	struct xfs_log_item	*lv_item;	/* owner */
 	/*
-	 * 感觉这个就是文档中的memory buffer
+	 * 这个就是文档中的memory buffer
+	 * - 紧跟在lv_iovecp指向的数组后面，有对齐
 	 */
 	char			*lv_buf;	/* formatted buffer */
 	int			lv_bytes;	/* accounted space in buffer */

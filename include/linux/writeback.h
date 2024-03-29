@@ -274,7 +274,6 @@ static inline void wbc_attach_fdatawrite_inode(struct writeback_control *wbc,
 	spin_lock(&inode->i_lock);
 	/*
 	 * 往inode->i_wb原子地设置一个bdi_writeback；
-	 * - 该bdi_writeback来源于哪里？
 	 */
 	inode_attach_wb(inode, NULL);
 	/*

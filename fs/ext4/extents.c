@@ -586,6 +586,9 @@ int ext4_ext_precache(struct inode *inode)
 	down_read(&ei->i_data_sem);
 	depth = ext_depth(inode);
 
+	/*
+	 * 树的高度等于depth + 1，因为leaf node的depth为0
+	 */
 	path = kcalloc(depth + 1, sizeof(struct ext4_ext_path),
 		       GFP_NOFS);
 	if (path == NULL) {
@@ -600,6 +603,9 @@ int ext4_ext_precache(struct inode *inode)
 	ret = ext4_ext_check(inode, path[0].p_hdr, depth, 0);
 	if (ret)
 		goto out;
+	/*
+	 * 将对tree的递归遍历转换为循环遍历
+	 */
 	path[0].p_idx = EXT_FIRST_INDEX(path[0].p_hdr);
 	while (i >= 0) {
 		/*
@@ -614,6 +620,10 @@ int ext4_ext_precache(struct inode *inode)
 			continue;
 		}
 		bh = read_extent_tree_block(inode,
+						/*
+						 * 这里的自增操作导致下次循环到
+						 * 这里时，读的就是下一个idx了
+						 */
 					    ext4_idx_pblock(path[i].p_idx++),
 					    depth - i - 1,
 					    EXT4_EX_FORCE_CACHE);
@@ -4263,6 +4273,8 @@ static int get_implied_cluster_alloc(struct super_block *sb,
  *          buffer head is unmapped
  *
  * return < 0, error case.
+ *
+ * 主要目的是为ext4_map_blocks.m_lblk寻找合适的ext4_map_blocks.m_pblk
  */
 int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 			struct ext4_map_blocks *map, int flags)
@@ -4282,7 +4294,12 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 		  map->m_lblk, map->m_len, inode->i_ino);
 	trace_ext4_ext_map_blocks_enter(inode, map->m_lblk, map->m_len, flags);
 
-	/* find extent for this block */
+	/*
+	 * find extent for this block
+	 *
+	 * ext4_ext_path的作用类似xfs_btree_cur，保存了从树根遍历到叶子的所有中
+	 * 间节点的extent；
+	 */
 	path = ext4_find_extent(inode, map->m_lblk, NULL, 0);
 	if (IS_ERR(path)) {
 		err = PTR_ERR(path);
@@ -4308,6 +4325,9 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 
 	ex = path[depth].p_ext;
 	if (ex) {
+	/*
+	 * 如果有叶子节点，说明该logical block所在的extents已经被映射了
+	 */
 		ext4_lblk_t ee_block = le32_to_cpu(ex->ee_block);
 		ext4_fsblk_t ee_start = ext4_ext_pblock(ex);
 		unsigned short ee_len;
@@ -4356,6 +4376,12 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 	/*
 	 * requested block isn't allocated yet;
 	 * we couldn't try to create block if create flag is zero
+	 *
+	 * 走到这里说明现有的extents tree中没有目标logical block range，需要根据
+	 * EXT4_GET_BLOCKS_CREATE标志判断是否需要在此处分配。
+	 * - 没有该标志的两种情况：
+	 *   > 延迟分配
+	 *   > 文件空洞
 	 */
 	if ((flags & EXT4_GET_BLOCKS_CREATE) == 0) {
 		ext4_lblk_t hole_start, hole_len;
@@ -4379,13 +4405,27 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 
 	/*
 	 * Okay, we need to do block allocation.
+	 *
+	 * 需要做分配
+	 */
+
+	/*
+	 * 分配请求的起始逻辑块
 	 */
 	newex.ee_block = cpu_to_le32(map->m_lblk);
+	/*
+	 * 起始逻辑块在cluster内部的偏移
+	 * - 每个cluster的大小是相同、固定的
+	 */
 	cluster_offset = EXT4_LBLK_COFF(sbi, map->m_lblk);
 
 	/*
 	 * If we are doing bigalloc, check to see if the extent returned
 	 * by ext4_find_extent() implies a cluster we can use.
+	 *
+	 * bigalloc上次分配的cluster ex可能还未用完，此处检查该cluster剩余的空
+	 * 间是否可以用于此次分配；
+	 * - 如果cluster_offset为0，则表示是个新的cluster分配，则无需进入
 	 */
 	if (cluster_offset && ex &&
 	    get_implied_cluster_alloc(inode->i_sb, map, ex, path)) {
@@ -4449,8 +4489,18 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 	 * needed so that future calls to get_implied_cluster_alloc()
 	 * work correctly.
 	 */
+
+	/*
+	 * 在cluster中的偏移
+	 */
 	offset = EXT4_LBLK_COFF(sbi, map->m_lblk);
+	/*
+	 * 需要分配多少cluster
+	 */
 	ar.len = EXT4_NUM_B2C(sbi, offset+allocated);
+	/*
+	 * 将goal和offset对齐到cluster
+	 */
 	ar.goal -= offset;
 	ar.logical -= offset;
 	if (S_ISREG(inode->i_mode))
@@ -4464,6 +4514,9 @@ int ext4_ext_map_blocks(handle_t *handle, struct inode *inode,
 		ar.flags |= EXT4_MB_DELALLOC_RESERVED;
 	if (flags & EXT4_GET_BLOCKS_METADATA_NOFAIL)
 		ar.flags |= EXT4_MB_USE_RESERVED;
+	/*
+	 * 核心分配逻辑
+	 */
 	newblock = ext4_mb_new_blocks(handle, &ar, &err);
 	if (!newblock)
 		goto out2;

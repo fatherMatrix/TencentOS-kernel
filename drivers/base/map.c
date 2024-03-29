@@ -17,6 +17,9 @@
 #include <linux/kobj_map.h>
 
 struct kobj_map {
+	/*
+	 * 这是个哈希表，数组中的元素是一个链表
+	 */
 	struct probe {
 		struct probe *next;
 		dev_t dev;
@@ -53,6 +56,9 @@ int kobj_map(struct kobj_map *domain, dev_t dev, unsigned long range,
 		p->range = range;
 		p->data = data;
 	}
+	/*
+	 * 将分配的probe结构体插入哈希表
+	 */
 	mutex_lock(domain->lock);
 	for (i = 0, p -= n; i < n; i++, p++, index++) {
 		struct probe **s = &domain->probes[index % 255];

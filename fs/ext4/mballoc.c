@@ -4216,6 +4216,12 @@ static inline void ext4_mb_show_ac(struct ext4_allocation_context *ac)
  * allocation which ever is larger
  *
  * One can tune this size via /sys/fs/ext4/<partition>/mb_stream_req
+ *
+ * ext4对于大文件采用的是per inode预留分配空间的方式分配，对于小文件采用的是
+ * per_cpu locality group的方式，那么怎么定义文件是大文件还是小文件呢？在sys文
+ * 件系统的“/sys/fs/ext4//mb_stream_req”的值，如果文件大小超过了这个值就是“大文
+ * 件”，小于等于则是“小文件”，mb_stream_req默认为16个文件块，按照每个文件块4k计
+ * 算为64k。
  */
 static void ext4_mb_group_or_file(struct ext4_allocation_context *ac)
 {
@@ -4229,6 +4235,9 @@ static void ext4_mb_group_or_file(struct ext4_allocation_context *ac)
 	if (unlikely(ac->ac_flags & EXT4_MB_HINT_GOAL_ONLY))
 		return;
 
+	/*
+	 * 此次分配后的文件大小，单位为文件块
+	 */
 	size = ac->ac_o_ex.fe_logical + EXT4_C2B(sbi, ac->ac_o_ex.fe_len);
 	isize = (i_size_read(ac->ac_inode) + ac->ac_sb->s_blocksize - 1)
 		>> bsbits;
@@ -4281,7 +4290,10 @@ ext4_mb_initialize_context(struct ext4_allocation_context *ac,
 	/* we can't allocate > group size */
 	len = ar->len;
 
-	/* just a dirty hack to filter too big requests  */
+	/*
+	 * just a dirty hack to filter too big requests
+	 * - 分配的cluster数量超过了一个block group的cluster数量，减小
+	 */
 	if (len >= EXT4_CLUSTERS_PER_GROUP(sb))
 		len = EXT4_CLUSTERS_PER_GROUP(sb);
 
@@ -4297,6 +4309,9 @@ ext4_mb_initialize_context(struct ext4_allocation_context *ac,
 	ac->ac_status = AC_STATUS_CONTINUE;
 	ac->ac_sb = sb;
 	ac->ac_inode = ar->inode;
+	/*
+	 * 要分配的起始逻辑块号从来都不会改变，无所谓先设置original或best
+	 */
 	ac->ac_o_ex.fe_logical = ac->ac_b_ex.fe_logical;
 	ac->ac_o_ex.fe_group = group;
 	ac->ac_o_ex.fe_start = block;
@@ -4611,6 +4626,9 @@ ext4_fsblk_t ext4_mb_new_blocks(handle_t *handle,
 		goto out;
 	}
 
+	/*
+	 * 通过ext4_allocation_request初始化ext4_allocation_context
+	 */
 	*errp = ext4_mb_initialize_context(ac, ar);
 	if (*errp) {
 		ar->len = 0;
@@ -4619,10 +4637,16 @@ ext4_fsblk_t ext4_mb_new_blocks(handle_t *handle,
 
 	ac->ac_op = EXT4_MB_HISTORY_PREALLOC;
 	if (!ext4_mb_use_preallocated(ac)) {
+	/*
+	 * 预分配失败
+	 */
 		ac->ac_op = EXT4_MB_HISTORY_ALLOC;
 		ext4_mb_normalize_request(ac, ar);
 repeat:
-		/* allocate space in core */
+		/*
+		 * allocate space in core
+		 * - 常规分配
+		 */
 		*errp = ext4_mb_regular_allocator(ac);
 		if (*errp)
 			goto discard_and_exit;

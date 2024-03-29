@@ -143,7 +143,11 @@ xlog_cil_alloc_shadow_bufs(
 		if (!test_bit(XFS_LI_DIRTY, &lip->li_flags))
 			continue;
 
-		/* get number of vecs and size of data to be stored */
+		/*
+		 * get number of vecs and size of data to be stored
+		 *
+		 * CUI: refcount update intent item: xfs_cui_item_ops.xfs_cui_item_size()
+		 */
 		lip->li_ops->iop_size(lip, &niovecs, &nbytes);
 
 		/*
@@ -180,6 +184,11 @@ xlog_cil_alloc_shadow_bufs(
 		 */
 		if (!lip->li_lv_shadow ||
 		    buf_size > lip->li_lv_shadow->lv_size) {
+		/*
+		 * 进入的两种情况：
+		 * - xfs_log_item->li_lv_shadow为空
+		 * - xfs_log_item->li_lv_shadow不为空，但其尺寸小于buf
+		 */
 
 			/*
 			 * We free and allocate here as a realloc would copy
@@ -211,6 +220,10 @@ xlog_cil_alloc_shadow_bufs(
 				lv->lv_iovecp = (struct xfs_log_iovec *)&lv[1];
 			lip->li_lv_shadow = lv;
 		} else {
+		/*
+		 * 进入只有一种情况：
+		 * - xfs_log_item->li_lv_shadow不为空，且其尺寸大于等于buf
+		 */
 			/* same or smaller, optimise common overwrite case */
 			lv = lip->li_lv_shadow;
 			if (ordered)
@@ -314,11 +327,17 @@ xfs_cil_prepare_item(
  * done lazily either by th enext modification or the freeing of the log item.
  *
  * We don't set up region headers during this process; we simply copy the
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * regions into the flat buffer. We can do this because we still have to do a
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * formatting step to write the regions into the iclog buffer.  Writing the
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^
  * ophdrs during the iclog write means that we can support splitting large
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * regions across iclog boundares without needing a change in the format of the
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * item/region encapsulation.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^
  *
  * Hence what we need to do now is change the rewrite the vector array to point
  * to the copied region inside the buffer we just allocated. This allows us to
@@ -368,6 +387,9 @@ xlog_cil_insert_format_items(
 
 		/* compare to existing item size */
 		old_lv = lip->li_lv;
+		/*
+		 * 意思就是谁大用谁
+		 */
 		if (lip->li_lv && shadow->lv_size <= lip->li_lv->lv_size) {
 			/* same or smaller, optimise common overwrite case */
 			lv = lip->li_lv;
@@ -452,7 +474,15 @@ xlog_cil_insert_items(
 
 	spin_lock(&cil->xc_cil_lock);
 
-	/* account for space used by new iovec headers  */
+	/*
+	 * account for space used by new iovec headers
+	 * - 这里之所以有个diff操作，是因为本次commit的xfs_trans中所包含的
+	 *   xfs_log_item本身已经处于CIL中了，这里因为relog accumulate导致没有
+	 *   生成新的xfs_log_item，而是把原来的xfs_log_item在CIL中后移。此时：
+	 *   > 如果继续使用上次commit时分配的xfs_log_vec，就可能存在尺寸不同的
+	 *     情况，此时所以要重新计算log vec的尺寸和用量。
+	 *   > 如果使用本次分配的xfs_log_vec shadow，则diff_xxx会是0，不影响
+	 */
 	iovhdr_res = diff_iovecs * sizeof(xlog_op_header_t);
 	len += iovhdr_res;
 	ctx->nvecs += diff_iovecs;
@@ -475,6 +505,9 @@ xlog_cil_insert_items(
 	}
 
 	/* do we need space for more log record headers? */
+	/*
+	 * xlog_in_core->ic_data的分配尺寸剪掉iclog header尺寸
+	 */
 	iclog_space = log->l_iclog_size - log->l_iclog_hsize;
 	if (len > 0 && (ctx->space_used / iclog_space !=
 				(ctx->space_used + len) / iclog_space)) {
@@ -511,6 +544,9 @@ xlog_cil_insert_items(
 	 *
 	 * 这里是将在tp->t_items链表上的元素在cil->xc_cil链表上后移，所以
 	 * 不需要使用safe版本；
+	 * - 这就是relog产生的多个log发生accumulate的地方。第N+1次修改不会在CIL
+	 *   中产生一个新的xfs_log_item，而是将第N次修改的xfs_log_item在CIL中后
+	 *   移，此时xfs_log_item中保存的是第N+1次的修改；
 	 */
 	list_for_each_entry(lip, &tp->t_items, li_trans) {
 
@@ -907,13 +943,13 @@ xlog_cil_push(
 	lvhdr.lv_niovecs = 1;
 	lvhdr.lv_iovecp = &lhdr;
 	/*
-	 * checkpoint本身的这个xfs_log_vec要串在ctx->lv_chain链表上所有的
+	 * checkpoint本身的这个header xfs_log_vec要串在ctx->lv_chain链表上所有的
 	 * xfs_log_vec之前
 	 */
 	lvhdr.lv_next = ctx->lv_chain;
 
 	/*
-	 * 将checkpoint context中的xfs_log_vec链表写入log buffer
+	 * 写CIL到iclog
 	 */
 	error = xlog_write(log, &lvhdr, tic, &ctx->start_lsn, NULL, 0);
 	if (error)
@@ -1141,7 +1177,8 @@ xfs_log_commit_cil(
 	 * This ensures the allocation does not deadlock with a CIL
 	 * push in memory reclaim (e.g. from kswapd).
 	 *
-	 * 预分配xfs_log_vec/xfs_log_iovec，防止后面加锁状态的死锁
+	 * 预分配xfs_log_vec/xfs_log_iovec，防止持锁后分配内存时引发reclaim并写
+	 * 日志，那么就要再次到这里获取这把锁；
 	 */
 	xlog_cil_alloc_shadow_bufs(log, tp);
 

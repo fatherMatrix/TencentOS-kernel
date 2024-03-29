@@ -938,6 +938,9 @@ struct block_device *bdget(dev_t dev)
 	bdev = &BDEV_I(inode)->bdev;
 
 	if (inode->i_state & I_NEW) {
+	/*
+	 * 有效block_device数据在哪里填充？
+	 */
 		bdev->bd_contains = NULL;
 		bdev->bd_super = NULL;
 		bdev->bd_inode = inode;
@@ -1143,7 +1146,8 @@ static struct gendisk *bdev_get_gendisk(struct block_device *bdev, int *partno)
 {
 	/*
 	 * 这里为什么不用bdev->bd_disk呢？
-	 * - 因为bdev本身可能还没有初始化完整？
+	 * - bdev->bd_disk就是通过本函数查找后填充的
+	 *   > 参见__blkdev_get()
 	 */
 	struct gendisk *disk = get_gendisk(bdev->bd_dev, partno);
 
@@ -1905,6 +1909,9 @@ static int blkdev_open(struct inode * inode, struct file * filp)
 	if ((filp->f_flags & O_ACCMODE) == 3)
 		filp->f_mode |= FMODE_WRITE_IOCTL;
 
+	/*
+	 * 根据devtmpfs中的inode得到block_device
+	 */
 	bdev = bd_acquire(inode);
 	if (bdev == NULL)
 		return -ENOMEM;

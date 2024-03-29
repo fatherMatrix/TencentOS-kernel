@@ -1324,6 +1324,10 @@ struct inode *iget5_locked(struct super_block *sb, unsigned long hashval,
 	struct inode *inode = ilookup5(sb, hashval, test, data);
 
 	if (!inode) {
+		/*
+		 * bdevfs: bdev_alloc_inode()
+		 * - 返回的inode对应的bdev_inode->block_device是全0
+		 */
 		struct inode *new = alloc_inode(sb);
 
 		if (new) {

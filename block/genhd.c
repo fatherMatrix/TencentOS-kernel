@@ -340,6 +340,9 @@ void blkdev_show(struct seq_file *seqf, off_t offset)
 
 /**
  * register_blkdev - register a new block device
+ * - 本函数的工作只是分配一个块设备的主设备号
+ *   > 而主设备号用于确定设备驱动，因此这里的真正作用是分配一个设备驱动的编号
+ *     # 该动作会在/proc/devices中增加一个块设备项
  *
  * @major: the requested major device number [1..BLKDEV_MAJOR_MAX-1]. If
  *         @major = 0, try to allocate any unused major number.
@@ -752,6 +755,7 @@ static void __device_add_disk(struct device *parent, struct gendisk *disk,
 	 * 给part0分配一个dev_t
 	 *
 	 * 其他的分区呢？
+	 * - add_partition()
 	 */
 	retval = blk_alloc_devt(&disk->part0, &devt);
 	if (retval) {
@@ -777,6 +781,8 @@ static void __device_add_disk(struct device *parent, struct gendisk *disk,
 		disk_to_dev(disk)->devt = devt;
 		/*
 		 * 注册对应的bdi
+		 * - request_queue->backing_dev_info会在blk_mq_init_queue()中伴
+		 *   随request_queue一起分配；
 		 */
 		ret = bdi_register_owner(disk->queue->backing_dev_info,
 						disk_to_dev(disk));

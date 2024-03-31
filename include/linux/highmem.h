@@ -21,6 +21,10 @@ static inline void flush_anon_page(struct vm_area_struct *vma, struct page *page
 static inline void flush_kernel_dcache_page(struct page *page)
 {
 }
+/*
+ * IO子系统只认内核逻辑地址，这里要确保经过内核虚拟地址的修改对IO子系统可见
+ * - 可见的含义是在内存中可见了
+ */
 static inline void flush_kernel_vmap_range(void *vaddr, int size)
 {
 }

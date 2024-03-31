@@ -861,6 +861,10 @@ xlog_cil_push(
 		 * - 如此一来，xfs_log_item起始就是空的了；
 		 * - 但问题是后面又把该xfs_log_item挂到AIL上了，这时log item中
 		 *   还有什么呢？挂到AIL上后又是怎么互斥的？
+		 *   > 挂到AIL中的xfs_log_item已经不再关心其xfs_log_vec了，因为
+		 *     vec中的内容是要写到iclog -> disk log space的，AIL上只挂已
+		 *     经写完日志的xfs_log_item。在AIL上，我们仅关心xfs_log_item
+		 *     目前对应的object本身的数据。
 		 */
 		item->li_lv = NULL;
 		num_iovecs += lv->lv_niovecs;
@@ -961,6 +965,9 @@ xlog_cil_push(
 	 */
 restart:
 	spin_lock(&cil->xc_push_lock);
+	/*
+	 * xlog_cil_push()要确保本次xfs_cil_ctx之前的ctx全部push结束了
+	 */
 	list_for_each_entry(new_ctx, &cil->xc_committing, committing) {
 		/*
 		 * Avoid getting stuck in this loop because we were woken by the
@@ -990,6 +997,10 @@ restart:
 	spin_unlock(&cil->xc_push_lock);
 
 	/* xfs_log_done always frees the ticket on error. */
+	/*
+	 * 一个xfs_cil_ctx的数据内容已经写入iclog了，此处写最后的结束标志。
+	 * - commit_lsn最终来源时commit log写入的第一个iclog的ic_header.h_lsn
+	 */
 	commit_lsn = xfs_log_done(log->l_mp, tic, &commit_iclog, false);
 	if (commit_lsn == -1)
 		goto out_abort;
@@ -1014,13 +1025,18 @@ restart:
 	 */
 	spin_lock(&cil->xc_push_lock);
 	/*
-	 * push完成之后，设置checkpoint context的commit_lsn，并唤醒xc_commit_wait
+	 * 参见上面xfs_log_done() -> xlog_write()中关于start_lsn的注释
 	 */
 	ctx->commit_lsn = commit_lsn;
 	wake_up_all(&cil->xc_commit_wait);
 	spin_unlock(&cil->xc_push_lock);
 
-	/* release the hounds! */
+	/*
+	 * release the hounds!
+	 *
+	 * 放弃引用计数
+	 * - 获取引用计数的动作在xlog_state_get_iclog_space()
+	 */
 	return xfs_log_release_iclog(log->l_mp, commit_iclog);
 
 out_skip:

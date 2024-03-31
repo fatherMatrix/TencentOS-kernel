@@ -44,6 +44,9 @@ struct xfs_ail_cursor {
 	 * 链表头是xfs_ail->ail_cursors
 	 */
 	struct list_head	list;
+	/*
+	 * 这个指针的最低位为1时，表示非法
+	 */
 	struct xfs_log_item	*item;
 };
 
@@ -68,6 +71,8 @@ struct xfs_ail {
 	struct list_head	ail_head;
 	/*
 	 * ail_task向磁盘metadata region刷数据的最高lsn
+	 * - xfsaild()已此作为目标
+	 * - 配置该字段的位置在xfs_ail_push()
 	 */
 	xfs_lsn_t		ail_target;
 	xfs_lsn_t		ail_target_prev;

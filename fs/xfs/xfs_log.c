@@ -591,6 +591,10 @@ xfs_log_done(
 	     * If we get an error, just continue and give back the log ticket.
 	     */
 	    (((ticket->t_flags & XLOG_TIC_INITED) == 0) && 	/* 没有该标志表示已经写入过iclog了；*/
+		/*
+		 * 在这里写入commit log
+		 * - 并提取lsn
+		 */
 	     (xlog_commit_record(log, ticket, iclog, &lsn)))) {
 		lsn = (xfs_lsn_t) -1;
 		regrant = false;
@@ -1838,6 +1842,7 @@ xlog_bio_end_io(
 
 	/*
 	 * 工作函数是：  xlog_ioend_work()
+	 * - 开启 8. Checkpoint completion
 	 */
 	queue_work(iclog->ic_log->l_ioend_workqueue,
 		   &iclog->ic_end_io_work);
@@ -1897,6 +1902,9 @@ xlog_write_iclog(
 
 	bio_init(&iclog->ic_bio, iclog->ic_bvec, howmany(count, PAGE_SIZE));
 	bio_set_dev(&iclog->ic_bio, log->l_targ->bt_bdev);
+	/*
+	 * 指定磁盘地址
+	 */
 	iclog->ic_bio.bi_iter.bi_sector = log->l_logBBstart + bno;
 	/*
 	 * 回调函数
@@ -1907,6 +1915,9 @@ xlog_write_iclog(
 	if (need_flush)
 		iclog->ic_bio.bi_opf |= REQ_PREFLUSH;
 
+	/*
+	 * 将data所在的page加入到bio中
+	 */
 	xlog_map_iclog_data(&iclog->ic_bio, iclog->ic_data, iclog->ic_io_size);
 	if (is_vmalloc_addr(iclog->ic_data))
 		flush_kernel_vmap_range(iclog->ic_data, iclog->ic_io_size);
@@ -2046,7 +2057,7 @@ xlog_sync(
 	XFS_STATS_ADD(log->l_mp, xs_log_blocks, BTOBB(count));
 
 	/*
-	 * 通过lsn获取当前的bno
+	 * 通过lsn获取本iclog在disk log space中对应区域的开始位置
 	 */
 	bno = BLOCK_LSN(be64_to_cpu(iclog->ic_header.h_lsn));
 
@@ -2078,18 +2089,31 @@ xlog_sync(
 
 	/*
 	 * Flush the data device before flushing the log to make sure all meta
+	 *                                                            ^^^^^^^^
 	 * data written back from the AIL actually made it to disk before
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * stamping the new log tail LSN into the log buffer.  For an external
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * log we need to issue the flush explicitly, and unfortunately
 	 * synchronously here; for an internal log we can simply use the block
 	 * layer state machine for preflushes.
+	 *
+	 * 如果日志设备和数据设备是分开的，则两者落盘无必然先后关系，这里手动保
+	 * 证之前的AIL writeback在此之前落盘。
+	 * - 这里只能同步
 	 */
 	if (log->l_targ != log->l_mp->m_ddev_targp || split) {
 		xfs_blkdev_issue_flush(log->l_mp->m_ddev_targp);
 		need_flush = false;
 	}
 
+	/*
+	 * debug code
+	 */
 	xlog_verify_iclog(log, iclog, count);
+	/*
+	 * 触发实际写iclog操作
+	 */
 	xlog_write_iclog(log, iclog, bno, count, need_flush);
 }
 
@@ -2729,6 +2753,10 @@ next_lv:
 				index = 0;
 				if (lv)
 					vecp = lv->lv_iovecp;
+				/*
+				 * else
+				 *	上面的while会结束
+				 */
 			}
 			if (record_cnt == 0 && !ordered) {
 				if (!lv)
@@ -2741,6 +2769,9 @@ next_lv:
 	ASSERT(len == 0);
 
 	xlog_state_finish_copy(log, iclog, record_cnt, data_cnt);
+	/*
+	 * 其中会缩减在xlog_state_get_iclog_space()中增加的引用计数
+	 */
 	if (!commit_iclog)
 		return xlog_state_release_iclog(log, iclog);
 
@@ -3007,7 +3038,6 @@ xlog_state_iodone_process_iclog(
 
 	/*
 	 * 更新l_last_sync_lsn
-	 * - 名字和作用并无关系
 	 */
 	xlog_state_set_callback(log, iclog, header_lsn);
 	return false;
@@ -3031,6 +3061,9 @@ xlog_state_do_iclog_callbacks(
 {
 	spin_unlock(&log->l_icloglock);
 	spin_lock(&iclog->ic_callback_lock);
+	/*
+	 * 这个循环不用纠结，高版本已经取消掉了
+	 */
 	while (!list_empty(&iclog->ic_callbacks)) {
 		LIST_HEAD(tmp);
 
@@ -3127,17 +3160,33 @@ xlog_state_do_callback(
 
 		do {
 			/*
-			 * 返回true表示需要停止
+			 * xlog_state_iodone_process_iclog()返回true
+			 * -
 			 */
 			if (xlog_state_iodone_process_iclog(log, iclog,
 							ciclog, &ioerror))
 				break;
+
+			/*
+			 * xlog_state_iodone_process_iclog()返回false表示需要进
+			 * 一步处理该iclog，仅当该iclog被标记了XLOG_STATE_CALLBACK
+			 * 标记时，才需要真正调用回调。
+			 * - 目的在于iclog的回调需要按照事务上的顺序来进行，我们
+			 *   需要找到目前最早的那个iclog，并对其进行回调。
+			 *   > 如果此时commit iclog不是那个最早的iclog，则对其的
+			 *     回调留到后面一个iclog flush io完成时再进入到此处
+			 *     试探。
+			 */
 
 			if (!(iclog->ic_state &
 			      (XLOG_STATE_CALLBACK | XLOG_STATE_IOERROR))) {
 				iclog = iclog->ic_next;
 				continue;
 			}
+
+			/*
+			 * 当前iclog的h_lsn是最小的，需要do callback
+			 */
 
 			/*
 			 * Running callbacks will drop the icloglock which means
@@ -3208,6 +3257,8 @@ xlog_state_done_syncing(
 	 * split log writes, on the second, we mark ALL iclogs STATE_IOERROR,
 	 * and none should ever be attempted to be written to disk
 	 * again.
+	 *
+	 * 标记为同步完成状态
 	 */
 	if (iclog->ic_state != XLOG_STATE_IOERROR)
 		iclog->ic_state = XLOG_STATE_DONE_SYNC;
@@ -3268,12 +3319,20 @@ restart:
 	}
 
 	iclog = log->l_iclog;
+	/*
+	 * 这里对应的情况是：我们选中了本iclog作为我们cil push的目标iclog，但走
+	 * 到这里后发现本iclog已经不再接受cil push了（通常是被其他内核路径塞满
+	 * 了，进行了flush），所以我们要等他被flush。
+	 * - 为什么呢？直接去选择next iclog不行吗？
+	 */
 	if (iclog->ic_state != XLOG_STATE_ACTIVE) {
 		XFS_STATS_INC(log->l_mp, xs_log_noiclogs);
 
 		/* Wait for log writes to have flushed */
 		/*
 		 * 去xlog->l_flush_wait等待队列上睡眠，睡眠之前释放l_icloglock
+		 * - 唤醒端在：xlog_state_do_callback() <- xlog_ioend_work()
+		 *   > iclog落盘IO结束时回调
 		 */
 		xlog_wait(&log->l_flush_wait, &log->l_icloglock);
 		goto restart;
@@ -3289,6 +3348,9 @@ restart:
 	 */
 	head = &iclog->ic_header;
 
+	/*
+	 * 引用计数的缩减在xlog_cil_push()结束时
+	 */
 	atomic_inc(&iclog->ic_refcnt);	/* prevents sync */
 	log_offset = iclog->ic_offset;
 
@@ -3493,6 +3555,9 @@ xlog_state_release_iclog(
 	if (!atomic_dec_and_lock(&iclog->ic_refcnt, &log->l_icloglock))
 		return 0;
 
+	/*
+	 * 最后一个引用计数被放弃后持锁到这里
+	 */
 	if (iclog->ic_state & XLOG_STATE_IOERROR) {
 		spin_unlock(&log->l_icloglock);
 		return -EIO;
@@ -3553,7 +3618,8 @@ xlog_state_switch_iclogs(
 
 	/* roll log?: ic_offset changed later */
 	/*
-	 * 切换到下一个log buffer，此时需要将标志当前可用block的计数后移？
+	 * 切换到下一个log buffer，此时需要将disk log space上对应next iclog的位
+	 * 置求出来；
 	 */
 	log->l_curr_block += BTOBB(eventual_size)+BTOBB(log->l_iclog_hsize);
 

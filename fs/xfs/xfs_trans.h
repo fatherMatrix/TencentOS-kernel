@@ -40,6 +40,19 @@ struct xfs_log_item {
 	 * 作为链表元素加入xfs_trans->t_items
 	 */
 	struct list_head		li_trans;	/* transaction list */
+	/*
+	 * 在插入AIL时获得具体值
+	 * - xfs_trans_ail_update_bulk()
+	 *
+	 * 在xfs_log_item被插入AIL之前，确定其li_lsn
+	 * - lsn来源于xfs_cil_ctx->start_lsn
+	 *   > xlog_cil_committed() -> call xfs_trans_committed_bulk()
+	 * - xfs_cil_ctx->start_lsn又来源于其写入的第一个iclog的h_lsn
+	 *   > xlog_state_get_iclog_space
+	 *
+	 * 这个值主要是用于在AIL上对xfs_log_item进行排序，所以我觉得用start_lsn
+	 * 或者commit_lsn问题都不大；
+	 */
 	xfs_lsn_t			li_lsn;		/* last on-disk lsn */
 	struct xfs_mount		*li_mountp;	/* ptr to fs mount */
 	/*
@@ -106,13 +119,31 @@ struct xfs_item_ops {
 	void (*iop_format)(struct xfs_log_item *, struct xfs_log_vec *);
 	void (*iop_pin)(struct xfs_log_item *);
 	void (*iop_unpin)(struct xfs_log_item *, int remove);
+	/*
+	 * 将AIL上的xfs_log_item回写的数据挂到入参list_head中，等待后面回写
+	 * - deferred intent item不配置此方法，导致xfsaild_push_item()返回
+	 *   XFS_ITEM_PINNED从而在AIL链表上保留。
+	 *   > deferred intent item会在deferred done item调用iop_release()方法
+	 *     时被摘下；
+	 */
 	uint (*iop_push)(struct xfs_log_item *, struct list_head *);
 	/*
 	 * 将xfs_log_item提交到CIL后调用本回调
 	 * - 可以用来做6. Transaction commit中的unlock item这一步
 	 */
 	void (*iop_committing)(struct xfs_log_item *, xfs_lsn_t commit_lsn);
+	/*
+	 * 用于释放object
+	 * - 一般而言是unlock，对应文档中Item Unlock
+	 */
 	void (*iop_release)(struct xfs_log_item *);
+	/*
+	 * 用于在xfs_trans_committed_bulk()中获取xfs_log_item对应的commit lsn
+	 * - 一般而言，是直接返回第二个参数；
+	 * - 但对某些类型的xfs_log_item有特殊处理
+	 *   > xfs_inode_item_committed()
+	 *   > xfs_buf_item_committed()
+	 */
 	xfs_lsn_t (*iop_committed)(struct xfs_log_item *, xfs_lsn_t);
 	void (*iop_error)(struct xfs_log_item *, xfs_buf_t *);
 };

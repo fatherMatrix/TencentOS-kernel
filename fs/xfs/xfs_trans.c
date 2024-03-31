@@ -922,7 +922,15 @@ xfs_trans_committed_bulk(
 		if (aborted)
 			set_bit(XFS_LI_ABORTED, &lip->li_flags);
 
+		/*
+		 * 针对intent done item这种不需要回写到数据区的log item，那么也不需要
+		 * 将其放入AIL
+		 */
 		if (lip->li_ops->flags & XFS_ITEM_RELEASE_WHEN_COMMITTED) {
+			/*
+			 * xfs_bud_item_release()
+			 * xfs_efd_item_release()
+			 */
 			lip->li_ops->iop_release(lip);
 			continue;
 		}
@@ -965,6 +973,10 @@ xfs_trans_committed_bulk(
 				lip->li_ops->iop_unpin(lip, 0);
 			continue;
 		}
+
+		/*
+		 * 走到这里，item_lsn肯定等于commit_lsn
+		 */
 
 		/* Item is a candidate for bulk AIL insert.  */
 		log_items[i++] = lv->lv_item;

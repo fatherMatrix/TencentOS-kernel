@@ -368,11 +368,15 @@ xfsaild_push_item(
 	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * as they are unpinned once the associated done item is committed to
 	 * the on-disk log.
+	 *
+	 * intent items都未定义此接口
+	 * - xfs_efi_item_ops
+	 * - xfs_bui_item_ops
 	 */
 	if (!lip->li_ops->iop_push)
 		return XFS_ITEM_PINNED;
 	/*
-	 * inode: xfs_
+	 * inode: xfs_inode_item_push()
 	 */
 	return lip->li_ops->iop_push(lip, &ailp->ail_buf_list);
 }
@@ -739,6 +743,9 @@ xfs_ail_push_all_sync(
  *
  * This function must be called with the AIL lock held.  The lock is dropped
  * before returning.
+ *
+ * 如果xfs_log_item已经在AIL中存在了，则将其后移到入参lsn的位置（relog）；
+ * 如果xfs_log_item不在AIL中存在，则将其加入；
  */
 void
 xfs_trans_ail_update_bulk(
@@ -762,10 +769,24 @@ xfs_trans_ail_update_bulk(
 		 * 设置XFS_LI_IN_AIL，并返回原来的值；
 		 */
 		if (test_and_set_bit(XFS_LI_IN_AIL, &lip->li_flags)) {
-			/* check if we really need to move the item */
+		/*
+		 * 如果原来已经有XFS_LI_IN_AIL标志了，即已经在AIL中了
+		 */
+			/*
+			 * check if we really need to move the item
+			 *
+			 * 已经在AIL中的，必定已经有li_lsn了。如果当前iclog的
+			 * lsn早于xfs_log_item->li_lsn，说明该xfs_log_item被
+			 * 更新的iclog修改了，此时我们啥都不做；
+			 */
 			if (XFS_LSN_CMP(lsn, lip->li_lsn) <= 0)
 				continue;
 
+			/*
+			 * 当前iclog的lsn晚于xfs_log_item->li_lsn，则将其在
+			 * 原位置删除，并经由后面的list_add重新插入合适位置
+			 * - 这是relog机制导致的
+			 */
 			trace_xfs_ail_move(lip, lip->li_lsn, lsn);
 			xfs_ail_delete(ailp, lip);
 			if (mlip == lip)
@@ -773,14 +794,30 @@ xfs_trans_ail_update_bulk(
 		} else {
 			trace_xfs_ail_insert(lip, 0, lsn);
 		}
+		/*
+		 * 在xfs_log_item被插入AIL之前，确定其li_lsn
+		 * - lsn来源于xfs_cil_ctx->start_lsn
+		 *   > xlog_cil_committed() -> call xfs_trans_committed_bulk()
+		 * - xfs_cil_ctx->start_lsn又来源于其写入的第一个iclog的h_lsn
+		 *   > xlog_state_get_iclog_space
+		 */
 		lip->li_lsn = lsn;
 		list_add(&lip->li_ail, &tmp);
 	}
 
+	/*
+	 * 这一批要执行插入动作的xfs_log_item肯定是同一个lsn
+	 */
 	if (!list_empty(&tmp))
 		xfs_ail_splice(ailp, cur, &tmp, lsn);
 
+	/*
+	 * 如果AIL的tail元素发生了更新
+	 */
 	if (mlip_changed) {
+		/*
+		 * 更新xlog->l_tail_lsn
+		 */
 		if (!XFS_FORCED_SHUTDOWN(ailp->ail_mount))
 			xlog_assign_tail_lsn_locked(ailp->ail_mount);
 		spin_unlock(&ailp->ail_lock);

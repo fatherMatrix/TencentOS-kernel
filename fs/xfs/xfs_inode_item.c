@@ -754,6 +754,10 @@ xfs_iflush_done(
 		list_for_each_entry(blip, &tmp, li_bio_list) {
 			if (INODE_ITEM(blip)->ili_logged &&
 			    blip->li_lsn == INODE_ITEM(blip)->ili_flush_lsn)
+				/*
+				 * 这里有可能导致xlog->l_tail_lsn增大，即disk log
+				 * space上释放了空间
+				 */
 				mlip_changed |= xfs_ail_delete_one(ailp, blip);
 			else {
 				xfs_clear_li_failed(blip);

@@ -142,7 +142,7 @@ static inline void bio_issue_init(struct bio_issue *issue,
  * main unit of I/O for the block layer and lower layers (ie drivers and
  * stacking drivers)
  *
- * bio本身描述的是对磁盘上一段连续空间的IO
+ * bio本身描述的是对一段连续磁盘空间的IO
  * - 磁盘位置在bi_iter->bi_sector；
  * - 内存端可能是由多段组成，每一段内物理地址连续；
  */

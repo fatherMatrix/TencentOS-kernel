@@ -243,6 +243,7 @@ typedef struct xlog_in_core {
 	 * 链表头，链表元素是xfs_cil_ctx->iclog_entry；
 	 * - xfs_cil_ctx被写入log buffer（iclog）后，需要将xfs_cil_ctx链接到
 	 *   iclog中，等iclog被写入disk后，依次调用相关回调；
+	 * - 只有本iclog包含了xfs_cil_ctx的尾部提交标记，才会包含xfs_cil_ctx
 	 */
 	struct list_head	ic_callbacks;
 
@@ -283,10 +284,25 @@ struct xfs_cil;
 
 struct xfs_cil_ctx {
 	struct xfs_cil		*cil;
+	/*
+	 * 每次新建时比上一个增加1
+	 * - 这个东西表示的本质内容与start_lsn，commit_lsn不同，相对大小无意义
+	 */
 	xfs_lsn_t		sequence;	/* chkpt sequence # */
+	/*
+	 * 来源是xlog_in_core->ic_header.h_lsn
+	 * - 此处用于记录本xfs_cil_ctx所写入的第一个iclog的h_lsn字段
+	 *   > iclog->ic_header.h_lsn表示该iclog在disk log space的写入起始位置
+	 *   > 参见xlog_write()
+	 * - 本字段也是xfs_log_item->li_lsn的来源
+	 *   > 参见xlog_cil_committed() -> call xfs_trans_committed_bulk()
+	 */
 	xfs_lsn_t		start_lsn;	/* first LSN of chkpt commit */
 	/*
-	 * 最后那个commit record的lsn
+	 * 来源是xlog_in_core->ic_header.h_lsn
+	 * - 此处是用于记录本xfs_cil_ctx写入完成后的commit log所写入的iclog的
+	 *   h_lsn字段
+	 *   > commit log本身会不会跨iclog呢？
 	 */
 	xfs_lsn_t		commit_lsn;	/* chkpt commit record lsn */
 	struct xlog_ticket	*ticket;	/* chkpt ticket */
@@ -299,7 +315,9 @@ struct xfs_cil_ctx {
 	 */
 	struct xfs_log_vec	*lv_chain;	/* logvecs being pushed */
 	/*
-	 * 作为链表元素加入checkpoint context->
+	 * 作为链表元素加入xlog_in_core->ic_callbacks
+	 * - 当xfs_cil_ctx的内容全部经由xlog_write写入iclog后，会将xfs_cil_ctx通
+	 *   过本字段挂入事务结束标记所写入的iclog
 	 */
 	struct list_head	iclog_entry;
 	/*
@@ -360,11 +378,14 @@ struct xfs_cil {
 	 */
 	xfs_lsn_t		xc_push_seq;
 	/*
-	 * 链表元素是xc_cil_ctx->committing
+	 * 链表头，链表元素是xc_cil_ctx->committing
 	 * - checkpoint context在被xlog_cil_push()到真正写入log buffer之前，会先
 	 *   挂到CIL的这个链表上；
 	 */
 	struct list_head	xc_committing;
+	/*
+	 * 本CIL中有xfs_cil_ctx被完全写入iclog后会进行一次唤醒
+	 */
 	wait_queue_head_t	xc_commit_wait;
 	/*
 	 * 来源是CIL目前关联的xfs_cil_ctx->sequence
@@ -487,8 +508,9 @@ struct xlog {
 	/* The following block of fields are changed while holding icloglock */
 	/*
 	 * 当向log buffer中写log，但log buffer状态不为ACTIVE时，在此等待队列上
-	 * 睡眠；等待点在： xlog_state_get_iclog_space()
-	 * wake该队列的点在： xlog_state_do_callback()
+	 * 睡眠。这里等待的是某些iclog被flush到磁盘的过程结束。
+	 * - 等待点在： xlog_state_get_iclog_space()
+	 * - wake该队列的点在： xlog_state_do_callback()
 	 */
 	wait_queue_head_t	l_flush_wait ____cacheline_aligned_in_smp;
 						/* waiting for iclog flush */
@@ -502,7 +524,8 @@ struct xlog {
 	/*
 	 * 下面这个东西是log buffer/iclog的，还是disk log space的？
 	 * - 卧槽，看l_curr_block和xlog->l_logBBsize做比较，猜测应该是disk log
-	 *   > 参见xlog_state_switch_iclogs()
+	 *   > 参见xlog_state_switch_iclogs()注释
+	 *   > 是的，确实是disk log space的
 	 */
 	int			l_curr_cycle;   /* Cycle number of log writes */
 	int			l_prev_cycle;   /* Cycle number before last
@@ -517,9 +540,10 @@ struct xlog {
 	 * cacheline.
 	 */
 	/*
-	 * lsn of last LR on disk
-	 * - 已经写到disk上的log space的最大lsn
-	 *   > 最大表示最后一个写入disk的lsn，最新的lsn
+	 * 来源是iclog->ic_header.h_lsn
+	 * - 表示的是最新的已经写到disk log space的iclog的h_lsn
+	 * - 该字段控制AIL flush可以进行的最大lsn
+	 *   > 大于该lsn表示iclog还未写入disk log space，AIL flush不安全
 	 */
 	atomic64_t		l_last_sync_lsn ____cacheline_aligned_in_smp;
 	/*
@@ -527,6 +551,8 @@ struct xlog {
 	 * - 在iclog中等待写到磁盘metadata region上的（AIL中的）最小的lsn 
 	 *   > 最小的表示AIL中最老的
 	 * - 参见：xlog_assign_tail_lsn_locked()
+	 *
+	 * 这个值变大，表示disk log space上释放了一些空间！
 	 */
 	atomic64_t		l_tail_lsn ____cacheline_aligned_in_smp;
 

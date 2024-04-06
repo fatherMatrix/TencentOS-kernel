@@ -5248,7 +5248,7 @@ xfs_bmap_del_extent_real(
 	xfs_iext_get_extent(ifp, icur, &got);
 	/*
 	 * 传进来的del和这里的got都是对应icur的xfs_bmbt_irec，不同之处在与入参
-	 * del可能被trim过，trim的来源是我们要unmap的[start, end)
+	 * del可能被trim过，trim的依据是我们要unmap的[start, end)
 	 * - 即got是del的超集
 	 */
 	ASSERT(got.br_startoff <= del->br_startoff);
@@ -5815,6 +5815,9 @@ __xfs_bunmapi(
 
 delete:
 		if (wasdel) {
+			/*
+			 * 删除delayed extents不涉及事务，因此没有传入xfs_trans
+			 */
 			error = xfs_bmap_del_extent_delay(ip, whichfork, &icur,
 					&got, &del);
 		} else {

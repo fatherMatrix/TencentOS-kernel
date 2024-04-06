@@ -883,6 +883,10 @@ int smp_call_on_cpu(unsigned int cpu, int (*func)(void *), void *par, bool phys)
 		.cpu  = phys ? cpu : -1,
 	};
 
+	/*
+	 * 本函数会一直等待其他cpu完成callback动作后才退出，因此这个栈上数据结
+	 * 构是安全的
+	 */
 	INIT_WORK_ONSTACK(&sscs.work, smp_call_on_cpu_callback);
 
 	if (cpu >= nr_cpu_ids || !cpu_online(cpu))

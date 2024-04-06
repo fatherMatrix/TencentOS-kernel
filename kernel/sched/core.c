@@ -215,6 +215,9 @@ void update_rq_clock(struct rq *rq)
 	rq->clock_update_flags |= RQCF_UPDATED;
 #endif
 
+	/*
+	 * 实际的纳秒数
+	 */
 	delta = sched_clock_cpu(cpu_of(rq)) - rq->clock;
 	if (delta < 0)
 		return;
@@ -2952,11 +2955,16 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	 * We mark the process as NEW here. This guarantees that
 	 * nobody will actually run it, and a signal or other external
 	 * event cannot wake it up and insert it on the runqueue either.
+	 *
+	 * 设置进程的状态为TASK_NEW
+	 * - 这个状态表示进程还未被加入调度器
 	 */
 	p->state = TASK_NEW;
 
 	/*
 	 * Make sure we do not leak PI boosting priority to the child.
+	 *
+	 * 将新进程的动态优先级设置为父进程的normal_prio
 	 */
 	p->prio = current->normal_prio;
 
@@ -2988,7 +2996,8 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	 */
 	if (dl_prio(p->prio))
 		/*
-		 * 这个分支的激活条件是？
+		 * deadline调度类
+		 * - deadline的优先级是-1
 		 */
 		return -EAGAIN;
 	else if (rt_prio(p->prio))
@@ -2996,6 +3005,9 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	else
 		p->sched_class = &fair_sched_class;
 
+	/*
+	 * 设置新进程调度实体的相关变量
+	 */
 	init_entity_runnable_average(&p->se);
 
 	/*
@@ -3012,6 +3024,8 @@ int sched_fork(unsigned long clone_flags, struct task_struct *p)
 	 * so use __set_task_cpu().
 	 *
 	 * 将新创建的进程先放到当前cpu的调度队列上；
+	 * - 这里只是预设，后面会根据相关情况进行调整
+	 *   > 在哪里进行调整？
 	 */
 	__set_task_cpu(p, smp_processor_id());
 	/*
@@ -3082,6 +3096,13 @@ void wake_up_new_task(struct task_struct *p)
 	 */
 	p->recent_used_cpu = task_cpu(p);
 	rseq_migrate(p);
+	/*
+	 * 选择合适的cpu
+	 * - 在前面sched_fork()中已经设置了父进程的cpu到新进程的thread_info->cpu
+	 *   中，为什么这里需要重新设置？
+	 *   > 在创建进程的过程中，cpu_allowed可能会发生变化
+	 *     > 既然会发生变化，为什么sched_fork()中非要选择一个呢？
+	 */
 	__set_task_cpu(p, select_task_rq(p, task_cpu(p), SD_BALANCE_FORK, 0));
 #endif
 	/*
@@ -3091,6 +3112,9 @@ void wake_up_new_task(struct task_struct *p)
 	update_rq_clock(rq);
 	post_init_entity_util_avg(p);
 
+	/*
+	 * 调用enqueue_task()函数来把新进程插入到调度器中
+	 */
 	activate_task(rq, p, ENQUEUE_NOCLOCK);
 	trace_sched_wakeup_new(p);
 	check_preempt_curr(rq, p, WF_FORK);
@@ -8128,6 +8152,7 @@ void dump_cpu_task(int cpu)
  * the relative distance between them is ~25%.)
  *
  * nice值对应的权重
+ * - nice 0对应的权重为1024
  */
 const int sched_prio_to_weight[40] = {
  /* -20 */     88761,     71755,     56483,     46273,     36291,

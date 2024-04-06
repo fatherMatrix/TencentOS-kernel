@@ -57,6 +57,12 @@ typedef struct xfs_efi_log_item {
 	unsigned long		efi_flags;	/* misc flags */
 	xfs_efi_log_format_t	efi_format;
 } xfs_efi_log_item_t;
+/*
+ * 后面紧跟着efi_format.efi_nextents - 1个xfs_extent的内存空间
+ * - 参见：xfs_efi_init()
+ * - 为什么要减一？
+ *   > xfs_efi_log_format_t中包含了一个
+ */
 
 /*
  * This is the "extent free done" log item.  It is used to log

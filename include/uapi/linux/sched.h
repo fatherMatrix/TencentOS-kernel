@@ -78,11 +78,63 @@ struct clone_args {
 #define CLONE_ARGS_SIZE_VER0 64 /* sizeof first published struct */
 
 /*
+ * 调度类：stop -> deadline -> realtime -> cfs -> idle
+ *
+ * +------------------+----------------+-----------+
+ * | class            | policy         | prio      |
+ * +------------------+----------------+-----------+
+ * | stop             | /              | /         |
+ * | stop_sched_class |                |           |
+ * +------------------+----------------+-----------+
+ * | deadline         | SCHED_DEADLINE | -1        |
+ * | dl_sched_class   |                |           |
+ * +------------------+----------------+-----------+
+ * | realtime         | SCHED_FIFO     | 0   - 99  |
+ * | rt_sched_class   | SCHED_RR       |           |
+ * +------------------+----------------+-----------+
+ * | cfs              | SCHED_NORMAL   | 100 - 139 |
+ * | fair_sched_class | SCHED_BATCH    |           |
+ * |                  | SCHED_IDLE     |           |
+ * +------------------+----------------+-----------+
+ * | idle             | /              | /         |
+ * | idle_sched_class |                |           |
+ * +------------------+----------------+-----------+
+ */
+
+/*
  * Scheduling policies
  */
+
+/*
+ * SCHED_NORMAL（以前称为SCHED_OTHER）分时调度策略是非实时进程的默认调度策略。
+ * 所有普通进程的静态优先级都为0，因此，任何一个基于SCHED_FIFO或SCHED_RR调度策
+ * 略的就绪进程都会抢占他们。Linux内核没有实现这类调度策略。？
+ * - 参见fair_policy()
+ */
 #define SCHED_NORMAL		0
+/*
+ * SCHED_FIFO（先进先出调度）策略与SCHED_RR类似，只不过没有时间片概念。一旦进程
+ * 获得了CPU控制权，它会一直运行下去直到下面的某个条件被满足：
+ * - 自愿放弃CPU
+ * - 进程终止
+ * - 被高优先级的进程抢占
+ */
 #define SCHED_FIFO		1
+/*
+ * SCHED_RR（循环调度）策略表示优先级相同的进程以循环分享时间的方式来运行。进程
+ * 每次使用CPU的时间为一个固定长度的时间片。进程会保持占有CPU直到下面的某个条件
+ * 得到满足。
+ * - 时间片用完
+ * - 自愿放弃CPU
+ * - 进程终止
+ * - 被高优先级的进程抢占
+ */
 #define SCHED_RR		2
+/*
+ * SCHED_BATCH（批处理调度）策略是普通进程调度策略。这个调度策略表示让调度起认为
+ * 该进程是CPU消耗型的。因此，调度器对这类进程的唤醒惩罚比较小。在Linux内核里，
+ * 该类调度策略表示使用CFS
+ */
 #define SCHED_BATCH		3
 /* SCHED_ISO: reserved but not implemented yet */
 #define SCHED_IDLE		5

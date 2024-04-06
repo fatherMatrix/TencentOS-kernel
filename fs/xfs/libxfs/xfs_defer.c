@@ -29,14 +29,22 @@
  * more generic.
  *
  * When adding the reverse mapping and reflink features, it became
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * necessary to perform complex remapping multi-transactions to comply
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * with AG locking order rules, and to be able to spread a single
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * refcount update operation (an operation on an n-block extent can
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * update as many as n records!) among multiple transactions.  XFS can
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * roll a transaction to facilitate this, but using this facility
  * requires us to log "intent" items in case log recovery needs to
  * redo the operation, and to log "done" items to indicate that redo
  * is not necessary.
+ * - free extent这类操作可能回被拆分到多个xfs_trans中，需要在开始前写入EFI，在
+ *   结束后写入EFD，以此来提示recover code哪些需要redo。
+ *   > 意思是将多个xfs_trans作为一个原子整体？
  *
  * Deferred work is tracked in xfs_defer_pending items.  Each pending
  * item tracks one type of deferred work.  Incoming work items (which
@@ -74,8 +82,11 @@
  *       details.
  *
  * The key here is that we must log an intent item for all pending
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * work items every time we roll the transaction, and that we must log
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * a done item as soon as the work is completed.  With this mechanism
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * we can perform complex remapping operations, chaining intent items
  * as needed.
  *
@@ -91,9 +102,13 @@
  * item to prevent the log intent item from replaying, immediately log
  * a new log intent item with the unfinished work items, roll the
  * transaction, and re-call ->finish_item wherever it left off.  The
+ *                                                               ^^^
  * log done item and the new log intent item must be in the same
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * transaction or atomicity cannot be guaranteed; defer_finish ensures
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * that this happens.
+ * ^^^^^^^^^^^^^^^^^^
  *
  * This requires some coordination between ->finish_item and
  * defer_finish.  Upon deciding to request a new transaction,
@@ -118,7 +133,7 @@
  * | Intent to map (X, A, B) at startblock E         |
  * +-------------------------------------------------+
  * | Map file X startblock E offset A length B       | t1
- * | Done mapping (X, E, A, B)                       |
+ * | Done mapping (X, E, A, B)                       |		做完了上面的map，记录一个done item
  * | Intent to increase refcount for extent (E, B)   |
  * | Intent to add rmap (X, E, A, B)                 |
  * +-------------------------------------------------+
@@ -194,12 +209,21 @@ xfs_defer_create_intents(
 	list_for_each_entry(dfp, &tp->t_dfops, dfp_list) {
 		ops = defer_op_types[dfp->dfp_type];
 		/*
-		 * xfs_refcount_update_defer_type
+		 * - xfs_extent_free_create_intent()
+		 * - xfs_rmap_update_create_intent()
+		 * - xfs_refcount_update_create_intent()
 		 * ... ...
 		 */
 		dfp->dfp_intent = ops->create_intent(tp, dfp->dfp_count);
 		trace_xfs_defer_create_intent(tp->t_mountp, dfp);
 		list_sort(tp->t_mountp, &dfp->dfp_work, ops->diff_items);
+		/*
+		 * 将这个xfs_defer_pending元素中的所有xfs_extent_free_item依次
+		 * log进EFI的尾部xfs_extent数组中
+		 *
+		 * - xfs_extent_free_log_item()
+		 * -
+		 */
 		list_for_each(li, &dfp->dfp_work)
 			ops->log_item(tp, dfp->dfp_intent, li);
 	}
@@ -380,7 +404,8 @@ xfs_defer_finish_noroll(
 	while (!list_empty(&dop_pending) || !list_empty(&(*tp)->t_dfops)) {
 		/*
 		 * log intents and pull in intake items
-		 * - 这里生成的是intent items
+		 * - 这里生成的是intent items，并将其全部挂入了xfs_trans->t_items
+		 *   链表尾部；
 		 */
 		xfs_defer_create_intents(*tp);
 		/*
@@ -403,6 +428,9 @@ xfs_defer_finish_noroll(
 				       dfp_list);
 		ops = defer_op_types[dfp->dfp_type];
 		trace_xfs_defer_pending_finish((*tp)->t_mountp, dfp);
+		/*
+		 * - xfs_extent_free_create_done()
+		 */
 		dfp->dfp_done = ops->create_done(*tp, dfp->dfp_intent,
 				dfp->dfp_count);
 
@@ -411,6 +439,17 @@ xfs_defer_finish_noroll(
 		list_for_each_safe(li, n, &dfp->dfp_work) {
 			list_del(li);
 			dfp->dfp_count--;
+			/*
+			 * - xfs_extent_free_finish_item()
+			 *   > 调用xfs_trans_free_extent()真正执行extent free
+			 * - xfs_rmap_update_finish_item()
+			 * - xfs_refcount_update_finish_item()
+			 *   > -EAGAIN错误就是给这个用的
+			 *
+			 * 这里真正去做EFI表示的工作；
+			 * - 做完之后会标记done item的XFS_LI_DIRTY标志，从而会
+			 *   在后面被写入iclog
+			 */
 			error = ops->finish_item(*tp, li, dfp->dfp_done,
 					&state);
 			if (error == -EAGAIN) {
@@ -452,6 +491,11 @@ xfs_defer_finish_noroll(
 			kmem_free(dfp);
 		}
 
+		/*
+		 * 只有两个，其他没有：
+		 * - xfs_rmap_update_finish_cleanup()
+		 * - xfs_refcount_update_finish_cleanup()
+		 */
 		if (ops->finish_cleanup)
 			ops->finish_cleanup(*tp, state, error);
 	}
@@ -546,11 +590,16 @@ xfs_defer_add(
 		dfp->dfp_done = NULL;
 		dfp->dfp_count = 0;
 		INIT_LIST_HEAD(&dfp->dfp_work);
+		/*
+		 * 将新建的xfs_defer_pending放入xfs_trans->t_dfops链表
+		 */
 		list_add_tail(&dfp->dfp_list, &tp->t_dfops);
 	}
 
 	/*
-	 * 将xfs_rmap_intent挂入选中的xfs_defer_pending
+	 * 挂入选中的xfs_defer_pending
+	 * - xfs_extent_free_item
+	 * - xfs_rmap_intent
 	 */
 	list_add_tail(li, &dfp->dfp_work);
 	dfp->dfp_count++;

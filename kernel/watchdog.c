@@ -151,6 +151,9 @@ void __weak watchdog_nmi_start(void) { }
 static void lockup_detector_update_enable(void)
 {
 	watchdog_enabled = 0;
+	/*
+	 * watchdog_user_enabled对应/proc/sys/kernel/watchdog
+	 */
 	if (!watchdog_user_enabled)
 		return;
 	if (nmi_watchdog_available && nmi_watchdog_user_enabled)
@@ -363,6 +366,9 @@ static int softlockup_fn(void *data)
 /* watchdog kicker functions */
 static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 {
+	/*
+	 * softlockup的喂狗内核线程softlockup_fn()会更新这个值
+	 */
 	unsigned long touch_ts = __this_cpu_read(watchdog_touch_ts);
 	struct pt_regs *regs = get_irq_regs();
 	int duration;
@@ -371,7 +377,10 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 	if (!watchdog_enabled)
 		return HRTIMER_NORESTART;
 
-	/* kick the hardlockup detector */
+	/*
+	 * kick the hardlockup detector
+	 * - 更新hardlockup检测的计数器
+	 */
 	watchdog_interrupt_count();
 
 	/* kick the softlockup detector 
@@ -390,7 +399,10 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 				this_cpu_ptr(&softlockup_stop_work));
 	}
 
-	/* .. and repeat */
+	/*
+	 * .. and repeat
+	 * - 更新定时器下次到期时间
+	 */
 	hrtimer_forward_now(hrtimer, ns_to_ktime(sample_period));
 
 	if (touch_ts == SOFTLOCKUP_RESET) {
@@ -672,6 +684,9 @@ static void proc_watchdog_update(void)
 {
 	/* Remove impossible cpus to keep sysctl output clean. */
 	cpumask_and(&watchdog_cpumask, &watchdog_cpumask, cpu_possible_mask);
+	/*
+	 * 更新watchdog_enabled全局变量
+	 */
 	lockup_detector_reconfigure();
 }
 

@@ -463,16 +463,23 @@ struct sched_statistics {
 struct sched_entity {
 	/* For load-balancing: */
 	/*
-	 * 在 prio_to_weight[] 中包含优先级转换权重的数值?
+	 * 在 prio_to_weight[] 中包含优先级转换权重的数值
+	 * - 进程的权重
 	 */
 	struct load_weight		load;
+	/*
+	 * 表示进程在可运行(runable)状态的权重
+	 * - 这个值等于权重？
+	 */
 	unsigned long			runnable_weight;
 	/*
 	 * 标准的树节点，用于在红黑树上排序
+	 * - 树根是：
+	 *   > cfs_rq->tasks_timeline
 	 */
 	struct rb_node			run_node;
 	/*
-	 * 进程所在的task_group
+	 * 链表元素，链表头是rq->cfs_tasks
 	 */
 	struct list_head		group_node;
 	/*
@@ -481,11 +488,15 @@ struct sched_entity {
 	unsigned int			on_rq;
 
 	/*
-	 * 开始运行时间
+	 * 计算调度实体vruntime的起始时间
+	 * - 每次调用update_curr()都会更新本字段，可以认为本字段是上一次调用
+	 *   update_curr()的时间
 	 */
 	u64				exec_start;
 	/*
-	 * 总运行时间
+	 * 调度实体的总运行时间
+	 * - 真实时间？
+	 *   > 是的，单位为纳秒，参见update_curr()
 	 */
 	u64				sum_exec_runtime;
 	/*
@@ -494,6 +505,7 @@ struct sched_entity {
 	u64				vruntime;
 	/*
 	 * 进程在切换进cpu时的sum_exec_runtime值
+	 * - 上一次统计调度实体运行的总时间
 	 */
 	u64				prev_sum_exec_runtime;
 
@@ -527,6 +539,7 @@ struct sched_entity {
 	 * se自己的红黑树运行队列
 	 * - 本字段为NULL，表明是一个进程
 	 * - 本字段不为NULL，表明是task_group
+	 *   > 参见entity_is_task()
 	 */
 	struct cfs_rq			*my_q;
 #endif
@@ -723,13 +736,28 @@ struct task_struct {
 
 #ifdef CONFIG_SMP
 	struct llist_node		wake_entry;
+	/*
+	 * 表示进程当前正运行在cpu上
+	 */
 	int				on_cpu;
 #ifdef CONFIG_THREAD_INFO_IN_TASK
-	/* Current CPU: */
+	/*
+	 * Current CPU:
+	 * - 表示当前进程正运行在哪个cpu上
+	 */
 	unsigned int			cpu;
 #endif
+	/*
+	 * 用于wake affine特性
+	 */
 	unsigned int			wakee_flips;
+	/*
+	 * 用于记录上一次wake flips的时间
+	 */
 	unsigned long			wakee_flip_decay_ts;
+	/*
+	 * 表示上一次唤醒的是哪个进程
+	 */
 	struct task_struct		*last_wakee;
 
 	/*
@@ -742,6 +770,11 @@ struct task_struct {
 	int				recent_used_cpu;
 	int				wake_cpu;
 #endif
+	/*
+	 * 用于设置进程的状态，支持的状态如下：
+	 * - TASK_ON_RQ_QUEUED：表示进程正在就绪队列中
+	 * - TASK_ON_RQ_MIGRATING：表示处于迁移过程中的进程，它不可能在就绪队列
+	 */
 	int				on_rq;
 
 	/*
@@ -773,10 +806,12 @@ struct task_struct {
 	const struct sched_class	*sched_class;
 	/*
 	 * 调度实体，cfs？
+	 * - 普通进程
 	 */
 	struct sched_entity		se;
 	/*
 	 * 调度实体，rt？
+	 * - 实时进程
 	 */
 	struct sched_rt_entity		rt;
 #ifdef CONFIG_CGROUP_SCHED
@@ -785,6 +820,10 @@ struct task_struct {
 	 */
 	struct task_group		*sched_task_group;
 #endif
+	/*
+	 * 实时进程调度实体
+	 * - deadline
+	 */
 	struct sched_dl_entity		dl;
 
 #ifdef CONFIG_UCLAMP_TASK
@@ -804,7 +843,13 @@ struct task_struct {
 #endif
 
 	unsigned int			policy;
+	/*
+	 * 进程允许运行的cpu个数
+	 */
 	int				nr_cpus_allowed;
+	/*
+	 * 进程允许运行的cpu位图
+	 */
 	const cpumask_t			*cpus_ptr;
 	cpumask_t			cpus_mask;
 
@@ -823,6 +868,9 @@ struct task_struct {
 	struct list_head		rcu_tasks_holdout_list;
 #endif /* #ifdef CONFIG_TASKS_RCU */
 
+	/*
+	 * 调度相关信息
+	 */
 	struct sched_info		sched_info;
 
 	/*

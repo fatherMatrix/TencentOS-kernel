@@ -659,12 +659,20 @@ int sched_proc_update_handler(struct ctl_table *table, int write,
 
 /*
  * delta /= w
+ *
+ * vruntime = delta_exec * nice_0_weight / weight
+ * - vruntime表示进程虚拟运行时间
+ * - delta_exec表示实际运行时间
+ * - nice_0_weight表示nice值为0的进程的权重值
  */
 static inline u64 calc_delta_fair(u64 delta, struct sched_entity *se)
 {
 	if (unlikely(se->load.weight != NICE_0_LOAD))
 		delta = __calc_delta(delta, NICE_0_LOAD, &se->load);
 
+	/*
+	 * 如果进程的权重值是nice_0_weight，则vruntime过的和真实事件一样快
+	 */
 	return delta;
 }
 
@@ -675,6 +683,11 @@ static inline u64 calc_delta_fair(u64 delta, struct sched_entity *se)
  * this period because otherwise the slices get too small.
  *
  * p = (nr <= nl) ? l : l*nr/nl
+ *
+ * 本函数计算cfs就绪队列中一个调度周期的长度
+ * - 调度周期可以理解为cfs就绪队列中每个task运行一次的总耗时，即调度周期的总时
+ *   间片
+ * - 单位为纳秒
  */
 static u64 __sched_period(unsigned long nr_running)
 {
@@ -689,6 +702,8 @@ static u64 __sched_period(unsigned long nr_running)
  * proportional to the weight.
  *
  * s = p*P[w/rw]
+ *
+ * 本函数根据当前进程的权重来计算在cfs就绪队列总权重中可以瓜分到的调度时间
  */
 static u64 sched_slice(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
@@ -716,6 +731,8 @@ static u64 sched_slice(struct cfs_rq *cfs_rq, struct sched_entity *se)
  * We calculate the vruntime slice of a to-be-inserted task.
  *
  * vs = s/w
+ *
+ * 根据se可以瓜分到的墙上调度时间来计算其可以瓜分到的vruntime
  */
 static u64 sched_vslice(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
@@ -834,16 +851,25 @@ static void update_tg_load_avg(struct cfs_rq *cfs_rq, int force)
 static void update_curr(struct cfs_rq *cfs_rq)
 {
 	struct sched_entity *curr = cfs_rq->curr;
+	/*
+	 * 获取当前rq的clock_task
+	 */
 	u64 now = rq_clock_task(rq_of(cfs_rq));
 	u64 delta_exec;
 
 	if (unlikely(!curr))
 		return;
 
+	/*
+	 * 从上次调用update_curr()到现在的时间差
+	 */
 	delta_exec = now - curr->exec_start;
 	if (unlikely((s64)delta_exec <= 0))
 		return;
 
+	/*
+	 * 更新exec_start字段
+	 */
 	curr->exec_start = now;
 
 	schedstat_set(curr->statistics.exec_max,
@@ -852,6 +878,9 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	curr->sum_exec_runtime += delta_exec;
 	schedstat_add(cfs_rq->exec_clock, delta_exec);
 
+	/*
+	 * 计算vruntime
+	 */
 	curr->vruntime += calc_delta_fair(delta_exec, curr);
 	update_min_vruntime(cfs_rq);
 
@@ -5274,6 +5303,8 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 
 	/*
 	 * 向上迭代
+	 * - sched_entity->parent何时设置？
+	 *   > __set_task_cpu()
 	 */
 	for_each_sched_entity(se) {
 		/*
@@ -10097,6 +10128,7 @@ static void task_fork_fair(struct task_struct *p)
 	/*
 	 * 父进程当前所处的cfs_rq当前正在运行的se
 	 * - 这不肯定是父进程current吗？
+	 *   > 组调度的情况？
 	 */
 	curr = cfs_rq->curr;
 	/*
@@ -10105,10 +10137,14 @@ static void task_fork_fair(struct task_struct *p)
 	if (curr) {
 		/*
 		 * 更新当前进程运行时间
+		 * - cfs核心函数
 		 */
 		update_curr(cfs_rq);
 		se->vruntime = curr->vruntime;
 	}
+	/*
+	 * 根据情况对进程的虚拟时间进行一些惩罚
+	 */
 	place_entity(cfs_rq, se, 1);
 
 	if (sysctl_sched_child_runs_first && curr && entity_before(curr, se)) {
@@ -10120,6 +10156,10 @@ static void task_fork_fair(struct task_struct *p)
 		resched_curr(rq);
 	}
 
+	/*
+	 * 为什么要减掉cfs_rq->min_vruntime？
+	 * - 在新进程加入调度器时又加了回来的
+	 */
 	se->vruntime -= cfs_rq->min_vruntime;
 	rq_unlock(rq, &rf);
 }

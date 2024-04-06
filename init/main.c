@@ -1317,6 +1317,9 @@ static noinline void __init kernel_init_freeable(void)
 	init_mm_internals();
 
 	do_pre_smp_initcalls();
+	/*
+	 * softlockup相关
+	 */
 	lockup_detector_init();
 
 	/*

@@ -31,9 +31,13 @@ struct xfs_defer_pending {
 	 */
 	struct list_head		dfp_list;	/* pending items */
 	/*
-	 * 作为链表头，链表元素是 xfs_rmap_intent->ri_list
+	 * 作为链表头
 	 * - 在xfs_defer_pending本身保序的前提下，相同类型的xfs_rmap_intent链
 	 *   接到同一个xfs_defer_pending
+	 *
+	 * 链表元素：
+	 * - xfs_extent_free_item->xefi_list
+	 * - xfs_rmap_intent->ri_list
 	 */
 	struct list_head		dfp_work;	/* work items */
 	void				*dfp_intent;	/* log intent item */
@@ -52,13 +56,30 @@ void xfs_defer_move(struct xfs_trans *dtp, struct xfs_trans *stp);
 /* Description of a deferred type. */
 struct xfs_defer_op_type {
 	void (*abort_intent)(void *);
+	/*
+	 * 创建一个intent item对应的done item
+	 * - 要注意的是这里虽然将其挂到xfs_trans->t_items链表上，但并没有设置
+	 *   XFS_LI_DIRTY标志，没有该标志的话，xlog_cil_push是不会写入iclog的
+	 */
 	void *(*create_done)(struct xfs_trans *, void *, unsigned int);
+	/*
+	 * 这里会设置XFS_LI_DIRTY，此时该done item会被写入iclog了
+	 */
 	int (*finish_item)(struct xfs_trans *, struct list_head *, void *,
 			void **);
 	void (*finish_cleanup)(struct xfs_trans *, void *, int);
 	void (*cancel_item)(struct list_head *);
 	int (*diff_items)(void *, struct list_head *, struct list_head *);
+	/*
+	 * 创建intent item，并挂入xfs_trans->t_items链表的尾部
+	 * - 这里挂入尾部，表明了虽然xfs_defer_finish()的调用在xfs_trans_roll()
+	 *   之前，但defer item还是在前面已经发生的log之后发生；
+	 * - 这里没有设置intent item的XFS_LI_DIRTY标志
+	 */
 	void *(*create_intent)(struct xfs_trans *, uint);
+	/*
+	 * 这里会设置intent item的XFS_LI_DIRTY标志
+	 */
 	void (*log_item)(struct xfs_trans *, void *, struct list_head *);
 	unsigned int		max_items;
 };

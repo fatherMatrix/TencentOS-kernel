@@ -445,6 +445,10 @@ xfs_extent_free_log_item(
 	uint				next_extent;
 	struct xfs_extent		*extp;
 
+	/*
+	 * 一个xfs_defer_pending可能关联多个xfs_extent_free_item，
+	 * 本函数应该被循环调用
+	 */
 	free = container_of(item, struct xfs_extent_free_item, xefi_list);
 
 	tp->t_flags |= XFS_TRANS_DIRTY;

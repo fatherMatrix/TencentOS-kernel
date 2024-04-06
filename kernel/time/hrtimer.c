@@ -1663,6 +1663,8 @@ retry:
 
 	/*
 	 * 处理所有到期的硬定时器
+	 * - watchdog_timer_fn()
+	 * -
 	 */
 	__hrtimer_run_queues(cpu_base, now, flags, HRTIMER_ACTIVE_HARD);
 

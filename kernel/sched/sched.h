@@ -520,20 +520,40 @@ struct cfs_bandwidth { };
 
 /* CFS-related fields in a runqueue */
 struct cfs_rq {
+	/*
+	 * 就绪队列的总权重
+	 */
 	struct load_weight	load;
+	/*
+	 * 就绪队列中runable状态进程的权重
+	 */
 	unsigned long		runnable_weight;
+	/*
+	 * runable状态进程的数量
+	 */
 	unsigned int		nr_running;
+	/*
+	 * 在支持组调度机制时，这个成员表示cfs就绪队列中包含组调度里所有runable
+	 * 状态进程的数量。
+	 * - h表示hierarchy
+	 */
 	unsigned int		h_nr_running;      /* SCHED_{NORMAL,BATCH,IDLE} */
 	unsigned int		idle_h_nr_running; /* SCHED_IDLE */
 
+	/*
+	 * 统计就绪队列的总运行时间
+	 */
 	u64			exec_clock;
+	/*
+	 * 用于跟踪整个cfs就绪队列中红黑树里最小的vruntime值
+	 */
 	u64			min_vruntime;
 #ifndef CONFIG_64BIT
 	u64			min_vruntime_copy;
 #endif
 
 	/*
-	 * 红黑树的root
+	 * 红黑树的root，节点是sched_entity->run_node
 	 */
 	struct rb_root_cached	tasks_timeline;
 
@@ -546,6 +566,9 @@ struct cfs_rq {
 	 * 紧急需要运行的SE，即使违反调度策略，也要提前运行
 	 */
 	struct sched_entity	*next;
+	/*
+	 * 用于抢占内核，当唤醒进程抢占了当前进程时，last指向这个当前进程
+	 */
 	struct sched_entity	*last;
 	struct sched_entity	*skip;
 
@@ -890,6 +913,8 @@ DECLARE_STATIC_KEY_FALSE(sched_uclamp_used);
  * Locking rule: those places that want to lock multiple runqueues
  * (such as the load balancing or the thread migration code), lock
  * acquire operations must be ordered by ascending &runqueue.
+ *
+ * 系统中每个cpu都会有一个就绪队列
  */
 struct rq {
 	/* runqueue lock: */
@@ -898,6 +923,8 @@ struct rq {
 	/*
 	 * nr_running and cpu_load should be in the same cacheline because
 	 * remote CPUs use both these fields when doing load calculation.
+	 *
+	 * 就绪队列中可运行的进程数量
 	 */
 	unsigned int		nr_running;
 #ifdef CONFIG_NUMA_BALANCING
@@ -961,9 +988,18 @@ struct rq {
 	unsigned int		clock_update_flags;
 	/*
 	 * 用于实现就绪队列自身的时钟
+	 * - 单位是纳秒
+	 *   > 参见update_rq_clock()
+	 * - 表示本rq初始化后的总运行时间
 	 */
 	u64			clock;
-	/* Ensure that all clocks are in the same cache line */
+	/*
+	 * Ensure that all clocks are in the same cache line
+	 * - 单位是纳秒
+	 * - 该变量在每个时钟节拍到来时更新
+	 *   > 参见update_rq_clock_task()
+	 * - 表示当前进程的运行时间
+	 */
 	u64			clock_task ____cacheline_aligned;
 	u64			clock_pelt;
 	unsigned long		lost_idle_time;
@@ -997,8 +1033,14 @@ struct rq {
 
 	/* CPU of this runqueue: */
 	int			cpu;
+	/*
+	 * 表示cpu处于active或者online状态
+	 */
 	int			online;
 
+	/*
+	 * 链表头，链表元素是sched_entity->group_node
+	 */
 	struct list_head cfs_tasks;
 
 	struct sched_avg	avg_rt;
@@ -1807,8 +1849,12 @@ struct sched_class {
 	 * 放弃cpu
 	 * - 在compat_yield sysctl关闭的情况下，该函数实际上执行先出队后入队；在这种情况下，
 	 *   se被放在最右边；
+	 * - 用于sched_yield()系统调用
 	 */
 	void (*yield_task)   (struct rq *rq);
+	/*
+	 * 用于yield_to()接口函数
+	 */
 	bool (*yield_to_task)(struct rq *rq, struct task_struct *p, bool preempt);
 
 	/*
@@ -1871,7 +1917,8 @@ struct sched_class {
 #endif
 
 	/*
-	 * 通常调用自time tick函数，它可能引起进程切换
+	 * 处理时钟节拍：
+	 * - 通常调用自time tick函数，它可能引起进程切换
 	 */
 	void (*task_tick)(struct rq *rq, struct task_struct *p, int queued);
 	/*
@@ -1888,9 +1935,12 @@ struct sched_class {
 	 * cannot assume the switched_from/switched_to pair is serliazed by
 	 * rq->lock. They are however serialized by p->pi_lock.
 	 *
-	 * 用于进程切换
+	 * 用于切换调度类？
 	 */
 	void (*switched_from)(struct rq *this_rq, struct task_struct *task);
+	/*
+	 * 切换到下一个进程来运行
+	 */
 	void (*switched_to)  (struct rq *this_rq, struct task_struct *task);
 	/*
 	 * 改变进程优先级
@@ -1901,6 +1951,10 @@ struct sched_class {
 	unsigned int (*get_rr_interval)(struct rq *rq,
 					struct task_struct *task);
 
+	/*
+	 * 更新就绪队列的运行时间
+	 * - 对于cfs的调度类，更新虚拟时间
+	 */
 	void (*update_curr)(struct rq *rq);
 
 #define TASK_SET_GROUP		0

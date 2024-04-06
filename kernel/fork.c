@@ -2047,6 +2047,7 @@ static __latent_entropy struct task_struct *copy_process(
 	 * Perform scheduler related setup. Assign this task to a CPU.
 	 *
 	 * 为新进程设置调度器相关的参数；
+	 * - 因为新创建进程的调度参数要重新设置，不能使用父进程的参数
 	 */
 	retval = sched_fork(clone_flags, p);
 	if (retval)

@@ -1151,12 +1151,21 @@ xfs_droplink(
 {
 	xfs_trans_ichgtime(tp, ip, XFS_ICHGTIME_CHG);
 
+	/*
+	 * 减小nlink
+	 */
 	drop_nlink(VFS_I(ip));
 	xfs_trans_log_inode(tp, ip, XFS_ILOG_CORE);
 
+	/*
+	 * 如果此时nlink不为0，则直接返回
+	 */
 	if (VFS_I(ip)->i_nlink)
 		return 0;
 
+	/*
+	 * 如果此时nlink为0了，则需要在磁盘上进行删除
+	 */
 	return xfs_iunlink(tp, ip);
 }
 
@@ -2026,8 +2035,11 @@ xfs_inactive(
  *
  * What if we modelled the unlinked list as a collection of records capturing
  * "X.next_unlinked = Y" relations?  If we indexed those records on Y, we'd
+ *                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * have a fast way to look up unlinked list predecessors, which avoids the
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * slow list walk.  That's exactly what we do here (in-core) with a per-AG
+ * ^^^^^^^^^^^^^^^
  * rhashtable.
  *
  * Because this is a backref cache, we ignore operational failures since the
@@ -2035,7 +2047,9 @@ xfs_inactive(
  * should bubble out are for obviously incorrect situations.
  *
  * All users of the backref cache MUST hold the AGI buffer lock to serialize
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * access or have otherwise provided for concurrency control.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  */
 
 /* Capture a "X.next_unlinked = Y" relationship. */
@@ -2062,6 +2076,10 @@ xfs_iunlink_obj_cmpfn(
 static const struct rhashtable_params xfs_iunlink_hash_params = {
 	.min_size		= XFS_AGI_UNLINKED_BUCKETS,
 	.key_len		= sizeof(xfs_agino_t),
+	/*
+	 * 哈希表的key是next_unlinked
+	 * - 该哈希表的主要作用参见xfs_perag->pagi_unlinked_hash
+	 */
 	.key_offset		= offsetof(struct xfs_iunlink,
 					   iu_next_unlinked),
 	.head_offset		= offsetof(struct xfs_iunlink, iu_rhash_head),
@@ -2274,6 +2292,10 @@ xfs_iunlink_update_dinode(
 	trace_xfs_iunlink_update_dinode(mp, agno, agino,
 			be32_to_cpu(dip->di_next_unlinked), next_agino);
 
+	/*
+	 * 新释放的xfs_dinode->di_next_unlinked指向原来的inode
+	 * - 就是这个链表是反着串的，新元素放在链表头
+	 */
 	dip->di_next_unlinked = cpu_to_be32(next_agino);
 	offset = imap->im_boffset +
 			offsetof(struct xfs_dinode, di_next_unlinked);
@@ -2382,6 +2404,9 @@ xfs_iunlink(
 		/*
 		 * There is already another inode in the bucket, so point this
 		 * inode to the current head of the list.
+		 *
+		 * 将本xfs_inode->xfs_dinode->di_next_unlinked指向当前哈希桶的
+		 * 头节点；后面会将本xfs_inode放到哈希桶的头节点上。
 		 */
 		error = xfs_iunlink_update_inode(tp, ip, agno, next_agino,
 				&old_agino);
@@ -2392,6 +2417,9 @@ xfs_iunlink(
 		/*
 		 * agino has been unlinked, add a backref from the next inode
 		 * back to agino.
+		 *
+		 * 这里是设置xfs_perag->pagi_unlinked_hash哈希表，目的在于通过
+		 * di_next_unlinked反向查找前一个xfs_inode节点；
 		 */
 		pag = xfs_perag_get(mp, agno);
 		error = xfs_iunlink_add_backref(pag, agino, next_agino);
@@ -2449,11 +2477,26 @@ STATIC int
 xfs_iunlink_map_prev(
 	struct xfs_trans	*tp,
 	xfs_agnumber_t		agno,
+	/*
+	 * 哈希桶的第一个元素
+	 */
 	xfs_agino_t		head_agino,
+	/*
+	 * 要查找的目标元素
+	 */
 	xfs_agino_t		target_agino,
+	/*
+	 * 返回X当且仅当X.di_next_unlinked = target_agino
+	 */
 	xfs_agino_t		*agino,
 	struct xfs_imap		*imap,
+	/*
+	 * X/agino的xfs_dinode
+	 */
 	struct xfs_dinode	**dipp,
+	/*
+	 * X/agino的xfs_buf
+	 */
 	struct xfs_buf		**bpp,
 	struct xfs_perag	*pag)
 {
@@ -2464,9 +2507,16 @@ xfs_iunlink_map_prev(
 	ASSERT(head_agino != target_agino);
 	*bpp = NULL;
 
-	/* See if our backref cache can find it faster. */
+	/*
+	 * See if our backref cache can find it faster.
+	 * - 首先尝试在xfs_perag->pagi_unlinked_hash哈希树中查找
+	 * - agino.di_next_unlinked = target_agino
+	 */
 	*agino = xfs_iunlink_lookup_backref(pag, target_agino);
 	if (*agino != NULLAGINO) {
+	/*
+	 * 找到了
+	 */
 		error = xfs_iunlink_map_ino(tp, agno, *agino, imap, dipp, bpp);
 		if (error)
 			return error;
@@ -2482,6 +2532,12 @@ xfs_iunlink_map_prev(
 		*bpp = NULL;
 		WARN_ON_ONCE(1);
 	}
+
+	/*
+	 * 未找到或者出错了
+	 * - 为什么会没找到？
+	 * - 为什么会出错？
+	 */
 
 	trace_xfs_iunlink_map_prev_fallback(mp, agno);
 
@@ -2562,6 +2618,11 @@ xfs_iunlink_remove(
 	 * Set our inode's next_unlinked pointer to NULL and then return
 	 * the old pointer value so that we can update whatever was previous
 	 * to us in the list to point to whatever was next in the list.
+	 *
+	 * 将本xfs_inode->xfs_dinode->di_next_unlinked设置为NULL，并在next_agino
+	 * 中返回原值。
+	 * - 这里只是做完了在单链表中删除一个元素的一半
+	 * - next_agino是ip的下一个unlinked inode
 	 */
 	error = xfs_iunlink_update_inode(tp, ip, agno, NULLAGINO, &next_agino);
 	if (error)
@@ -2573,6 +2634,11 @@ xfs_iunlink_remove(
 	 *
 	 * Later, if this inode was in the middle of the list we'll update
 	 * this inode's backref to point from the next inode.
+	 *
+	 * 对于agino.di_next_unlinked = next_agino，如果next_agino不等于
+	 * NULLAGINO，说明xfs_perag->pagi_unlinked_hash哈希表中存在一个指向agino
+	 * 的反向索引，即hash(next_agino) -> agino，此时需要设置
+	 * hash(next_agino) -> NULLAGINO；
 	 */
 	if (next_agino != NULLAGINO) {
 		pag = xfs_perag_get(mp, agno);
@@ -2582,7 +2648,16 @@ xfs_iunlink_remove(
 			goto out;
 	}
 
+	/*
+	 * 接下来，需要处理X.di_next_unlinked = agino的哈希元素了
+	 */
+
 	if (head_agino == agino) {
+	/*
+	 * 如果agino是哈希桶的头，那么不存在X使得X.di_next_unlinked = agino
+	 * - 此时不需要操作xfs_perag->pagi_unlinked_hash哈希表
+	 * - 仅操作单链表即可
+	 */
 		/* Point the head of the list to the next unlinked inode. */
 		error = xfs_iunlink_update_bucket(tp, agno, agibp, bucket_index,
 				next_agino);
@@ -2651,6 +2726,11 @@ xfs_ifree_cluster(
 
 	inum = xic->first_ino;
 	pag = xfs_perag_get(mp, XFS_INO_TO_AGNO(mp, inum));
+	/*
+	 * 算出一个inode chunk中有几个cluster
+	 * - 一个chunk中包含多个cluster
+	 * - 每个cluster对应一个xfs_buf
+	 */
 	nbufs = igeo->ialloc_blks / igeo->blocks_per_cluster;
 
 	for (j = 0; j < nbufs; j++, inum += igeo->inodes_per_cluster) {
@@ -2661,6 +2741,9 @@ xfs_ifree_cluster(
 		 */
 		ioffset = inum - xic->first_ino;
 		if ((xic->alloc & XFS_INOBT_MASK(ioffset)) == 0) {
+		/*
+		 * 对于和xic表示的cluster不同的cluster，这里会一直continue的呀
+		 */
 			ASSERT(ioffset % igeo->inodes_per_cluster == 0);
 			continue;
 		}
@@ -2688,7 +2771,9 @@ xfs_ifree_cluster(
 		 * didn't read it from disk. That's not important because we are
 		 * only using to mark the buffer as stale in the log, and to
 		 * attach stale cached inodes on it. That means it will never be
+		 *                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		 * dispatched for IO. If it is, we want to know about it, and we
+		 * ^^^^^^^^^^^^^^^^^^
 		 * want it to fail. We can acheive this by adding a write
 		 * verifier to the buffer.
 		 */
@@ -2700,11 +2785,17 @@ xfs_ifree_cluster(
 		 * in-memory inode walk can't lock them. By marking them all
 		 * stale first, we will not attempt to lock them in the loop
 		 * below as the XFS_ISTALE flag will be set.
+		 *
+		 * 每个xfs_buf都关联了很多xfs_log_item
 		 */
 		list_for_each_entry(lip, &bp->b_li_list, li_bio_list) {
 			if (lip->li_type == XFS_LI_INODE) {
 				iip = (xfs_inode_log_item_t *)lip;
 				ASSERT(iip->ili_logged == 1);
+				/*
+				 * 理论上，li_cb在xfs_log_item写入数据区后才会
+				 * 调用，但看这里的意思，似乎是停止写入？
+				 */
 				lip->li_cb = xfs_istale_done;
 				xfs_trans_ail_copy_lsn(mp->m_ail,
 							&iip->ili_flush_lsn,
@@ -2863,6 +2954,10 @@ xfs_ifree(
 
 	/*
 	 * Pull the on-disk inode from the AGI unlinked list.
+	 *
+	 * 处理unlinked list及反向查找的哈希表
+	 * - 删除ip
+	 * - 重新连接剩余元素
 	 */
 	error = xfs_iunlink_remove(tp, ip);
 	if (error)
@@ -2893,6 +2988,9 @@ xfs_ifree(
 	VFS_I(ip)->i_generation++;
 	xfs_trans_log_inode(tp, ip, XFS_ILOG_CORE);
 
+	/*
+	 * 整个cluster inode全部都被释放了，做后续处理
+	 */
 	if (xic.deleted)
 		error = xfs_ifree_cluster(ip, tp, &xic);
 
@@ -3062,6 +3160,10 @@ xfs_remove(
 	if (error)
 		goto out_trans_cancel;
 
+	/*
+	 * 这里一定要处于xfs_droplink()之后
+	 * - 因为要求AGI的锁顺序先于AGF的锁顺序
+	 */
 	error = xfs_dir_removename(tp, dp, name, ip->i_ino, resblks);
 	if (error) {
 		ASSERT(error != -ENOENT);

@@ -136,6 +136,11 @@ struct bus_type {
 	int (*remove)(struct device *dev);
 	void (*shutdown)(struct device *dev);
 
+	/*
+	 * 本总线上设备的热插拔操作
+	 * - online_show()/online_store()
+	 *   > /sys/devices/system/cpu/cpu1/online
+	 */
 	int (*online)(struct device *dev);
 	int (*offline)(struct device *dev);
 
@@ -879,6 +884,10 @@ ssize_t device_store_bool(struct device *dev, struct device_attribute *attr,
 	struct device_attribute dev_attr_##_name =		\
 		__ATTR_IGNORE_LOCKDEP(_name, _mode, _show, _store)
 
+/*
+ * DEVICE_ATTR_*()宏的作用是定义struct device_attribute结构体，定义好的结构体通
+ * 过device_create_file()函数添加到sysfs中；
+ */
 extern int device_create_file(struct device *device,
 			      const struct device_attribute *entry);
 extern void device_remove_file(struct device *dev,

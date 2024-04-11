@@ -291,6 +291,8 @@ xfs_ialloc_inode_init(
 	 * Loop over the new block(s), filling in the inodes.  For small block
 	 * sizes, manipulate the inodes in buffers  which are multiples of the
 	 * blocks size.
+	 *
+	 * 计算这个批量分配的inode集合可以分为多少个cluster
 	 */
 	nbufs = length / M_IGEO(mp)->blocks_per_cluster;
 
@@ -331,6 +333,9 @@ xfs_ialloc_inode_init(
 	} else
 		version = 2;
 
+	/*
+	 * 对这个chunk中的每个cluster
+	 */
 	for (j = 0; j < nbufs; j++) {
 		/*
 		 * Get the block.
@@ -351,6 +356,9 @@ xfs_ialloc_inode_init(
 		 * 等进行设置；
 		 */
 		xfs_buf_zero(fbuf, 0, BBTOB(fbuf->b_length));
+		/*
+		 * 对这个cluster中的每个inode
+		 */
 		for (i = 0; i < M_IGEO(mp)->inodes_per_cluster; i++) {
 			int	ioffset = i << mp->m_sb.sb_inodelog;
 			uint	isize = xfs_dinode_size(version);
@@ -653,6 +661,7 @@ xfs_ialloc_ag_alloc(
 	 * at one time.
 	 *
 	 * 批量分配inode时的默认个数？
+	 * - 是的
 	 */
 	newlen = igeo->ialloc_inos;
 	if (igeo->maxicount &&
@@ -1927,12 +1936,22 @@ xfs_difree_inode_chunk(
 	DECLARE_BITMAP(holemask, XFS_INOBT_HOLEMASK_BITS);
 
 	if (!xfs_inobt_issparse(rec->ir_holemask)) {
-		/* not sparse, calculate extent info directly */
+	/*
+	 * 非sparse chunk
+	 */
+		/*
+		 * not sparse, calculate extent info directly
+		 * - 内部产生EFI
+		 */
 		xfs_bmap_add_free(tp, XFS_AGB_TO_FSB(mp, agno, sagbno),
 				  M_IGEO(mp)->ialloc_blks,
 				  &XFS_RMAP_OINFO_INODES);
 		return;
 	}
+
+	/*
+	 * 走到这里，说明是sparse chunk
+	 */
 
 	/* holemask is only 16-bits (fits in an unsigned long) */
 	ASSERT(sizeof(rec->ir_holemask) <= sizeof(holemask[0]));
@@ -1943,6 +1962,9 @@ xfs_difree_inode_chunk(
 	 * holemask and convert the start/end index of each range to an extent.
 	 * We start with the start and end index both pointing at the first 0 in
 	 * the mask.
+	 *
+	 * - ir_holemask中1表示为hole，0表示不为hole，所以这里要对连续的0区域触
+	 *   发EFI
 	 */
 	startidx = endidx = find_first_zero_bit(holemask,
 						XFS_INOBT_HOLEMASK_BITS);
@@ -1964,6 +1986,9 @@ xfs_difree_inode_chunk(
 		 * nextbit is not contiguous with the current end index. Convert
 		 * the current start/end to an extent and add it to the free
 		 * list.
+		 *
+		 * 看的出来，这里还是保证了稀疏的inode chunk中，4个block还是连续
+		 * 的；
 		 */
 		agbno = sagbno + (startidx * XFS_INODES_PER_HOLEMASK_BIT) /
 				  mp->m_sb.sb_inopblock;
@@ -2045,11 +2070,25 @@ xfs_difree_inobt(
 
 	/*
 	 * When an inode chunk is free, it becomes eligible for removal. Don't
+	 *                                                               ^^^^^
 	 * remove the chunk if the block size is large enough for multiple inode
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * chunks (that might not be free).
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+	 *
+	 * inode数量大于chunk size是什么情况？
 	 */
 	if (!(mp->m_flags & XFS_MOUNT_IKEEP) &&
+		/*
+		 * 整个chunk中的所有inode都是free状态
+		 */
 	    rec.ir_free == XFS_INOBT_ALL_FREE &&
+		/*
+		 * 因为xfs中的block可以人为设置地很大，所以可能sb_inopblock也会
+		 * 很大；
+		 * - 这种情况什么时候去删除呢？
+		 * - 必要性？
+		 */
 	    mp->m_sb.sb_inopblock <= XFS_INODES_PER_CHUNK) {
 		xic->deleted = true;
 		xic->first_ino = XFS_AGINO_TO_INO(mp, agno, rec.ir_startino);
@@ -2071,12 +2110,20 @@ xfs_difree_inobt(
 		xfs_trans_mod_sb(tp, XFS_TRANS_SB_ICOUNT, -ilen);
 		xfs_trans_mod_sb(tp, XFS_TRANS_SB_IFREE, -(ilen - 1));
 
+		/*
+		 * 在btree上将该chunk的extents摘下
+		 */
 		if ((error = xfs_btree_delete(cur, &i))) {
 			xfs_warn(mp, "%s: xfs_btree_delete returned error %d.",
 				__func__, error);
 			goto error0;
 		}
 
+		/*
+		 * 生成EFI
+		 * - EFI会在正常的log item被log之前log，EFD在正常的log item被log
+		 *   之后执行finish_item，其中会真正执行extents的释放动作；
+		 */
 		xfs_difree_inode_chunk(tp, agno, &rec);
 	} else {
 		xic->deleted = false;
@@ -2380,7 +2427,7 @@ xfs_imap(
 	agno = XFS_INO_TO_AGNO(mp, ino);
 	agino = XFS_INO_TO_AGINO(mp, ino);
 	/*
-	 * 这个agbno并不是指在AG中的绝对bno，而是在inobt中的bno
+	 * 通过agino解码其所在agbno
 	 */
 	agbno = XFS_AGINO_TO_AGBNO(mp, agino);
 	if (agno >= mp->m_sb.sb_agcount || agbno >= mp->m_sb.sb_agblocks ||
@@ -2453,6 +2500,10 @@ xfs_imap(
 		offset_agbno = agbno & M_IGEO(mp)->inoalign_mask;
 		chunk_agbno = agbno - offset_agbno;
 	} else {
+		/*
+		 * chunk_agbno返回agino所在chunk的起始block的ag bno
+		 * offset_agbno返回agbno - chunk_agbno
+		 */
 		error = xfs_imap_lookup(mp, tp, agno, agino, agbno,
 					&chunk_agbno, &offset_agbno, flags);
 		if (error)
@@ -2462,13 +2513,27 @@ xfs_imap(
 out_map:
 	ASSERT(agbno >= chunk_agbno);
 	cluster_agbno = chunk_agbno +
+		/*
+		 * 这一行算出offset_agbno在chunk_agbno起始的chunk中是第几个
+		 * cluster
+		 */
 		((offset_agbno / M_IGEO(mp)->blocks_per_cluster) *
+		/*
+		 * 这行算出本cluster前面有几个block
+		 * - 加上前面的chunk_agbno就是本cluster的起始block agbno
+		 */
 		 M_IGEO(mp)->blocks_per_cluster);
+	/*
+	 * 计算出agbno在对应cluster中是第几个ino
+	 */
 	offset = ((agbno - cluster_agbno) * mp->m_sb.sb_inopblock) +
 		XFS_INO_TO_OFFSET(mp, ino);
 
 	imap->im_blkno = XFS_AGB_TO_DADDR(mp, agno, cluster_agbno);
 	imap->im_len = XFS_FSB_TO_BB(mp, M_IGEO(mp)->blocks_per_cluster);
+	/*
+	 * agbno在对应cluster中的字节偏移
+	 */
 	imap->im_boffset = (unsigned short)(offset << mp->m_sb.sb_inodelog);
 
 	/*
@@ -2868,6 +2933,8 @@ xfs_ialloc_setup_geometry(
 
 	/*
 	 * 这里为什么是max而不是min
+	 * - sb_inopblock是一个block所能承载的inode，这是我们分配inode集合的最
+	 *   小单位；
 	 */
 	igeo->ialloc_inos = max_t(uint16_t, XFS_INODES_PER_CHUNK,
 			sbp->sb_inopblock);

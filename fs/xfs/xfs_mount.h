@@ -472,6 +472,10 @@ typedef struct xfs_perag {
 	 * Unlinked inode information.  This incore information reflects
 	 * data stored in the AGI, so callers must hold the AGI buffer lock
 	 * or have some other means to control concurrency.
+	 *
+	 * 磁盘上unlink inode单链表的反向查找哈希表
+	 * - 纯内存形式，磁盘上只是一个单链表
+	 * - 目的是对于X.di_next_unlinked = Y，给定Y，快速找到X
 	 */
 	struct rhashtable	pagi_unlinked_hash;
 } xfs_perag_t;

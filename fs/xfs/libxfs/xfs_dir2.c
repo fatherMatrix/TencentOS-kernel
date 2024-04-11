@@ -406,6 +406,8 @@ out_free:
 
 /*
  * Remove an entry from a directory.
+ * - 为什么要同时传入name和ino呢？
+ *   > 对于同一个目录下的两个硬链接，其ino相同，name不同
  */
 int
 xfs_dir_removename(

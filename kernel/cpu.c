@@ -52,6 +52,8 @@
  * @result:	Result of the operation
  * @done_up:	Signal completion to the issuer of the task for cpu-up
  * @done_down:	Signal completion to the issuer of the task for cpu-down
+ *
+ * 标志一个cpu的hotplug的相关状态
  */
 struct cpuhp_cpu_state {
 	enum cpuhp_state	state;
@@ -109,6 +111,8 @@ static inline void cpuhp_lock_release(bool bringup) { }
  * @startup:	Startup function of the step
  * @teardown:	Teardown function of the step
  * @cant_stop:	Bringup/teardown can't be stopped at this step
+ *
+ * 每个cpuhp_state中的状态对应的操作函数
  */
 struct cpuhp_step {
 	const char		*name;
@@ -1391,7 +1395,10 @@ int __boot_cpu_id;
 
 #endif /* CONFIG_SMP */
 
-/* Boot processor state steps */
+/*
+ * Boot processor state steps
+ * - 启动cpu的状态机回调
+ */
 static struct cpuhp_step cpuhp_hp_states[] = {
 	[CPUHP_OFFLINE] = {
 		.name			= "offline",

@@ -71,6 +71,12 @@ struct xfs_log_item {
 	 * - 当xfs_buf的io操作完成后，依次调用该链表上xfs_log_item的回调
 	 */
 	struct list_head		li_bio_list;	/* buffer item list */
+	/*
+	 * 当log item写入完成后的回调
+	 * - 写入disk log space？
+	 * - 写入metadata space？
+	 *   > 好像是这个
+	 */
 	void				(*li_cb)(struct xfs_buf *,
 						 struct xfs_log_item *);
 							/* buffer item iodone */

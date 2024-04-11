@@ -164,6 +164,8 @@ const struct xfs_buf_ops xfs_inode_buf_ra_ops = {
  *
  * If a non-zero error is returned, then the contents of bpp and dipp are
  * undefined.
+ *
+ * - 返回的xfs_buf似乎指向的是cluster
  */
 int
 xfs_imap_to_bp(

@@ -8312,7 +8312,7 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 	 */
 	/*
 	 * 关中断?
-	 * - 本函数下面（guest返回之后）有对应的开抢占喝开中断；但按理解似乎应
+	 * - 本函数下面（guest返回之后）有对应的开抢占和开中断；但按理解似乎应
 	 *   该是:
 	 *   - vmentry时pCPU加载了vCPU对应的vmcs中的控制寄存器，导致在进入guest
 	 *     态后实际上处于另外可能的状态？
@@ -8429,6 +8429,7 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 	/*
 	 * 中断相关的退出处理，需要在关中断的情况下执行；
 	 * - 后面开中断后还有handle_exit()；
+	 * - intel: vmx_handle_exit_irqoff()
 	 */
 	kvm_x86_ops->handle_exit_irqoff(vcpu);
 

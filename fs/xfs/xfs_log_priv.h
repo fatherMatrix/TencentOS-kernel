@@ -553,6 +553,8 @@ struct xlog {
 	 * - 参见：xlog_assign_tail_lsn_locked()
 	 *
 	 * 这个值变大，表示disk log space上释放了一些空间！
+	 * - 因为数据被写入到metadata region中，表示disk log space中有部分数据就
+	 *   无用了，相当于disk log space的空间释放。
 	 */
 	atomic64_t		l_tail_lsn ____cacheline_aligned_in_smp;
 

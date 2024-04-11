@@ -150,6 +150,7 @@ typedef struct xfs_sb {
 	/*
 	 * 每个block包含的inode数量
 	 * - 等于sb_blocksize /sb_inodesize
+	 * - 该值是mkfs.xfs时由用户指定，是其他字段的计算依据
 	 */
 	uint16_t	sb_inopblock;	/* inodes per block */
 	char		sb_fname[XFSLABEL_MAX]; /* file system name */
@@ -860,7 +861,10 @@ typedef struct xfs_agi {
 	 * Hash table of inodes which have been unlinked but are
 	 * still being referenced.
 	 *
-	 * 这是agino？
+	 * 保存unlinked inode的agino
+	 * - 是agino不是ino
+	 * - 单链表
+	 *   > 单链表的反向查找问题由xfs_perag->pagi_unlinked_hash哈希表解决
 	 */
 	__be32		agi_unlinked[XFS_AGI_UNLINKED_BUCKETS];
 	/*
@@ -1245,6 +1249,9 @@ static inline void xfs_dinode_put_rdev(struct xfs_dinode *dip, xfs_dev_t rdev)
 #define	XFS_INO_TO_AGBNO(mp,i)		\
 	(((xfs_agblock_t)(i) >> XFS_INO_OFFSET_BITS(mp)) & \
 		XFS_INO_MASK(XFS_INO_AGBNO_BITS(mp)))
+/*
+ * 计算ino在一个block中是第几个
+ */
 #define	XFS_INO_TO_OFFSET(mp,i)		\
 	((int)(i) & XFS_INO_MASK(XFS_INO_OFFSET_BITS(mp)))
 #define	XFS_INO_TO_FSB(mp,i)		\
@@ -1500,6 +1507,13 @@ typedef struct xfs_inobt_rec {
  */
 typedef struct xfs_inobt_rec_incore {
 	xfs_agino_t	ir_startino;	/* starting inode number */
+	/*
+	 * xfs分配新的ondisk inode时每次分配64个，通常占用4个blocks？当磁盘上没
+	 * 有足够大的extents时，xfs会使用ir_holemask字段禁止对非full inode chunk
+	 * 中的某些inode的使用；
+	 * - 这里1一个bit表示4个inode的hole
+	 *   > 参见：xfs_inobt_irec_to_allocmask()
+	 */
 	uint16_t	ir_holemask;	/* hole mask for sparse chunks */
 	uint8_t		ir_count;	/* total inode count */
 	uint8_t		ir_freecount;	/* count of free inodes (set bits) */

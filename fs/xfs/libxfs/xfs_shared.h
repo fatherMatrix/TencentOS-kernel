@@ -165,7 +165,13 @@ struct xfs_ino_geometry {
 	unsigned int	inobt_maxlevels; /* max inobt btree levels. */
 
 	/* Size of inode allocations under normal operation. */
+	/*
+	 * 每次inode cluster分配时批量分配的inode数量
+	 */
 	unsigned int	ialloc_inos;
+	/*
+	 * 每次inode cluster分配时批量分配所需的fsblock数量
+	 */
 	unsigned int	ialloc_blks;
 
 	/* Minimum inode blocks for a sparse allocation. */

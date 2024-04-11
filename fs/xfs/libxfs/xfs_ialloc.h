@@ -16,6 +16,10 @@ struct xfs_btree_cur;
 /* Move inodes in clusters of this size */
 #define	XFS_INODE_BIG_CLUSTER_SIZE	8192
 
+/*
+ * 怎么感觉这里表示的是一个chunk？
+ * - 对的，这里表示的确实是一个chunk，参见xfs_difree_inobt()
+ */
 struct xfs_icluster {
 	bool		deleted;	/* record is deleted */
 	xfs_ino_t	first_ino;	/* first inode number */

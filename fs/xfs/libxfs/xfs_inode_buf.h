@@ -43,10 +43,16 @@ struct xfs_icdinode {
 /*
  * Inode location information.  Stored in the inode and passed to
  * xfs_imap_to_bp() to get a buffer and dinode for a given inode.
+ *
+ * 这是一个cluster，其中的每个inode都有自己的im_boffset
  */
 struct xfs_imap {
 	xfs_daddr_t	im_blkno;	/* starting BB of inode chunk */
 	unsigned short	im_len;		/* length in BBs of inode chunk */
+	/*
+	 * 在cluster中的偏移
+	 * - 单位是字节，参见xfs_imap()
+	 */
 	unsigned short	im_boffset;	/* inode offset in block in bytes */
 };
 

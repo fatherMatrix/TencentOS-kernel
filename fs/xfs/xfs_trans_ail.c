@@ -413,6 +413,9 @@ xfsaild_push(
 
 	/* barrier matches the ail_target update in xfs_ail_push() */
 	smp_rmb();
+	/*
+	 * 获取push的目标lsn
+	 */
 	target = ailp->ail_target;
 	ailp->ail_target_prev = target;
 

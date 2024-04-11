@@ -2018,6 +2018,7 @@ xfs_alloc_longest_free_extent(
 
 /*
  * 计算要保留多少block才能保证树结构操作成功；
+ * - 这里计算的是分配或释放extents需要操作的树
  */
 unsigned int
 xfs_alloc_min_freelist(
@@ -2044,6 +2045,7 @@ xfs_alloc_min_freelist(
 /*
  * Check if the operation we are fixing up the freelist for should go ahead or
  * not. If we are freeing blocks, we always allow it, otherwise the allocation
+ *      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * is dependent on whether the size and shape of free space available will
  * permit the requested allocation to take place.
  */
@@ -2059,6 +2061,9 @@ xfs_alloc_space_available(
 	int			available;
 	xfs_extlen_t		agflcount;
 
+	/*
+	 * 对于XFS_ALLOC_FLAG_FREEING，总是允许
+	 */
 	if (flags & XFS_ALLOC_FLAG_FREEING)
 		return true;
 
@@ -2264,6 +2269,8 @@ xfs_defer_agfl_block(
  * If so, fix up the btree freelist's size.
  *
  * freelist是用来保存用于btree本身的空闲块的；
+ * - 本函数的调用者有可能是为了释放extents
+ *   > XFS_ALLOC_FLAG_FREEING
  */
 int			/* error */
 xfs_alloc_fix_freelist(
@@ -2387,6 +2394,9 @@ xfs_alloc_fix_freelist(
 		targs.oinfo = XFS_RMAP_OINFO_SKIP_UPDATE;
 	else
 		targs.oinfo = XFS_RMAP_OINFO_AG;
+	/*
+	 * 这是在做什么？
+	 */
 	while (!(flags & XFS_ALLOC_FLAG_NOSHRINK) && pag->pagf_flcount > need) {
 		error = xfs_alloc_get_freelist(tp, agbp, &bno, 0);
 		if (error)
@@ -2395,6 +2405,10 @@ xfs_alloc_fix_freelist(
 		/* defer agfl frees */
 		xfs_defer_agfl_block(tp, args->agno, bno, &targs.oinfo);
 	}
+
+	/*
+	 * 到这里时，pag->pagf_flcount <= need
+	 */
 
 	targs.tp = tp;
 	targs.mp = mp;

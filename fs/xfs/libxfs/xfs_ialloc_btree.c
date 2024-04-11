@@ -474,8 +474,13 @@ xfs_inobt_irec_to_allocmask(
 
 	/*
 	 * The holemask has 16-bits for a 64 inode record. Therefore each
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * holemask bit represents multiple inodes. Create a mask of bits to set
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * in the allocmask for each holemask bit.
+	 *
+	 * xfs_inobt_rec_incore->ir_holemask只有16bit，每一个bit表示几个inode的
+	 * hole在这里计算；
 	 */
 	inodespbit = (1 << XFS_INODES_PER_HOLEMASK_BIT) - 1;
 

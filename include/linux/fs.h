@@ -344,7 +344,8 @@ struct kiocb {
 static inline bool is_sync_kiocb(struct kiocb *kiocb)
 {
 	/*
-	 * 如果是同步的，该字段会置空
+	 * 如果是同步的，该字段会置空；
+	 * 如果是异步的，该字段会保存回调函数；
 	 */
 	return kiocb->ki_complete == NULL;
 }

@@ -48,6 +48,9 @@ void dump_stack_print_info(const char *log_lvl)
 	       log_lvl, raw_smp_processor_id(), current->pid, current->comm,
 	       kexec_crash_loaded() ? "Kdump: loaded " : "",
 	       print_tainted(),
+		/*
+		 * 内核版本号
+		 */
 	       init_utsname()->release,
 	       (int)strcspn(init_utsname()->version, " "),
 	       init_utsname()->version);

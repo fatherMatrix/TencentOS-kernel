@@ -86,7 +86,13 @@
  * at the end of the used ring. Guest should ignore the used->flags field. */
 #define VIRTIO_RING_F_EVENT_IDX		29
 
-/* Virtio ring descriptors: 16 bytes.  These can chain together via "next". */
+/*
+ * Virtio ring descriptors: 16 bytes.  These can chain together via "next".
+ * - 表示一段由guest分配的内存，作为一个数据传输的buffer。
+ *   > 所有vring_desc组成一个描述符表，vring_desc的个数即为virtqueue的队列深度
+ *
+ * 该结构体以结构体数组的形式出现，结构体数组即为"描述符表"。
+ */
 struct vring_desc {
 	/* Address (guest-physical). */
 	__virtio64 addr;
@@ -94,13 +100,32 @@ struct vring_desc {
 	__virtio32 len;
 	/* The flags as indicated above. */
 	__virtio16 flags;
-	/* We chain unused descriptors via this, too */
+	/*
+	 * We chain unused descriptors via this, too
+	 *
+	 * 驱动和设备的一次数据交互，可能需要用多个描述符来表示，多个描述符构成
+	 * 一个描述符链。
+	 * - 当前描述符是否是描述符链的最后一个、后面是否还有描述符，需要根据
+	 *   flag字段来判断。
+	 *   > VRING_DESC_F_NEXT：next字段指向下一个描述符
+	 */
 	__virtio16 next;
 };
 
+/*
+ * Guest通过Avail Ring向Host提供buffer，指示Guest增加的buffer位置和当前工作的位
+ * 置
+ */
 struct vring_avail {
 	__virtio16 flags;
+	/*
+	 * 驱动向设备发起操作时，下一个可用的ring数组元素的下标
+	 */
 	__virtio16 idx;
+	/*
+	 * 值数组，该数组中的每个元素表示一个指向vring_desc数组元素的下标
+	 * - idx是第1级索引，ring[idx]是指向vring_desc的第2级索引
+	 */
 	__virtio16 ring[];
 };
 
@@ -108,17 +133,37 @@ struct vring_avail {
 struct vring_used_elem {
 	/* Index of start of used descriptor chain. */
 	__virtio32 id;
-	/* Total length of the descriptor chain which was used (written to) */
+	/*
+	 * Total length of the descriptor chain which was used (written to)
+	 * - 之所以vring_used_elem中有长度，而vring_avail中没有，是因为：
+	 *   > 驱动向设备写的都是命令字，往往比较简单。即便是向设备存数据，也只
+	 *     是写一个地址进去。
+	 *   > 设备向驱动反馈时，有可能有数据。
+	 *     o DMA时数据应该也不多吧？
+	 */
 	__virtio32 len;
 };
 
+/*
+ * Host向guest通知已处理的
+ */
 struct vring_used {
 	__virtio16 flags;
+	/*
+	 * 设备向驱动提供数据时，下一个可用的vring_used_elem数组元素的下标
+	 */
 	__virtio16 idx;
+	/*
+	 * vring_used_elem数组，即设备向驱动交互的环
+	 * - idx是第1级索引，ring[idx]是指向vring_desc的第2级索引
+	 */
 	struct vring_used_elem ring[];
 };
 
 struct vring {
+	/*
+	 * vring队列深度，即vring_desc数组的元素个数-1
+	 */
 	unsigned int num;
 
 	struct vring_desc *desc;

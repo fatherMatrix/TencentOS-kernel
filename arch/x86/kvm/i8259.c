@@ -56,6 +56,11 @@ static void pic_unlock(struct kvm_pic *s)
 
 	spin_unlock(&s->lock);
 
+	/*
+	 * 这里被抢占了怎么办？这个时候中断岂不是要乱序到达了？
+	 * - pic阶段，guest应该是单核，有可能被抢占吗？
+	 *   > host上是多核呀，设备有多个吧？在host上的表现是不是应该是多线程？
+	 */
 	if (wakeup) {
 		kvm_for_each_vcpu(i, vcpu, s->kvm) {
 			/*

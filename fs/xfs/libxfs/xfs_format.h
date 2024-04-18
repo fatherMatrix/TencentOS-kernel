@@ -224,6 +224,9 @@ typedef struct xfs_sb {
 	uint8_t		sb_dirblklog;	/* log2 of dir block size (fsbs) */
 	uint8_t		sb_logsectlog;	/* log2 of the log sector size */
 	uint16_t	sb_logsectsize;	/* sector size for the log, bytes */
+	/*
+	 * 单位是byte
+	 */
 	uint32_t	sb_logsunit;	/* stripe unit size for the log */
 	uint32_t	sb_features2;	/* additional feature bits */
 

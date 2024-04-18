@@ -94,6 +94,9 @@ typedef struct xfs_buftarg {
 
 	/* LRU control structures */
 	struct shrinker		bt_shrinker;
+	/*
+	 * 链表头，链表元素是xfs_buf->b_lru
+	 */
 	struct list_lru		bt_lru;
 
 	struct percpu_counter	bt_io_count;
@@ -168,6 +171,8 @@ typedef struct xfs_buf {
 	/*
 	 * concurrent access to b_lru and b_lru_flags are protected by
 	 * bt_lru_lock and not by b_sema
+	 *
+	 * 链表元素，链表头是xfs_buftarg->bt_lru
 	 */
 	struct list_head	b_lru;		/* lru list */
 	spinlock_t		b_lock;		/* internal state lock */

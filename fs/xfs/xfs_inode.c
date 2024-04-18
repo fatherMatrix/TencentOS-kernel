@@ -2704,6 +2704,8 @@ out:
  * A big issue when freeing the inode cluster is that we _cannot_ skip any
  * inodes that are in memory - they all must be marked stale and attached to
  * the cluster buffer.
+ *
+ * 这里的xfs_ifree_cluster()实际上释放的chunk
  */
 STATIC int
 xfs_ifree_cluster(
@@ -2733,6 +2735,13 @@ xfs_ifree_cluster(
 	 */
 	nbufs = igeo->ialloc_blks / igeo->blocks_per_cluster;
 
+	/*
+	 * xfs_icluster *xic表示一个chunk，这里每次循环处理该chunk中的一个inode
+	 * cluster。
+	 * - inode cluster有没有可能大于一个chunk？
+	 *   > 各种PAGE_SIZE和xfs_inode size组合下都不可能，参见：
+	 *     o xfs_ialloc_setup_geometry()
+	 */
 	for (j = 0; j < nbufs; j++, inum += igeo->inodes_per_cluster) {
 		/*
 		 * The allocation bitmap tells us which inodes of the chunk were
@@ -2742,7 +2751,8 @@ xfs_ifree_cluster(
 		ioffset = inum - xic->first_ino;
 		if ((xic->alloc & XFS_INOBT_MASK(ioffset)) == 0) {
 		/*
-		 * 对于和xic表示的cluster不同的cluster，这里会一直continue的呀
+		 * 如果这个cluster中的第1个inode未分配，则continue
+		 * - 第1个inode能代表个cluster吗？
 		 */
 			ASSERT(ioffset % igeo->inodes_per_cluster == 0);
 			continue;
@@ -2760,6 +2770,11 @@ xfs_ifree_cluster(
 		 * to mark all the active inodes on the buffer stale.
 		 */
 		bp = xfs_trans_get_buf(tp, mp->m_ddev_targp, blkno,
+					/*
+					 * 每个fsblock包含的basic block数量
+					 * 乘
+					 * 一个cluster中的fsblock数量
+					 */
 					mp->m_bsize * igeo->blocks_per_cluster,
 					XBF_UNMAPPED);
 
@@ -2809,7 +2824,9 @@ xfs_ifree_cluster(
 		 * For each inode in memory attempt to add it to the inode
 		 * buffer and set it up for being staled on buffer IO
 		 * completion.  This is safe as we've locked out tail pushing
+		 *              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		 * and flushing by locking the buffer.
+		 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 		 *
 		 * We have already marked every inode that was part of a
 		 * transaction stale above, which means there is no point in
@@ -2835,7 +2852,13 @@ retry:
 			 * is not valid, the wrong inode or stale.
 			 */
 			spin_lock(&ip->i_flags_lock);
+			/*
+			 * 如果一个xfs_inode被reclaim了，那么会将其设置为0
+			 */
 			if (ip->i_ino != inum + i ||
+				/*
+				 * XFS_ISTALE表示被free了?
+				 */
 			    __xfs_iflags_test(ip, XFS_ISTALE)) {
 				spin_unlock(&ip->i_flags_lock);
 				rcu_read_unlock();

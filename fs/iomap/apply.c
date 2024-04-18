@@ -33,6 +33,8 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 {
 	/*
 	 * 用于保存数据的文件偏移到磁盘偏移间的映射
+	 * - 只能保存一段连续的空间，连续指磁盘空间和内存空间都连续，即只能处理
+	 *   一个extent
 	 */
 	struct iomap iomap = { 0 };
 	loff_t written = 0, ret;

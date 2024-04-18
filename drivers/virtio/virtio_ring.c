@@ -84,6 +84,10 @@ struct vring_desc_extra_packed {
 	u16 flags;			/* Descriptor flags. */
 };
 
+/*
+ * vring和virtqueue的结合体
+ * - 将vring和virtqueue绑定在一起，两者可以通过偏移互相寻址定位
+ */
 struct vring_virtqueue {
 	struct virtqueue vq;
 

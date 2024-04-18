@@ -171,6 +171,7 @@ struct xfs_ino_geometry {
 	unsigned int	ialloc_inos;
 	/*
 	 * 每次inode cluster分配时批量分配所需的fsblock数量
+	 * - 这个里面会包含多个cluster的
 	 */
 	unsigned int	ialloc_blks;
 

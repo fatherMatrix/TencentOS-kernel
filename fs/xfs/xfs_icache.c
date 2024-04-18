@@ -389,7 +389,8 @@ xfs_iget_cache_hit(
 	spin_lock(&ip->i_flags_lock);
 	/*
 	 * xfs_reclaim_inode()中，在xarray delete之前，会将i_ino设置为0；
-	 * 如果已经被reallocated，xfs_inode->i_ino也会改变；
+	 * - 所以可以通过xfs_inode->i_ino是否等于目标ino来判断该xfs_inode是否被
+	 *   回收了；
 	 */
 	if (ip->i_ino != ino) {
 		trace_xfs_iget_skip(ip);
@@ -438,6 +439,9 @@ xfs_iget_cache_hit(
 	 * Need to carefully get it back into useable state.
 	 */
 	if (ip->i_flags & XFS_IRECLAIMABLE) {
+	/*
+	 * vfs inode已经被torn down了
+	 */
 		trace_xfs_iget_reclaim(ip);
 
 		if (flags & XFS_IGET_INCORE) {
@@ -502,8 +506,20 @@ xfs_iget_cache_hit(
 		spin_unlock(&ip->i_flags_lock);
 		spin_unlock(&pag->pag_ici_lock);
 	} else {
+	/*
+	 * vfs inode正在被torn down
+	 * - 走到这里的前提条件是ip->i_flags中不包含XFS_IRECLAIMABLE
+	 */
 		/* If the VFS inode is being torn down, pause and try again. */
 		if (!igrab(inode)) {
+		/*
+		 * 走到这里说明：
+		 * 1. 该xfs_inode已经被标记了I_FREEING | I_WILL_FREE
+		 * 2. 该xfs_inode还没有被标记XFS_IRECLAIMABLE
+		 *
+		 * 返回值-EAGAIN的作用是等I_FREEING | I_WILL_FREE结束
+		 * - 这是vfs规定的
+		 */
 			trace_xfs_iget_skip(ip);
 			error = -EAGAIN;
 			goto out_error;
@@ -1097,8 +1113,13 @@ xfs_reclaim_inode_grab(
 {
 	ASSERT(rcu_read_lock_held());
 
-	/* quick check for stale RCU freed inode */
-	/* xfs_reclaim_inode()中会将xfs_inode->i_ino设置为0 */
+	/*
+	 * quick check for stale RCU freed inode
+	 *                 ^^^^^^^^^^^^^^^^^^^^^
+	 *
+	 * - xfs_reclaim_inode()中会将xfs_inode->i_ino设置为0
+	 *   > 如果这里是0，说明
+	 */
 	if (!ip->i_ino)
 		return 1;
 
@@ -1272,6 +1293,11 @@ reclaim:
 	 */
 	spin_lock(&ip->i_flags_lock);
 	ip->i_flags = XFS_IRECLAIM;
+	/*
+	 * 回收路径抢到了这个inode后，就不能再重用了。
+	 * - 此时将i_ino设置为0之后就可以告知其他拿到该xfs_inode的内核路径：
+	 *   > 该xfs_inode马上要被回收了
+	 */
 	ip->i_ino = 0;
 	spin_unlock(&ip->i_flags_lock);
 
@@ -1360,6 +1386,13 @@ xfs_reclaim_inodes_ag(
 restart:
 	ag = 0;
 	skipped = 0;
+	/*
+	 * 找到一个被标记了XFS_ICI_RECLAIM_TAG的xfs_perag
+	 * - 该标记的置位在：
+	 *   > xfs_fs_destroy_inode()
+	 *       xfs_inode_set_reclaim_tag()
+	 *         xfs_perag_set_reclaim_tag()
+	 */
 	while ((pag = xfs_perag_get_tag(mp, ag, XFS_ICI_RECLAIM_TAG))) {
 		unsigned long	first_index = 0;
 		int		done = 0;
@@ -1388,6 +1421,12 @@ restart:
 			 * 进入rcu临界区
 			 */
 			rcu_read_lock();
+			/*
+			 * XFS_ICI_RECLAIM_TAG的置位在：
+			 * > xfs_fs_destroy_inode()
+			 *     xfs_inode_set_reclaim_tag()
+			 *       radix_tree_tag_set()
+			 */
 			nr_found = radix_tree_gang_lookup_tag(
 					&pag->pag_ici_root,
 					(void **)batch, first_index,

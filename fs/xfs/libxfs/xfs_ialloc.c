@@ -2084,10 +2084,12 @@ xfs_difree_inobt(
 		 */
 	    rec.ir_free == XFS_INOBT_ALL_FREE &&
 		/*
-		 * 因为xfs中的block可以人为设置地很大，所以可能sb_inopblock也会
-		 * 很大；
-		 * - 这种情况什么时候去删除呢？
-		 * - 必要性？
+		 * xfs中的block可以人为设置地很大，所以可能sb_inopblock也会很大
+		 * - arm64 64K页，共计128个512byte的inode
+		 *   > 参见xfs_ialloc_setup_geometry()
+		 *
+		 * 这种情况什么时候去删除呢？
+		 * - 不删除问题也不大，就是保留了一些磁盘空间用于新的inode分配
 		 */
 	    mp->m_sb.sb_inopblock <= XFS_INODES_PER_CHUNK) {
 		xic->deleted = true;
@@ -2934,7 +2936,15 @@ xfs_ialloc_setup_geometry(
 	/*
 	 * 这里为什么是max而不是min
 	 * - sb_inopblock是一个block所能承载的inode，这是我们分配inode集合的最
-	 *   小单位；
+	 *   小单位；即分配inode chunk时，每次最少分配一个block的
+	 *
+	 * 对于4KB的x86_64：
+	 * - 64 * 256  / 4096 = 4  个fsblock
+	 * - 64 * 2048 / 4096 = 32 个fsblock
+	 *
+	 * 对于64KB的aarch64：
+	 * - 64 * 256  / (64 * 1024) = 0.25 个fslock，此时选择sb_inopblock
+	 * - 64 * 2048 / (64 * 1024) = 2 个fsblock
 	 */
 	igeo->ialloc_inos = max_t(uint16_t, XFS_INODES_PER_CHUNK,
 			sbp->sb_inopblock);
@@ -2989,7 +2999,20 @@ xfs_ialloc_setup_geometry(
 			igeo->inode_cluster_size_raw = new_size;
 	}
 
-	/* Calculate inode cluster ratios. */
+	/*
+	 * Calculate inode cluster ratios.
+	 *
+	 * 默认的inode_cluster_size_raw是8192
+	 * - 对于4KB的x86_64，一个chunk最少是4个fsblock，此时inode cluster必定小
+	 *   于chunk的尺寸；
+	 * - 对于64KB的aarch64，一个chunk最少是1个fsblock，此时为64KB，大于8192
+	 *
+	 * 如果有crc特性，则会进入上面的if，此时inode_cluster_size_raw可能会翻倍
+	 * - 最大翻8倍，对应2048 inode size的情况
+	 *   > 此时blocks_per_bluster = 8192 * 8 / fsblock_size
+	 *     chunk_size = 64 * 2048 / fsblock_size
+	 *   > chunk_size一定是大于cluster size的
+	 */
 	if (igeo->inode_cluster_size_raw > mp->m_sb.sb_blocksize)
 		igeo->blocks_per_cluster = XFS_B_TO_FSBT(mp,
 				igeo->inode_cluster_size_raw);

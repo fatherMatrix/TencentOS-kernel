@@ -2442,7 +2442,13 @@ EXPORT_SYMBOL(inode_owner_or_capable);
  */
 static void __inode_dio_wait(struct inode *inode)
 {
+	/*
+	 * 找到应该睡眠到的wait_queue_head
+	 */
 	wait_queue_head_t *wq = bit_waitqueue(&inode->i_state, __I_DIO_WAKEUP);
+	/*
+	 * 定义在wait_queue_head上睡眠的wait_queue_entry
+	 */
 	DEFINE_WAIT_BIT(q, &inode->i_state, __I_DIO_WAKEUP);
 
 	do {

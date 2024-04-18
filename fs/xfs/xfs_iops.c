@@ -1298,6 +1298,12 @@ xfs_setup_inode(
 	struct inode		*inode = &ip->i_vnode;
 	gfp_t			gfp_mask;
 
+	/*
+	 * 对于第一次从磁盘上读出xfs_inode的情况，此时vfs inode->i_ino内是0，所
+	 * 以需要在这里将磁盘上的ino赋值给vfs inode。
+	 *
+	 * 对于reuse场景，这里两者肯定是相等的；
+	 */
 	inode->i_ino = ip->i_ino;
 	inode->i_state = I_NEW;
 

@@ -26,6 +26,9 @@
  * sg element.
  */
 struct virtqueue {
+	/*
+	 * 链表元素，链表头是virtio_device->vqs
+	 */
 	struct list_head list;
 	void (*callback)(struct virtqueue *vq);
 	const char *name;
@@ -115,6 +118,9 @@ struct virtio_device {
 	struct virtio_device_id id;
 	const struct virtio_config_ops *config;
 	const struct vringh_config_ops *vringh_config;
+	/*
+	 * 链表头，链表元素是virtqueue->list
+	 */
 	struct list_head vqs;
 	u64 features;
 	void *priv;

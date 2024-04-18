@@ -453,6 +453,9 @@ typedef struct xfs_perag {
 	/*
 	 * xfs_buf的哈希表
 	 * - xfs_buf中的关联字段是b_rhash_head
+	 * - 参数是：xfs_buf_hash_params
+	 *   > 其中key值是xfs_daddr_t类型的起始basic block number，没有len信息。
+	 *     这就要求xfs对磁盘中同地址的访问要同长
 	 */
 	struct rhashtable pag_buf_hash;
 

@@ -41,6 +41,9 @@ struct iomap_dio {
 	loff_t			size;
 	/*
 	 * 引用计数，干嘛用的？
+	 * - iomap_dio_rw()中先将ref设置为1
+	 * - iomap_dio_rw()中最后通过atomic_dec_and_test()判断ref是否为0
+	 * - 其他地方哪里操作ref了呢？
 	 */
 	atomic_t		ref;
 	unsigned		flags;
@@ -76,6 +79,9 @@ EXPORT_SYMBOL_GPL(iomap_dio_iopoll);
 static void iomap_dio_submit_bio(struct iomap_dio *dio, struct iomap *iomap,
 		struct bio *bio)
 {
+	/*
+	 * 这里会增大iomap_dio的ref
+	 */
 	atomic_inc(&dio->ref);
 
 	if (dio->iocb->ki_flags & IOCB_HIPRI)
@@ -170,6 +176,9 @@ static void iomap_dio_bio_end_io(struct bio *bio)
 		iomap_dio_set_error(dio, blk_status_to_errno(bio->bi_status));
 
 	if (atomic_dec_and_test(&dio->ref)) {
+	/*
+	 * 此时ref在dec后为0，即这是最后一个ref
+	 */
 		if (dio->wait_for_completion) {
 		/*
 		 * 同步io
@@ -661,14 +670,22 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	 */
 	dio->wait_for_completion = wait_for_completion;
 	if (!atomic_dec_and_test(&dio->ref)) {
+	/*
+	 * atomic_dec_and_test()在dec后为0时返回true
+	 * - 进入到这里表示返回的是false，即dio->ref在dec后不为0
+	 */
 		/*
 		 * 异步IO会在这里直接退出
 		 * - 异步IO中会设置kiocb->ki_complete()函数指针，内部会调用到下
 		 *   面的iomap_dio_complete()；
+		 * - 对应情况(b)
 		 */
 		if (!wait_for_completion)
 			return -EIOCBQUEUED;
 
+		/*
+		 * 对应情况(c)
+		 */
 		for (;;) {
 			set_current_state(TASK_UNINTERRUPTIBLE);
 			if (!READ_ONCE(dio->submit.waiter))

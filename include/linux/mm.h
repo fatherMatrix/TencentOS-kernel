@@ -277,6 +277,10 @@ extern unsigned int kobjsize(const void *objp);
 #define VM_LOCKONFAULT	0x00080000	/* Lock the pages covered when they are faulted in */
 #define VM_ACCOUNT	0x00100000	/* Is a VM accounted object */
 #define VM_NORESERVE	0x00200000	/* should the VM suppress accounting */
+/*
+ * 传统巨型页
+ * - 在hugetlbfs_file_mmap()中被添加进vma->vm_flags
+ */
 #define VM_HUGETLB	0x00400000	/* Huge TLB Page VM */
 #define VM_SYNC		0x00800000	/* Synchronous page faults */
 #define VM_ARCH_1	0x01000000	/* Architecture-specific flag */
@@ -1893,8 +1897,12 @@ static inline p4d_t *p4d_alloc(struct mm_struct *mm, pgd_t *pgd,
 		unsigned long address)
 {
 	/*
-	 * 如果pgtable_5level_enabled()返回false，则pgd_none()也直接返回0;
-	 * 如果pgd_none返回0，则走p4d_offset分支；
+	 * pgd_none()
+	 * - 返回0，则跳过__p4d_alloc()，直接走p4d_offset()
+	 *   > pgtable_5level_enabled()为false，此时直接走p4d_offset()
+	 *   > pgd entry确实存在，即p4d table存在，无需调用__p4d_alloc()分配
+	 * - 返回非0
+	 *   > pgd entry不存在，即p4d table不存在，需要先调用__p4d_alloc()进行分配
 	 */
 	return (unlikely(pgd_none(*pgd)) && __p4d_alloc(mm, pgd, address)) ?
 		NULL : p4d_offset(pgd, address);

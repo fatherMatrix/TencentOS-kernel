@@ -308,10 +308,19 @@ xfs_iext_rec_cmp(
 	uint64_t		rec_offset = rec->lo & XFS_IEXT_STARTOFF_MASK;
 	uint32_t		rec_len = rec->hi & XFS_IEXT_LENGTH_MASK;
 
+	/*
+	 * 目标offset处于extent之前
+	 */
 	if (rec_offset > offset)
 		return 1;
+	/*
+	 * 目标offset处于extent之后
+	 */
 	if (rec_offset + rec_len <= offset)
 		return -1;
+	/*
+	 * 目标offset处于extent之中
+	 */
 	return 0;
 }
 
@@ -1021,6 +1030,7 @@ xfs_iext_lookup_extent(
 		 * 这里找到的可能是the extent after it，参见
 		 * xfs_iext_lookup_extent()关于hole的注释；
 		 * - 只有在rec的尾巴小于offset时才会返回-1；
+		 *   > 即如果目标offset处于extent之前或之中则返回true
 		 */
 		if (xfs_iext_rec_cmp(rec, offset) >= 0)
 			goto found;

@@ -21,6 +21,12 @@
 #define GDT_ENTRY_BOOT_CS	2
 #define GDT_ENTRY_BOOT_DS	3
 #define GDT_ENTRY_BOOT_TSS	4
+/*
+ * 这个三个段选择子
+ * - 起始就是段描述符下标左移3位
+ *   > 段选择子的0-1位是CPL，第2位是TI，其余高位是段选择子对应描述符在段描述符
+ *     表中的下标
+ */
 #define __BOOT_CS		(GDT_ENTRY_BOOT_CS*8)
 #define __BOOT_DS		(GDT_ENTRY_BOOT_DS*8)
 #define __BOOT_TSS		(GDT_ENTRY_BOOT_TSS*8)

@@ -71,6 +71,8 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	/*
 	 * Cut down the length to the one actually provided by the filesystem,
 	 * as it might not be able to give us the whole size that we requested.
+	 *
+	 * 难道还会出现iomap.offset和pos不相同的情况吗？
 	 */
 	if (iomap.offset + iomap.length < pos + length)
 		length = iomap.offset + iomap.length - pos;

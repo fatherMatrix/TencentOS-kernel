@@ -1796,7 +1796,11 @@ xfs_btree_lookup_get_block(
 	xfs_daddr_t		daddr;
 	int			error = 0;
 
-	/* special case the root block if in an inode */
+	/*
+	 * special case the root block if in an inode
+	 * - 针对bmbt的特殊情况
+	 *   > 参见xfs_bmbt_init_cursor()
+	 */
 	if ((cur->bc_flags & XFS_BTREE_ROOT_IN_INODE) &&
 	    (level == cur->bc_nlevels - 1)) {
 		*blkp = xfs_btree_get_iroot(cur);
@@ -1871,12 +1875,18 @@ xfs_lookup_get_search_key(
 	struct xfs_btree_block	*block,
 	union xfs_btree_key	*kp)
 {
+	/*
+	 * 这个是叶子节点
+	 */
 	if (level == 0) {
 		cur->bc_ops->init_key_from_rec(kp,
 				xfs_btree_rec_addr(cur, keyno, block));
 		return kp;
 	}
 
+	/*
+	 * 这个是中间节点
+	 */
 	return xfs_btree_key_addr(cur, keyno, block);
 }
 
@@ -1907,10 +1917,12 @@ xfs_btree_lookup(
 	block = NULL;
 	keyno = 0;
 
-	/* initialise start pointer from cursor */
 	/*
-	 * 对于refcount btree，这里是： xfs_refcountbt_ops
-	 * 对于ino btee，这里是： xfs_inobt_ops -- xfs_inobt_init_ptr_from_cur()
+	 * initialise start pointer from cursor
+	 *
+	 * 将xfs_btree_ptr指向btree的root block
+	 * - 对于refcount btree，xfs_refcountbt_init_ptr_from_cur()
+	 * - 对于ino btee，xfs_inobt_init_ptr_from_cur()
 	 */
 	cur->bc_ops->init_ptr_from_cur(cur, &ptr);
 	pp = &ptr;
@@ -1948,10 +1960,11 @@ xfs_btree_lookup(
 			int	high;	/* high entry number */
 			int	low;	/* low entry number */
 
-			/* Set low and high entry numbers, 1-based. */
 			/*
+			 * Set low and high entry numbers, 1-based.
+			 *
 			 * low为什么从1开始？
-			 * - 二分的边界条件处理本身就五花八门；
+			 * - low/high/keyno表示的是n-th，即idx+1
 			 */
 			low = 1;
 			high = xfs_btree_get_numrecs(block);
@@ -2003,7 +2016,7 @@ xfs_btree_lookup(
 				else if (diff > 0)	/* kp - cur > 0 => cur < kp，在左边找 */
 					high = keyno - 1;
 				else
-					break;
+					break;		/* 相等退出 */
 			}
 		}
 

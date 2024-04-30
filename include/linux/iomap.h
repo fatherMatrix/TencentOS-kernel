@@ -52,6 +52,9 @@ struct vm_fault;
 
 /*
  * Magic value for addr:
+ * - 用于iomap->addr
+ *   > 对应xfs_bmbt_irec->startblock的HOLESTARTBLOCK和DELAYSTARTBLOCK
+ *     o 参见：xfs_bmbt_to_iomap()
  */
 #define IOMAP_NULL_ADDR -1ULL	/* addr is not valid */
 

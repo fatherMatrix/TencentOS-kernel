@@ -40,6 +40,11 @@ calc_load(unsigned long load, unsigned long exp, unsigned long active)
 extern unsigned long calc_load_n(unsigned long load, unsigned long exp,
 				 unsigned long active, unsigned int n);
 
+/*
+ * unsigned long的bit11及高位为整数部分，低位为小数部分
+ * - LOAD_FRAC()中乘100的作用是？
+ *   > 先乘100，然后通过LOAD_INT()右移FSHIFT，保留了小数点后2两位有效数字
+ */
 #define LOAD_INT(x) ((x) >> FSHIFT)
 #define LOAD_FRAC(x) LOAD_INT(((x) & (FIXED_1-1)) * 100)
 

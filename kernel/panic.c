@@ -200,6 +200,9 @@ void panic(const char *fmt, ...)
 	this_cpu = raw_smp_processor_id();
 	old_cpu  = atomic_cmpxchg(&panic_cpu, PANIC_CPU_INVALID, this_cpu);
 
+	/*
+	 * 如果panic_cpu已经被其他cpu抢先设置了，那么本cpu自己停机
+	 */
 	if (old_cpu != PANIC_CPU_INVALID && old_cpu != this_cpu)
 		panic_smp_self_stop();
 
@@ -237,6 +240,9 @@ void panic(const char *fmt, ...)
 	 * Bypass the panic_cpu check and call __crash_kexec directly.
 	 */
 	if (!_crash_kexec_post_notifiers) {
+	/*
+	 * 如果不需要在__crash_kexec()前调用panic_notifier_list，则走这里
+	 */
 		printk_safe_flush_on_panic();
 		__crash_kexec(NULL);
 
@@ -247,6 +253,9 @@ void panic(const char *fmt, ...)
 		 */
 		smp_send_stop();
 	} else {
+	/*
+	 * 需要在__crash_kexec()前调用panic_notifier_list，走这里
+	 */
 		/*
 		 * If we want to do crash dump after notifier calls and
 		 * kmsg_dump, we will need architecture dependent extra

@@ -44,6 +44,9 @@
 	.hidden _egot
 	.hidden _end
 
+	/*
+	 * __HEAD宏定义这个是一个 ".head.text","ax" 段
+	 */
 	__HEAD
 	.code32
 ENTRY(startup_32)

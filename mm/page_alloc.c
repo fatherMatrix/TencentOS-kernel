@@ -3672,6 +3672,9 @@ alloc_flags_nofragment(struct zone *zone, gfp_t gfp_mask)
 		alloc_flags |= ALLOC_KSWAPD;
 
 #ifdef CONFIG_ZONE_DMA32
+	/*
+	 * 什么时候zone会为空呢？
+	 */
 	if (!zone)
 		return alloc_flags;
 
@@ -4860,7 +4863,15 @@ static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
 		struct alloc_context *ac, gfp_t *alloc_mask,
 		unsigned int *alloc_flags)
 {
+	/*
+	 * 首选的zone
+	 */
 	ac->high_zoneidx = gfp_zone(gfp_mask);
+	/*
+	 * 选取zonelist的备用借用方式
+	 * - ZONELIST_FALLBACK
+	 * - ZONELIST_NOFALLBACK
+	 */
 	ac->zonelist = node_zonelist(preferred_nid, gfp_mask);
 	ac->nodemask = nodemask;
 	ac->migratetype = gfpflags_to_migratetype(gfp_mask);

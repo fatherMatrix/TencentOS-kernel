@@ -99,6 +99,9 @@ xfs_hole_to_iomap(
 	 * 这是一个特殊的磁盘地址，表示一个hole，不需要真的对应磁盘地址；
 	 */
 	iomap->addr = IOMAP_NULL_ADDR;
+	/*
+	 * 表示这是一个hole
+	 */
 	iomap->type = IOMAP_HOLE;
 	iomap->offset = XFS_FSB_TO_B(ip->i_mount, offset_fsb);
 	iomap->length = XFS_FSB_TO_B(ip->i_mount, end_fsb - offset_fsb);
@@ -580,6 +583,7 @@ xfs_file_iomap_begin_delay(
 	xfs_fileoff_t		end_fsb;
 	/*
 	 * 就是bmbt中的一个incore record
+	 * - imap用于标记我们本次要处理的extent，或许是现有的一个extent的子集
 	 */
 	struct xfs_bmbt_irec	imap, cmap;
 	struct xfs_iext_cursor	icur, ccur;
@@ -591,6 +595,8 @@ xfs_file_iomap_begin_delay(
 	ASSERT(!XFS_IS_REALTIME_INODE(ip));
 	/*
 	 * 这个要求是用来保证什么？
+	 * - 如果指定了要对extents做roundoff，那么不能使用delayed blocks
+	 *   > 为什么？
 	 */
 	ASSERT(!xfs_get_extsz_hint(ip));
 
@@ -644,6 +650,8 @@ xfs_file_iomap_begin_delay(
 		/*
 		 * 进入到这里时，说明xfs_iext_lookup_extent()返回了false，此时
 		 * imap内的信息时非法的，要在这里给他一个值；
+		 * - 这个end_fsb是安全的，因为offset_fsb都超出eof了，那么end_fsb
+		 *   肯定也是超出eof的；
 		 */
 		imap.br_startoff = end_fsb; /* fake hole until the end */
 
@@ -693,6 +701,14 @@ xfs_file_iomap_begin_delay(
 			 * 进入这里，说明满足cmap.br_startoff <= offset_fsb，即第2种情况
 			 */
 			trace_xfs_reflink_cow_found(ip, &cmap);
+			/*
+			 * 既然在cow fork中找到了extents，那么我们的读写目标就转
+			 * 移到cow fork中。
+			 * - 什么时候将cow fork中的数据转移到data fork中呢？
+			 * - 如果每次写后都完成了cow fork到data fork的转移，那
+			 *   怎么可能在cow fork中还能找到前面某次写产生的extents
+			 *   呢？
+			 */
 			whichfork = XFS_COW_FORK;
 			goto done;
 		}
@@ -710,6 +726,7 @@ xfs_file_iomap_begin_delay(
 		 * For reflink files we may need a delalloc reservation when
 		 * overwriting shared extents.   This includes zeroing of
 		 * existing extents that contain data.
+		 * - 下面这个情况是上述注释的补集，用于跳过非上述情况
 		 */
 		if (!xfs_is_cow_inode(ip) ||
 		    ((flags & IOMAP_ZERO) && imap.br_state != XFS_EXT_NORM)) {
@@ -717,6 +734,11 @@ xfs_file_iomap_begin_delay(
 					&imap);
 			goto done;
 		}
+
+		/*
+		 * 走到这里，说明同时满足如下条件：
+		 * - xfs_is_cow_inode() && (!IOMAP_ZERO || XFS_EXT_NORM)
+		 */
 
 		/*
 		 * 找到extent覆盖[offset_fsb, end_fsb]的部分；
@@ -739,17 +761,22 @@ xfs_file_iomap_begin_delay(
 
 		/* Not shared?  Just report the (potentially capped) extent. */
 		if (!shared) {
+		/*
+		 * 进入这里，说明reflink中没有与imap相交的extents，我们可以直接
+		 * 对data fork中的extents做读写；
+		 */
 			trace_xfs_iomap_found(ip, offset, count, XFS_DATA_FORK,
 					&imap);
 			goto done;
 		}
-		/*
-		 * 到这里说明是有shared的，所以将我们本次要处理的extent限制在与data fork
-		 * 中找到的extent对齐；
-		 */
+
 		/*
 		 * Fork all the shared blocks from our write offset until the
 		 * end of the extent.
+		 * - 到这里说明是有shared的，所以将我们本次要处理的extent限制在
+		 *   与data fork中找到的extent对齐；
+		 * - 并且，此时不可以直接对data fork中的extents做读写，需要转而
+		 *   先cow，然后map到data fork
 		 */
 		whichfork = XFS_COW_FORK;
 		end_fsb = imap.br_startoff + imap.br_blockcount;
@@ -757,6 +784,7 @@ xfs_file_iomap_begin_delay(
 	/*
 	 * 进到这里，说明offset_fsb不落于data fork中任何现有的extent中；
 	 * - 也包含offset超出eof的情况
+	 *   > eof == true
 	 */
 		/*
 		 * We cap the maximum length we map here to MAX_WRITEBACK_PAGES
@@ -780,9 +808,9 @@ xfs_file_iomap_begin_delay(
 
 	if (eof) {
 		/*
-		 * 计算一下prealloc的长度
-		 *
-		 * eof是超出了data fork的尾巴，但是这里的whichfork已经有可能是
+		 * 如果超过了data fork已有的长度，那么要提前预分配空间
+		 * - 计算一下prealloc的长度
+		 * - eof是超出了data fork的尾巴，但是这里的whichfork已经有可能是
 		 * cow fork了；没问题吗？
 		 */
 		prealloc_blocks = xfs_iomap_prealloc_size(ip, whichfork, offset,
@@ -997,6 +1025,9 @@ needs_cow_for_zeroing(
 	struct xfs_bmbt_irec	*imap,
 	int			nimaps)
 {
+	/*
+	 * HOLESTARTBLOCK和UNWRITTEN的extent不需要cow
+	 */
 	return nimaps &&
 		imap->br_startblock != HOLESTARTBLOCK &&
 		imap->br_state != XFS_EXT_UNWRITTEN;
@@ -1070,7 +1101,8 @@ xfs_file_iomap_begin(
 	struct xfs_inode	*ip = XFS_I(inode);
 	struct xfs_mount	*mp = ip->i_mount;
 	/*
-	 * 表示一个data extent，内存数据结构
+	 * 表示一个bmbt data extent，内存数据结构
+	 * - xfs中有各种btree，统一的xfs_btree_block中可能放各种树的record
 	 */
 	struct xfs_bmbt_irec	imap;
 	xfs_fileoff_t		offset_fsb, end_fsb;

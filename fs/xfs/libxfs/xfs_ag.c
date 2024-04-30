@@ -266,6 +266,12 @@ xfs_agfblock_init(
 	agf->agf_longest = cpu_to_be32(tmpsize);
 	if (xfs_sb_version_hascrc(&mp->m_sb))
 		uuid_copy(&agf->agf_uuid, &mp->m_sb.sb_meta_uuid);
+	/*
+	 * refcount btree默认分配了一个block
+	 * - 怎么知道这个block中的数据是否有意义？
+	 *   > 每个btree的block都有一个header，通过header中的numrecs字段决定；
+	 *     o 参见xfs_btree_block
+	 */
 	if (xfs_sb_version_hasreflink(&mp->m_sb)) {
 		agf->agf_refcount_root = cpu_to_be32(
 				xfs_refc_block(mp));

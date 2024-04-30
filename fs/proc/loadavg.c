@@ -14,6 +14,9 @@ static int loadavg_proc_show(struct seq_file *m, void *v)
 {
 	unsigned long avnrun[3];
 
+	/*
+	 * FIXED_1/200的作用是小数点后第3位四舍五入
+	 */
 	get_avenrun(avnrun, FIXED_1/200, 0);
 
 	seq_printf(m, "%lu.%02lu %lu.%02lu %lu.%02lu %ld/%d %d\n",

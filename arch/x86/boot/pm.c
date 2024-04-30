@@ -125,6 +125,10 @@ void go_to_protected_mode(void)
 	/* Actual transition to protected mode... */
 	setup_idt();	/* 仅初始化了一个null_idt项 */
 	setup_gdt();	/* 仅有数据段、代码段和一个TSS，平坦地址空间 */
+	/*
+	 * 该函数在arch/x86/boot/pmjump.S
+	 * - code32_start的值是预定义好的0x100000
+	 */
 	protected_mode_jump(boot_params.hdr.code32_start,
 			    (u32)&boot_params + (ds() << 4));
 }

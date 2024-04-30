@@ -151,6 +151,7 @@ bzlilo: $(obj)/bzImage
 	cp System.map $(INSTALL_PATH)/
 	if [ -x /sbin/lilo ]; then /sbin/lilo; else /etc/lilo/install; fi
 
+# 对于x86，这个install.sh是：arch/x86/boot/install.sh
 install:
 	sh $(srctree)/$(src)/install.sh $(KERNELRELEASE) $(obj)/bzImage \
 		System.map "$(INSTALL_PATH)"

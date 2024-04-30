@@ -200,6 +200,7 @@ typedef struct xfs_btree_cur
 	uint			bc_flags; /* btree features - below */
 	/*
 	 * 不同btree在这里是不同的
+	 * - 要插入或者查找的目标incore record
 	 */
 	union xfs_btree_irec	bc_rec;	/* current insert/search record value */
 	struct xfs_buf	*bc_bufs[XFS_BTREE_MAXLEVELS];	/* buf ptr per level */

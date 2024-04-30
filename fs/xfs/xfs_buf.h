@@ -86,9 +86,14 @@ typedef struct xfs_buftarg {
 	struct xfs_mount	*bt_mount;
 	unsigned int		bt_meta_sectorsize;
 	size_t			bt_meta_sectormask;
+	/*
+	 * 硬件扇区大小
+	 * - 本字段和xfs_sb.sb_sectsize之间的关系是？
+	 */
 	size_t			bt_logical_sectorsize;
 	/*
 	 * 硬件上的扇区mask，典型值是511，即硬件扇区典型值是512；
+	 * - bt_logical_sectormask = bt_logical_sectorsize - 1
 	 */
 	size_t			bt_logical_sectormask;
 

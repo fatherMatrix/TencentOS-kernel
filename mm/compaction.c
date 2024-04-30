@@ -970,6 +970,10 @@ isolate_migratepages_block(struct compact_control *cc, unsigned long low_pfn,
 			goto isolate_fail;
 
 		/*
+		 * 走到这里，说明page_count() <= page_mapcount()
+		 */
+
+		/*
 		 * Only allow to migrate anonymous pages in GFP_NOFS context
 		 * because those do not depend on fs locks.
 		 *

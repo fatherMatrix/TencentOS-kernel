@@ -67,8 +67,11 @@
  * C: ------DDDDDDD--------- (CoW fork)
  *
  * When dirty pages are being written out (typically in writepage), the
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * delalloc reservations are converted into unwritten mappings by
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * allocating blocks and replacing the delalloc mapping with real ones.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * A delalloc mapping can be replaced by several unwritten ones if the
  * free space is fragmented.
  *
@@ -77,12 +80,19 @@
  *
  * We want to adapt the delalloc mechanism for copy-on-write, since the
  * write paths are similar.  The first two steps (creating the reservation
+ *                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * and allocating the blocks) are exactly the same as delalloc except that
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * the mappings must be stored in a separate CoW fork because we do not want
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * to disturb the mapping in the data fork until we're sure that the write
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * succeeded.  IO completion in this case is the process of removing the old
+ * ^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * mapping from the data fork and moving the new mapping from the CoW fork to
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * the data fork.  This will be discussed shortly.
+ * ^^^^^^^^^^^^^^
  *
  * For now, unaligned directio writes will be bounced back to the page cache.
  * Block-aligned directio writes will use the same mechanism as buffered
@@ -129,6 +139,10 @@
  * find_end_of_shared is true, return the longest contiguous extent of
  * shared blocks.  If there are no shared extents, fbno and flen will
  * be set to NULLAGBLOCK and 0, respectively.
+ *
+ * 如果一个block被多个文件共享，那么其会处于refcount tree中的一个extents中，且
+ * 保存有相对应的引用计数；
+ * - 参见：xfs_refcount_rec
  */
 int
 xfs_reflink_find_shared(

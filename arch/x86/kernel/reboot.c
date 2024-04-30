@@ -795,6 +795,9 @@ void machine_halt(void)
 #ifdef CONFIG_KEXEC_CORE
 void machine_crash_shutdown(struct pt_regs *regs)
 {
+	/*
+	 * 物理机上：native_machine_crash_shutdown()
+	 */
 	machine_ops.crash_shutdown(regs);
 }
 #endif
@@ -854,7 +857,10 @@ void nmi_shootdown_cpus(nmi_shootdown_cb callback)
 	shootdown_callback = callback;
 
 	atomic_set(&waiting_for_crash_ipi, num_online_cpus() - 1);
-	/* Would it be better to replace the trap vector here? */
+	/*
+	 * Would it be better to replace the trap vector here?
+	 * - 先替换nmi的handler，然后在后面向其他cpu发送NMI中断
+	 */
 	if (register_nmi_handler(NMI_LOCAL, crash_nmi_callback,
 				 NMI_FLAG_FIRST, "crash"))
 		return;		/* Return what? */

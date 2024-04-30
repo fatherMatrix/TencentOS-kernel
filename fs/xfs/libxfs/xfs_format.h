@@ -139,6 +139,10 @@ typedef struct xfs_sb {
 	 * 底层存储盘的sector大小，direct io的最小单位;
 	 * - 磁盘是512
 	 * - 固态盘是4096
+	 *
+	 * 这个值来自于mount时在磁盘上读取的xfs_dsb.sb_sectsize
+	 * - xfs_dsb.sb_sectsize来源于mkfs.xfs -s size=value
+	 * - 该字段和xfs_buftarg.bt_logical_sectorsize之间的关系是？
 	 */
 	uint16_t	sb_sectsize;	/* volume sector size, bytes */
 	/*
@@ -754,6 +758,9 @@ typedef struct xfs_agf {
 	 * 当前AG中用于reverse mapping btree的block数量
 	 */
 	__be32		agf_rmap_blocks;	/* rmapbt blocks used */
+	/*
+	 * 当前AG中用于refcount btree的block数量
+	 */
 	__be32		agf_refcount_blocks;	/* refcountbt blocks used */
 
 	/*
@@ -1828,6 +1835,7 @@ struct xfs_btree_block_shdr {
 	 * 对于叶子结点，这两个字段应该是用于链表指针了；
 	 * 对于内部节点，这两个字段用来干嘛了？
 	 * - 对于内部节点，这两个字段恒为NULL；
+	 *   > 参见？
 	 */
 	__be32		bb_leftsib;
 	__be32		bb_rightsib;

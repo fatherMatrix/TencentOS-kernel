@@ -1008,6 +1008,8 @@ static inline int pgd_none(pgd_t pgd)
  *
  * this macro returns the index of the entry in the pgd page which would
  * control the given virtual address
+ *
+ * 给定地址address，求出这个address对应的pgd entry在pgd中的index
  */
 #define pgd_index(address) (((address) >> PGDIR_SHIFT) & (PTRS_PER_PGD - 1))
 

@@ -4073,14 +4073,37 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 	if (!vmf.pud)
 		return VM_FAULT_OOM;
 	if (pud_none(*vmf.pud) && __transparent_hugepage_enabled(vma)) {
+	/*
+	 * 进入的两个条件，需同时满足：
+	 * - pud entry为空
+	 * - vma开启了thp
+	 */
 		ret = create_huge_pud(&vmf);
+		/*
+		 * 如果ret非0，且不是VM_FAULT_FALLBACK，则直接向上层返回该错误
+		 */
 		if (!(ret & VM_FAULT_FALLBACK))
 			return ret;
+		/*
+		 * 走到这里，说明ret中有VM_FAULT_FALLBACK
+		 * - 此时跳到下面的pmd_alloc()分配pmd table并填充pud entry
+		 */
 	} else {
+	/*
+	 * 进入到这里的可能行，满足其一即可：
+	 * - pud entry不为空
+	 *   > vma开启了thp
+	 *   > vma未开启thp
+	 * - pud entry为空，但vma未开启thp
+	 */
+
 		pud_t orig_pud = *vmf.pud;
 
 		barrier();
 		if (pud_trans_huge(orig_pud) || pud_devmap(orig_pud)) {
+		/*
+		 * pud_trans_huge()判断pud entry指向了1G页面还是pmd table
+		 */
 
 			/* NUMA case for anonymous PUDs would go here */
 
@@ -4095,6 +4118,9 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 		}
 	}
 
+	/*
+	 * 如果不支持1G的hugepage，则我们需要分配pmd table，并填充pud entry
+	 */
 	vmf.pmd = pmd_alloc(mm, vmf.pud, address);
 	if (!vmf.pmd)
 		return VM_FAULT_OOM;
@@ -4163,8 +4189,14 @@ vm_fault_t handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 		mem_cgroup_enter_user_fault();
 
 	if (unlikely(is_vm_hugetlb_page(vma)))
+	/*
+	 * 传统巨型页
+	 */
 		ret = hugetlb_fault(vma->vm_mm, vma, address, flags);
 	else
+	/*
+	 * 普通页、透明巨型页
+	 */
 		ret = __handle_mm_fault(vma, address, flags);
 
 	if (flags & FAULT_FLAG_USER) {

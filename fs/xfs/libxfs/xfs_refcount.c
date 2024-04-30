@@ -1329,7 +1329,9 @@ xfs_refcount_find_shared(
 	}
 
 	/*
-	 * 其实还有另一种情况：agbno < rc_startblock
+	 * 其实还有另一种情况：
+	 * - agbno < rc_startblock
+	 *   > 如果是这种情况的话，此处可以将agbno对齐到rc_startblock
 	 */
 	*fbno = tmp.rc_startblock;
 	/*

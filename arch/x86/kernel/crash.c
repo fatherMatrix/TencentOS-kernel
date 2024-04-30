@@ -127,6 +127,9 @@ void crash_smp_send_stop(void)
 		return;
 
 	if (smp_ops.crash_stop_other_cpus)
+		/*
+		 * x86: kdump_nmi_shootdown_cpus()
+		 */
 		smp_ops.crash_stop_other_cpus();
 	else
 		smp_send_stop();

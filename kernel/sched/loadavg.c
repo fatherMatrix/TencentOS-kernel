@@ -68,6 +68,8 @@ EXPORT_SYMBOL(avenrun); /* should be removed */
  * @shift:	shift count to shift the result left
  *
  * These values are estimates at best, so no need for locking.
+ *
+ * 更新的地方在calc_global_load()
  */
 void get_avenrun(unsigned long *loads, unsigned long offset, int shift)
 {

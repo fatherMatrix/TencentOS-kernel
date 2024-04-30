@@ -531,6 +531,9 @@ extern int panic_on_warn;
 extern int sysctl_panic_on_rcu_stall;
 extern int sysctl_panic_on_stackoverflow;
 
+/*
+ * crash验证为false
+ */
 extern bool crash_kexec_post_notifiers;
 
 /*

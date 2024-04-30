@@ -704,8 +704,14 @@ vm_fault_t do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 
 	if (!transhuge_vma_suitable(vma, haddr))
 		return VM_FAULT_FALLBACK;
+	/*
+	 * 为反向映射准备结构体
+	 */
 	if (unlikely(anon_vma_prepare(vma)))
 		return VM_FAULT_OOM;
+	/*
+	 * 把mm_struct加入khugepaged扫描链表
+	 */
 	if (unlikely(khugepaged_enter(vma, vma->vm_flags)))
 		return VM_FAULT_OOM;
 	if (!(vmf->flags & FAULT_FLAG_WRITE) &&
@@ -747,6 +753,9 @@ vm_fault_t do_huge_pmd_anonymous_page(struct vm_fault *vmf)
 		return ret;
 	}
 	gfp = alloc_hugepage_direct_gfpmask(vma);
+	/*
+	 * 分配巨型页
+	 */
 	page = alloc_hugepage_vma(gfp, vma, haddr, HPAGE_PMD_ORDER);
 	if (unlikely(!page)) {
 		count_vm_event(THP_FAULT_FALLBACK);

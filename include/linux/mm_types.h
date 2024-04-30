@@ -217,6 +217,9 @@ struct page {
 		};
 		struct {	/* Page table pages */
 			unsigned long _pt_pad_1;	/* compound_head */
+			/*
+			 * 参见mm_struct->pmd_huge_pte
+			 */
 			pgtable_t pmd_huge_pte; /* protected by page->ptl */
 			unsigned long _pt_pad_2;	/* mapping */
 			union {
@@ -257,6 +260,7 @@ struct page {
 		 *
 		 * 表示物理页被映射到多少个虚拟内存区域，初始值是-1；
 		 * - vmalloc的映射算不算？
+		 * - page_mapping()的返回值
 		 */
 		atomic_t _mapcount;
 
@@ -276,7 +280,11 @@ struct page {
 		int units;			/* SLOB */
 	};
 
-	/* Usage count. *DO NOT USE DIRECTLY*. See page_ref.h */
+	/*
+	 * Usage count. *DO NOT USE DIRECTLY*. See page_ref.h
+	 * - page_count()的返回值
+	 * - get_page()操作的值
+	 */
 	atomic_t _refcount;
 
 #ifdef CONFIG_MEMCG
@@ -444,6 +452,7 @@ struct vm_area_struct {
 	/*
 	 * 有操作方法，就是文件页；
 	 * 没有操作方法，就是匿名页；
+	 * - 参见vma_is_anonymous()
 	 */
 	const struct vm_operations_struct *vm_ops;
 
@@ -634,6 +643,16 @@ struct mm_struct {
 		struct mmu_notifier_mm *mmu_notifier_mm;
 #endif
 #if defined(CONFIG_TRANSPARENT_HUGEPAGE) && !USE_SPLIT_PMD_PTLOCKS
+		/*
+		 * pmd巨型页在分裂成普通页时，需要在中间添加一级页表
+		 * - 在中间添加的一级页表项数量刚好是一个page包含的数量，因此提
+		 *   前把这个page分配好放到这里，用的时候不会再次阻塞分配；
+		 * - 如果定义了USE_SPLIT_PMD_PTLOCKS，则该字段移入pmd entry所在
+		 *   page的struct page->pmd_huge_pte中
+		 *
+		 * 那pud巨型页呢？
+		 * - 参见：create_huge_pud()
+		 */
 		pgtable_t pmd_huge_pte; /* protected by page_table_lock */
 #endif
 #ifdef CONFIG_NUMA_BALANCING

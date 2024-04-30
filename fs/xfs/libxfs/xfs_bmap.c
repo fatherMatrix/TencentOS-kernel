@@ -3821,6 +3821,9 @@ xfs_bmapi_trim_map(
 	int			flags)
 {
 	if ((flags & XFS_BMAPI_ENTIRE) ||			/* 调用函数要求返回一个完整的extent */
+		/*
+		 * 这说明目标obno处于extent之后
+		 */
 	    got->br_startoff + got->br_blockcount <= obno) {	/* 这个是干嘛的？ */
 		*mval = *got;
 		if (isnullstartblock(got->br_startblock))
@@ -3910,6 +3913,9 @@ xfs_bmapi_update_map(
 	ASSERT((flags & XFS_BMAPI_ENTIRE) || (mval->br_blockcount <= *len) ||
 	       (mval->br_startoff < obno));
 
+	/*
+	 * bno的后移是在这里完成的
+	 */
 	*bno = mval->br_startoff + mval->br_blockcount;
 	*len = end - *bno;
 	if (*n > 0 && mval->br_startoff == mval[-1].br_startoff) {
@@ -3950,6 +3956,7 @@ xfs_bmapi_update_map(
 		      obno))) {
 	/*
 	 * 没有做合并，后移mval指针；
+	 * - 这表示在mval数组中新增了一个元素
 	 */
 		mval++;
 		(*n)++;
@@ -4060,7 +4067,7 @@ xfs_bmapi_read(
 		/*
 		 * 有这种情况是因为上面的xfs_iext_lookup_extent()或下面的
 		 * xfs_iext_next_extent()有可能返回一个br_startoff > bno的extent，
-		 * 即bno位于hole中；
+		 * 即bno位于磁盘上现有extent之前的hole中；
 		 */
 		if (got.br_startoff > bno) {
 			/* Reading in a hole.  */
@@ -4081,8 +4088,19 @@ xfs_bmapi_read(
 			continue;
 		}
 
-		/* set up the extent map to return. */
+		/*
+		 * 走到这里，说明bno处于got表示的extent内部
+		 * - 此时got中的字段都是有意义的
+		 */
+
+		/*
+		 * set up the extent map to return.
+		 * - 既然可以确保bno处于extent中间，那么我们要将该extent对齐到[bno, bno+len)
+		 */
 		xfs_bmapi_trim_map(mval, &got, &bno, len, obno, end, n, flags);
+		/*
+		 * 内部会向后推bno，并减小len
+		 */
 		xfs_bmapi_update_map(&mval, &bno, &len, obno, end, &n, flags);
 
 		/* If we're done, stop now. */

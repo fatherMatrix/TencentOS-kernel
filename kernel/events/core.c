@@ -10280,6 +10280,9 @@ static int perf_try_init_event(struct pmu *pmu, struct perf_event *event)
 	}
 
 	event->pmu = pmu;
+	/*
+	 * amd: amd_uncore_event_init()
+	 */
 	ret = pmu->event_init(event);
 
 	if (ctx)

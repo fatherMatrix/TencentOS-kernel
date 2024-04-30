@@ -1544,6 +1544,8 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 		 * bd_mutex and can't be called under s_umount.  Drop
 		 * s_umount temporarily.  This is safe as we're
 		 * holding an active reference.
+		 *
+		 * 对应的down_write()在哪里？
 		 */
 		up_write(&s->s_umount);
 		/*

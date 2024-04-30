@@ -76,6 +76,10 @@ static unsigned int khugepaged_max_ptes_none __read_mostly;
 static unsigned int khugepaged_max_ptes_swap __read_mostly;
 
 #define MM_SLOTS_HASH_BITS 10
+/*
+ * mm_slot的哈希表
+ * - thp相关的，区别于ksm相关的同名static变量
+ */
 static __read_mostly DEFINE_HASHTABLE(mm_slots_hash, MM_SLOTS_HASH_BITS);
 
 static struct kmem_cache *mm_slot_cache __read_mostly;
@@ -90,6 +94,9 @@ static struct kmem_cache *mm_slot_cache __read_mostly;
  */
 struct mm_slot {
 	struct hlist_node hash;
+	/*
+	 * 链表元素，链表头是khugepaged_scan->mm_head
+	 */
 	struct list_head mm_node;
 	struct mm_struct *mm;
 
@@ -105,10 +112,24 @@ struct mm_slot {
  * @address: the next address inside that to be scanned
  *
  * There is only the one khugepaged_scan instance of this cursor structure.
+ *
+ * 透明巨型页线程定期扫描允许使用透明巨型页的虚拟内存区域，尝试把普通页合并成巨
+ * 型页；
  */
 struct khugepaged_scan {
+	/*
+	 * 链表头，链表元素是mm_slot->mm_node
+	 * - 透明巨型页线程的扫描链表
+	 * - 通过mm_slot->mm字段，可以定位需要被扫描的mm_struct
+	 */
 	struct list_head mm_head;
+	/*
+	 * 当前正在扫描的mm_slot
+	 */
 	struct mm_slot *mm_slot;
+	/*
+	 * 即将扫描的下一个虚拟地址
+	 */
 	unsigned long address;
 };
 
@@ -1087,6 +1108,9 @@ static void collapse_huge_page(struct mm_struct *mm,
 	 */
 	anon_vma_unlock_write(vma->anon_vma);
 
+	/*
+	 * 拷贝前后source page会被修改吗？
+	 */
 	__collapse_huge_page_copy(pte, new_page, vma, address, pte_ptl);
 	pte_unmap(pte);
 	__SetPageUptodate(new_page);
@@ -1219,6 +1243,9 @@ static int khugepaged_scan_pmd(struct mm_struct *mm,
 		 * cannot use mapcount: can't collapse if there's a gup pin.
 		 * The page must only be referenced by the scanned process
 		 * and page swap cache.
+		 *
+		 * 是不是也说明没有被其他用户态进程映射？
+		 * - 是的，如果被映射到用户态进程，page->refcount也是要增加的
 		 */
 		if (page_count(page) != 1 + PageSwapCache(page)) {
 			result = SCAN_PAGE_COUNT;
@@ -2063,6 +2090,9 @@ static void khugepaged_do_scan(void)
 	barrier(); /* write khugepaged_pages_to_scan to local stack */
 
 	while (progress < pages) {
+		/*
+		 * 预先分配一个巨型页
+		 */
 		if (!khugepaged_prealloc_page(&hpage, &wait))
 			break;
 

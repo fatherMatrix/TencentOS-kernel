@@ -565,6 +565,11 @@ xfs_bmbt_init_cursor(
 	cur->bc_statoff = XFS_STATS_CALC_INDEX(xs_bmbt_2);
 
 	cur->bc_ops = &xfs_bmbt_ops;
+	/*
+	 * bmbt tree是inode中映射文件逻辑地址到磁盘地址的，所以需要设置
+	 * XFS_BTREE_ROOT_IN_INODE
+	 * > 参见：xfs_btree_lookup_get_block()
+	 */
 	cur->bc_flags = XFS_BTREE_LONG_PTRS | XFS_BTREE_ROOT_IN_INODE;
 	if (xfs_sb_version_hascrc(&mp->m_sb))
 		cur->bc_flags |= XFS_BTREE_CRC_BLOCKS;

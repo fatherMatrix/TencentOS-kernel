@@ -157,6 +157,9 @@ struct irq_domain_chip_generic;
  * @revmap_size: Size of the linear map table @linear_revmap[]
  * @revmap_tree: Radix map tree for hwirqs that don't fit in the linear map
  * @linear_revmap: Linear table of hwirq->virq reverse mappings
+ *
+ * 表示一个中断域
+ * - 引入中断域的目的是为了管理 中断控制器本地中断编号 到 全局中断号的转换
  */
 struct irq_domain {
 	struct list_head link;

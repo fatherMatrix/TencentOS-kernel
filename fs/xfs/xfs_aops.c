@@ -1117,6 +1117,9 @@ xfs_do_writepage(
 		end_offset = offset;
 	}
 
+	/*
+	 * 这里面会对delayed blocks进行convert
+	 */
 	return xfs_writepage_map(wpc, wbc, inode, page, end_offset);
 
 redirty:

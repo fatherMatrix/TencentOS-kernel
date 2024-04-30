@@ -52,6 +52,8 @@ struct pt_regs;
  * @dir:		/proc/irq/ procfs entry
  * @debugfs_file:	dentry for the debugfs file
  * @name:		flow handler name for /proc/interrupts output
+ *
+ * 用于描述一个irq
  */
 struct irq_desc {
 	struct irq_common_data	irq_common_data;

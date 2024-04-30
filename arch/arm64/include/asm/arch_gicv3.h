@@ -42,6 +42,12 @@ static inline u64 gic_read_iar_common(void)
 {
 	u64 irqstat;
 
+	/*
+	 * ICC_IAR1寄存器作用：
+	 * - The PE reads this register to obtain the INTID of the signaled
+	 *   Group 1 interrupt. This read acts as an acknowledge for the
+	 *   interrupt.
+	 */
 	irqstat = read_sysreg_s(SYS_ICC_IAR1_EL1);
 	dsb(sy);
 	return irqstat;

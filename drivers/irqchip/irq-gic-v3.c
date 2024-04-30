@@ -652,6 +652,9 @@ static asmlinkage void __exception_irq_entry gic_handle_irq(struct pt_regs *regs
 		}
 		return;
 	}
+	/*
+	 * 0-15是SGI，用于IPI通信
+	 */
 	if (irqnr < 16) {
 		gic_write_eoir(irqnr);
 		if (static_branch_likely(&supports_deactivate_key))
@@ -740,6 +743,12 @@ static void __init gic_dist_init(void)
 	for (i = 0; i < GIC_ESPI_NR; i += 16)
 		writel_relaxed(0, base + GICD_ICFGRnE + i / 4);
 
+	/*
+	 * 所有irq先设置为默认优先级
+	 * - GICD_IPRIORITYRnE共计4字节，每个字节表示一个irq的优先级
+	 * - 为什么没有判断是否需要GICR_Ixxx？
+	 *   > arm公版架构实现相关？
+	 */
 	for (i = 0; i < GIC_ESPI_NR; i += 4)
 		writel_relaxed(GICD_INT_DEF_PRI_X4, base + GICD_IPRIORITYRnE + i);
 
@@ -1569,6 +1578,9 @@ static int __init gic_init_bases(void __iomem *dist_base,
 	gic_update_rdist_properties();
 
 	gic_smp_init();
+	/*
+	 * 配置irq的特性
+	 */
 	gic_dist_init();
 	gic_cpu_init();
 	gic_cpu_pm_init();

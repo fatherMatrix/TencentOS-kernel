@@ -776,6 +776,9 @@ static const char *ipi_types[NR_IPI] __tracepoint_string = {
 static void smp_cross_call(const struct cpumask *target, unsigned int ipinr)
 {
 	trace_ipi_raise(target, ipi_types[ipinr]);
+	/*
+	 * gic_smp_init() -> gic_raise_softirq()
+	 */
 	__smp_cross_call(target, ipinr);
 }
 

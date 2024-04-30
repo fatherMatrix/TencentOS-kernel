@@ -52,8 +52,18 @@ static inline void arch_local_irq_disable(void)
 		WARN_ON_ONCE(pmr != GIC_PRIO_IRQON && pmr != GIC_PRIO_IRQOFF);
 	}
 
+	/*
+	 * ALTERNATIVE保证下面两条指令只有一个执行
+	 */
 	asm volatile(ALTERNATIVE(
+		/*
+		 * 这条指令直接关闭了硬件上的中断响应
+		 */
 		"msr	daifset, #2		// arch_local_irq_disable",
+		/*
+		 * 这条指令没有关闭硬件上的中断响应，而是调高响应中断的优先级限
+		 * 制
+		 */
 		__msr_s(SYS_ICC_PMR_EL1, "%0"),
 		ARM64_HAS_IRQ_PRIO_MASKING)
 		:

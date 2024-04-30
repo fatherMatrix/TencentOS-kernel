@@ -434,6 +434,10 @@ tsk	.req	x28		// current thread_info	将x28寄存器用于特定目的
  * Interrupt handling.
  */
 	.macro	irq_handler
+	/*
+	 * 典型地：gic_handle_irq()
+	 * - 参见：gic_init_bases() -> set_handle_irq(gic_handle_irq)
+	 */
 	ldr_l	x1, handle_arch_irq
 	mov	x0, sp
 	irq_stack_entry

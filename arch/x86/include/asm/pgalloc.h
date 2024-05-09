@@ -93,6 +93,9 @@ static inline pmd_t *pmd_alloc_one(struct mm_struct *mm, unsigned long addr)
 
 	if (mm == &init_mm)
 		gfp &= ~__GFP_ACCOUNT;
+	/*
+	 * gfp中包含了__GFP_ZERO，所以分配的页初始状态为全零
+	 */
 	page = alloc_pages(gfp, 0);
 	if (!page)
 		return NULL;

@@ -136,6 +136,9 @@ void __init check_bugs(void)
 
 	fpu__init_check_bugs();
 #else /* CONFIG_X86_64 */
+	/*
+	 * 指令替换
+	 */
 	alternative_instructions();
 
 	/*

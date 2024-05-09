@@ -4055,6 +4055,9 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 		.pgoff = linear_page_index(vma, address),
 		.gfp_mask = __get_fault_gfp_mask(vma),
 	};
+	/*
+	 * hw_error_code中包含X86_PF_WRITE
+	 */
 	unsigned int dirty = flags & FAULT_FLAG_WRITE;
 	struct mm_struct *mm = vma->vm_mm;
 	pgd_t *pgd;
@@ -4108,10 +4111,17 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 			/* NUMA case for anonymous PUDs would go here */
 
 			if (dirty && !pud_write(orig_pud)) {
+			/*
+			 * 如果page fault的是由写操作触发，但pud entry表明了不
+			 * 可写，那么可以断定这是一个cow操作？
+			 */
 				ret = wp_huge_pud(&vmf, orig_pud);
 				if (!(ret & VM_FAULT_FALLBACK))
 					return ret;
 			} else {
+			/*
+			 * 写操作、读操作都可能
+			 */
 				huge_pud_set_accessed(&vmf, orig_pud);
 				return 0;
 			}
@@ -4125,10 +4135,20 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 	if (!vmf.pmd)
 		return VM_FAULT_OOM;
 	if (pmd_none(*vmf.pmd) && __transparent_hugepage_enabled(vma)) {
+	/*
+	 * pmd entry为空，且开启了thp
+	 */
 		ret = create_huge_pmd(&vmf);
 		if (!(ret & VM_FAULT_FALLBACK))
 			return ret;
 	} else {
+	/*
+	 * 进入这里有多种可能原因，满足其一即可：
+	 * - pmd entry不为空
+	 *   > vma开启了thp
+	 *   > vma未开启thp
+	 * - pmd entry为空，vma未开启thp
+	 */
 		pmd_t orig_pmd = *vmf.pmd;
 
 		barrier();
@@ -4140,6 +4160,10 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 			return 0;
 		}
 		if (pmd_trans_huge(orig_pmd) || pmd_devmap(orig_pmd)) {
+			/*
+			 * _PAGE_PROTNONE没有看懂，但似乎是被内核用来做numa
+			 * balancing相关的标记
+			 */
 			if (pmd_protnone(orig_pmd) && vma_is_accessible(vma))
 				return do_huge_pmd_numa_page(&vmf, orig_pmd);
 
@@ -4255,6 +4279,9 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 #ifndef __ARCH_HAS_5LEVEL_HACK
 	if (!p4d_present(*p4d)) {
 		mm_inc_nr_puds(mm);
+		/*
+		 * 将新分配的pud table地址放入p4d entry中
+		 */
 		p4d_populate(mm, p4d, new);
 	} else	/* Another has populated it */
 		pud_free(mm, new);

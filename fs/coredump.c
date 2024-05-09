@@ -798,6 +798,12 @@ void do_coredump(const kernel_siginfo_t *siginfo)
 			goto close_fail;
 		}
 		file_start_write(cprm.file);
+		/*
+		 * 几种可能的选择：
+		 * - elf_core_dump()
+		 * - elf_fdpic_core_dump()
+		 * - flat_core_dump()
+		 */
 		core_dumped = binfmt->core_dump(&cprm);
 		file_end_write(cprm.file);
 	}

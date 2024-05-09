@@ -12,12 +12,14 @@
 /*
  * 低分辨率定时器的实现
  * ^^^^^^^^
- *    ?
+ *    ? - 从字段expires来看，只能是低分辨率定时器了
+ *        > 高分辨率定时器如何组织？
  */
 struct timer_list {
 	/*
 	 * All fields that change during normal runtime grouped to the
 	 * same cacheline
+	 * - 链表元素，链接进timer_base->vectors[WHEEL_SIZE]中的某个哈希表头中
 	 */
 	struct hlist_node	entry;
 	/*
@@ -39,8 +41,7 @@ struct timer_list {
 	 * - TIMER_DEFERRABLE：表示该定时器是可延迟的；
 	 * - TIMER_PINNED：表示定时器已经绑死了当前的CPU，无论如何都不会迁移到
 	 *   别的CPU上；
-	 * - TIMER_IRQSAFE：表示定时器是中断安全的，使用的时候只需要加锁，不需
-	 *   要关中断
+	 * - TIMER_IRQSAFE：表示定时器是中断安全的，即可以在中断上下文中执行
 	 */
 	u32			flags;
 

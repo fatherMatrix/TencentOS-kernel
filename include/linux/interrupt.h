@@ -518,6 +518,12 @@ extern bool force_irqthreads;
 enum
 {
 	HI_SOFTIRQ=0,
+	/*
+	 * 低分辨率定时器的软中断
+	 * - 软中断处理函数是run_timer_softirq()
+	 *   > 处理函数配置在init_timers()
+	 *   > 软中断触发在run_local_timers()
+	 */
 	TIMER_SOFTIRQ,
 	NET_TX_SOFTIRQ,
 	NET_RX_SOFTIRQ,
@@ -525,6 +531,12 @@ enum
 	IRQ_POLL_SOFTIRQ,
 	TASKLET_SOFTIRQ,
 	SCHED_SOFTIRQ,
+	/*
+	 * 高分辨率定时器的软中断
+	 * - 软中断处理函数是hrtimer_run_softirq()
+	 *   > 处理函数配置在hrtimers_init()
+	 *   > 软中断触发在hrtimer_interrupt()和hrtimer_run_queues()
+	 */
 	HRTIMER_SOFTIRQ, /* Unused, but kept as tools rely on the
 			    numbering. Sigh! */
 	RCU_SOFTIRQ,    /* Preferable RCU should always be the last softirq */

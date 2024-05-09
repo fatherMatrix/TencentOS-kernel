@@ -883,7 +883,15 @@ struct task_struct {
 	struct rb_node			pushable_dl_tasks;
 #endif
 
+	/*
+	 * mm_struct描述的是用户态内存空间，因此内核线程的mm为NULL
+	 */
 	struct mm_struct		*mm;
+	/*
+	 * 对内核线程来说，该字段被设置为上一个运行进程的active_mm，在该内核线程
+	 * 被切换出去的时候，会重新将active_mm设置为NULL；
+	 * - 参见：context_switch()
+	 */
 	struct mm_struct		*active_mm;
 
 	/* Per-thread vma caching: */

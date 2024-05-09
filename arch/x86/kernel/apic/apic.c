@@ -1122,6 +1122,8 @@ static void local_apic_timer_interrupt(void)
 
 	/*
 	 * 对应的是hrtimer_interrupt
+	 * - crash得到的结果
+	 *   > 对应的设置点在tick_init_highres()
 	 */
 	evt->event_handler(evt);
 }

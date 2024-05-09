@@ -158,16 +158,26 @@ EXPORT_SYMBOL(jiffies_64);
 /*
  * The time start value for each level to select the bucket at enqueue
  * time.
+ * - 每个level的jiffies差值起始点
  */
 #define LVL_START(n)	((LVL_SIZE - 1) << (((n) - 1) * LVL_CLK_SHIFT))
 
 /* Size of each clock level */
 #define LVL_BITS	6
+/*
+ * 每个level包含的哈希桶个数
+ */
 #define LVL_SIZE	(1UL << LVL_BITS)
 #define LVL_MASK	(LVL_SIZE - 1)
+/*
+ * 每个level哈希桶编号的起始点
+ */
 #define LVL_OFFS(n)	((n) * LVL_SIZE)
 
-/* Level depth */
+/*
+ * Level depth
+ * - level数量
+ */
 #if HZ > 100
 # define LVL_DEPTH	9
 # else
@@ -194,6 +204,11 @@ EXPORT_SYMBOL(jiffies_64);
 # define BASE_DEF	0
 #endif
 
+/*
+ * 每个cpu对应一个timer_base，用于管理本cpu上的定时器
+ * - 可使用base确定定时器在哪个cpu上运行
+ *   > 低分辨率定时器？
+ */
 struct timer_base {
 	raw_spinlock_t		lock;
 	/*
@@ -207,6 +222,7 @@ struct timer_base {
 #endif
 	/*
 	 * 当前timer_base经过的jiffies值，用来确定所管理的timer_list是否超时
+	 * - 所谓"经过"，指的是该jiffies上的timer_list被处理了
 	 */
 	unsigned long		clk;
 	/*
@@ -227,7 +243,25 @@ struct timer_base {
 	 */
 	DECLARE_BITMAP(pending_map, WHEEL_SIZE);
 	/*
-	 * 桶子，每个桶是一个链表，链接timer_list
+	 * 桶子，每个桶是一个链表，链接timer_list->entry。但是，这是一张关于哈希
+	 * 桶的表。
+	 * - 相同level的检查粒度相同；level越大，检查粒度越大。
+	 *   > 随着时间的流逝，后面的定时器会往前移动吗？
+	 * - 相同时间到期的timer_list放到同一个格子里
+	 *
+	 *		     0                            LVL_SIZE - 1
+	 *               +------+------+------+------+------+------+
+	 *       0       |      |      |      |      |      |      |
+	 *               +------+------+------+------+------+------+
+	 *               |      |      |      |      |      |      |
+	 *               +------+------+------+------+------+------+
+	 *               |      |      |      |      |      |      |
+	 *               +------+------+------+------+------+------+
+	 * LVL_DEPTH - 1 |      |      |      |      |      |      |
+	 *               +------+------+------+------+------+------+
+	 *
+	 * 哈希桶号的计算：
+	 * - calc_wheel_index()
 	 */
 	struct hlist_head	vectors[WHEEL_SIZE];
 } ____cacheline_aligned;
@@ -237,7 +271,26 @@ struct timer_base {
  * - BASE_STD: Standard
  * - BASE_DEF: Deferrable
  *
- * 当未配置NO_HZ时，上面两个合二为一
+ * 当未配置NO_HZ_COMMON时，上面两个合二为一
+ * 当配置了NO_HZ_COMMON时，存在上面两个
+ *
+ * 为什么支持NO_HZ模式要包含两个timer_base呢？ -- 转载
+ * - 这其实和NO_HZ的工作模式有关：
+ *   > 如果NO_HZ模式，那么当CPU处于空闲状态时，定时器层是收不到也不需要收到任何
+ *     Tick的，这样可以节省电力。这时候底层的Tick层（准确说是Tick Sched）不会按
+ *     照预定好的HZ频率，每次到期后都去不停的设置底层的定时事件设备（启动NO_HZ
+ *     模式的前提是已经切换到了高精度模式下而高精度模式又要求定时事件设备是单次
+ *     触发模式的）。但是，如果定时器到期了不就错过去了嘛。所以，在停止Tick之前，
+ *     Tick层会从定时器层获得最近的下一次定时器到期的时间（通过调用
+ *     get_next_timer_interrupt函数），然后对下面的定时事件设备进行编程，让其在
+ *     这个最近的到期时刻到期，触发中断。但是，系统中有很多定时器，它们对到期的
+ *     要求没有那么严格，迟一点到期也不是很要紧。对于这类定时器，在停止Tick之前，
+ *     就没必要管他们到低什么时候到期。具体点说，就是Tick层在向定时器层询问下一
+ *     次最近到期时间时，定时器层更本就不会查找这些可延迟的定时器。对于前面说的
+ *     第一种定时器存放在BASE_STD指明的那个timer_base结构体里面，而第二种定时器
+ *     存放在BASE_DEF指明的那个timer_base结构体里面。
+ *   > 如果在编译内核的时候没有包含CONFIG_NO_HZ_COMMON，也就是内核不支持NO_HZ模
+ *     式，Tick从来就没有停止过，当然就不存在前面说的问题，也就没必要分两个了。
  */
 static DEFINE_PER_CPU(struct timer_base, timer_bases[NR_BASES]);
 
@@ -520,6 +573,9 @@ static inline void timer_set_idx(struct timer_list *timer, unsigned int idx)
  */
 static inline unsigned calc_index(unsigned expires, unsigned lvl)
 {
+	/*
+	 * 计算不同level时，expires选用不同的位
+	 */
 	expires = (expires + LVL_GRAN(lvl)) >> LVL_SHIFT(lvl);
 	return LVL_OFFS(lvl) + (expires & LVL_MASK);
 }
@@ -863,11 +919,17 @@ static inline void detach_timer(struct timer_list *timer, bool clear_pending)
 static int detach_if_pending(struct timer_list *timer, struct timer_base *base,
 			     bool clear_pending)
 {
+	/*
+	 * 计算哈希桶编号
+	 */
 	unsigned idx = timer_get_idx(timer);
 
 	if (!timer_pending(timer))
 		return 0;
 
+	/*
+	 * 如果目标timer_list已经是该哈希桶中最后一个元素了，则清空对应的位图
+	 */
 	if (hlist_is_singular_node(&timer->entry, base->vectors + idx))
 		__clear_bit(idx, base->pending_map);
 
@@ -1013,6 +1075,9 @@ __mod_timer(struct timer_list *timer, unsigned long expires, unsigned int option
 	 * same array bucket then just return:
 	 */
 	if (timer_pending(timer)) {
+	/*
+	 * 如果定时器已经被添加进某个链表中
+	 */
 		/*
 		 * The downside of this optimization is that it can result in
 		 * larger granularity than you would get from adding a new
@@ -1022,6 +1087,11 @@ __mod_timer(struct timer_list *timer, unsigned long expires, unsigned int option
 
 		if (!diff)
 			return 1;
+		/*
+		 * MOD_TIMER_REDUCE表示仅希望缩小定时器的到期时间；
+		 * diff <= 0表示当前到期时间小于目标到期时间，与MOD_TIMER_REDUCE
+		 * 矛盾，返回1
+		 */
 		if (options & MOD_TIMER_REDUCE && diff <= 0)
 			return 1;
 
@@ -1050,6 +1120,8 @@ __mod_timer(struct timer_list *timer, unsigned long expires, unsigned int option
 		 * Retrieve and compare the array index of the pending
 		 * timer. If it matches set the expiry to the new value so a
 		 * subsequent call will exit in the expires check above.
+		 *
+		 * 如果新桶和原桶是同一个
 		 */
 		if (idx == timer_get_idx(timer)) {
 			if (!(options & MOD_TIMER_REDUCE))
@@ -1060,16 +1132,23 @@ __mod_timer(struct timer_list *timer, unsigned long expires, unsigned int option
 			goto out_unlock;
 		}
 	} else {
+	/*
+	 * 新定时器，此时为了屏蔽时钟中断对timer_base的操作，内部会关中断
+	 */
 		base = lock_timer_base(timer, &flags);
 		forward_timer_base(base);
 	}
 
+	/*
+	 * 走到这里，有两种情况：
+	 * - timer原来就存在，但新桶和原桶不一致
+	 * - timer原来不存在，当然新桶和原桶（不存在）也不一致
+	 */
 	ret = detach_if_pending(timer, base, false);
 	if (!ret && (options & MOD_TIMER_PENDING_ONLY))
 		goto out_unlock;
 
 	new_base = get_target_base(base, timer->flags);
-
 	if (base != new_base) {
 		/*
 		 * We are trying to schedule the timer on the new base.
@@ -1113,8 +1192,9 @@ __mod_timer(struct timer_list *timer, unsigned long expires, unsigned int option
 		 * 该是已经被编程到了所有包含的定时器中最近要到期的那个时刻，这
 		 * 时候恰好要插入的定时器的到期时刻比原来最近的到期时刻还要早的
 		 * 话，那这个新被插入的定时器一定会超时，因为在这之前都不会有
-		 * Tick到来。对于这种情况，只有调用wake_up_nohz_cpu 函数将那个空
-		 * 闲的 CPU 唤醒，让它重新再检查一遍。
+		 * Tick到来。对于这种情况，只有调用wake_up_nohz_cpu()将那个空闲
+		 * 的cpu唤醒，让它重新再检查一遍。
+		 * - 通过ipi + irq_work机制
 		 */
 		trigger_dyntick_cpu(base, timer);
 	} else {
@@ -1264,7 +1344,17 @@ int del_timer(struct timer_list *timer)
 	debug_assert_init(timer);
 
 	if (timer_pending(timer)) {
+	/*
+	 * 如果目标timer_list已经加入timer_base中的某个哈希桶了
+	 */
+		/*
+		 * 找到timer_list对应的timer_base并对其上锁
+		 * - 互斥端在哪里？
+		 */
 		base = lock_timer_base(timer, &flags);
+		/*
+		 * 从链表中删除定时器
+		 */
 		ret = detach_if_pending(timer, base, true);
 		raw_spin_unlock_irqrestore(&base->lock, flags);
 	}
@@ -1362,7 +1452,7 @@ static void del_timer_wait_running(struct timer_list *timer)
 		spin_unlock_bh(&base->expiry_lock);
 	}
 }
-#else
+#else	/* CONFIG_PREEMPT_RT */
 static inline void timer_base_init_expiry_lock(struct timer_base *base) { }
 static inline void timer_base_lock_expiry(struct timer_base *base) { }
 static inline void timer_base_unlock_expiry(struct timer_base *base) { }
@@ -1406,6 +1496,8 @@ static inline void del_timer_wait_running(struct timer_list *timer) { }
  * it has interrupted the softirq that CPU0 is waiting to finish.
  *
  * The function returns whether it has deactivated a pending timer or not.
+ *
+ * 删除timer_list并等待其handler完成
  */
 int del_timer_sync(struct timer_list *timer)
 {
@@ -1430,9 +1522,15 @@ int del_timer_sync(struct timer_list *timer)
 	WARN_ON(in_irq() && !(timer->flags & TIMER_IRQSAFE));
 
 	do {
+		/*
+		 * 返回-1表示timer正在执行handler
+		 */
 		ret = try_to_del_timer_sync(timer);
 
 		if (unlikely(ret < 0)) {
+			/*
+			 * 如果没有定义CONFIG_PREEMPT_RT，则本函数为空
+			 */
 			del_timer_wait_running(timer);
 			cpu_relax();
 		}
@@ -1507,12 +1605,23 @@ static void expire_timers(struct timer_base *base, struct hlist_head *head)
 
 		fn = timer->function;
 
+		/*
+		 * 进来时是调用了raw_spin_lock_irq()的，在真正调用回调函数时需要
+		 * 放锁；
+		 */
 		if (timer->flags & TIMER_IRQSAFE) {
+		/*
+		 * TIMER_IRQSAFE表示可以在中断上下文中执行，所以只需要unlock()掉
+		 * 自旋锁，依旧保留了关中断；
+		 */
 			raw_spin_unlock(&base->lock);
 			call_timer_fn(timer, fn, baseclk);
 			base->running_timer = NULL;
 			raw_spin_lock(&base->lock);
 		} else {
+		/*
+		 * 不可以在中断上下文中执行，所以需要unlock()掉自旋锁，并开中断
+		 */
 			raw_spin_unlock_irq(&base->lock);
 			call_timer_fn(timer, fn, baseclk);
 			base->running_timer = NULL;
@@ -1534,11 +1643,20 @@ static int __collect_expired_timers(struct timer_base *base,
 		idx = (clk & LVL_MASK) + i * LVL_SIZE;
 
 		if (__test_and_clear_bit(idx, base->pending_map)) {
+		/*
+		 * 如果其原来的位图是1
+		 */
 			vec = base->vectors + idx;
+			/*
+			 * 将原来桶里的timer_list列表全部移入heads中
+			 */
 			hlist_move_list(vec, heads++);
 			levels++;
 		}
-		/* Is it time to look at the next level? */
+		/*
+		 * Is it time to look at the next level?
+		 * - 如果低3位全为0，则说明已经到了下一个level的检查周期
+		 */
 		if (clk & LVL_CLK_MASK)
 			break;
 		/* Shift clock for the next level granularity */
@@ -1579,11 +1697,22 @@ static unsigned long __next_timer_interrupt(struct timer_base *base)
 	next = base->clk + NEXT_TIMER_MAX_DELTA;
 	clk = base->clk;
 	for (lvl = 0; lvl < LVL_DEPTH; lvl++, offset += LVL_SIZE) {
+		/*
+		 * 获取某一级下下一个到期桶偏移距离
+		 * - clk & LVL_MASK的作用是排除clk之前的桶
+		 */
 		int pos = next_pending_bucket(base, offset, clk & LVL_MASK);
 
 		if (pos >= 0) {
+			/*
+			 * 计算对应桶的到期时间
+			 */
 			unsigned long tmp = clk + (unsigned long) pos;
 
+			/*
+			 * clk在搜索不同级时取用不同位，所以要和pos一起移位
+			 * - 参见本函数下面对clk的移位操作
+			 */
 			tmp <<= LVL_SHIFT(lvl);
 			if (time_before(tmp, next))
 				next = tmp;
@@ -1745,6 +1874,9 @@ void timer_clear_idle(void)
 	base->is_idle = false;
 }
 
+/*
+ * 当定义了CONFIG_NO_HZ_COMMON，本函数
+ */
 static int collect_expired_timers(struct timer_base *base,
 				  struct hlist_head *heads)
 {
@@ -1754,13 +1886,25 @@ static int collect_expired_timers(struct timer_base *base,
 	 * NOHZ optimization. After a long idle sleep we need to forward the
 	 * base to current jiffies. Avoid a loop by searching the bitfield for
 	 * the next expiring timer.
+	 * - 如果当前jiffies和base->clk相差大于2证明当前cpu已经进入过空闲模式
+	 *   > 为什么不是大于1呢？
 	 */
 	if ((long)(now - base->clk) > 2) {
+	/*
+	 * 刚从空闲模式出来
+	 */
+		/*
+		 * 获取下一个将要到期的timer_list的时间
+		 * - 如果刚从空闲模式出来，那么当前jiffies和base->clk之间的差值
+		 *   较大，此时要修正base->clk。
+		 */
 		unsigned long next = __next_timer_interrupt(base);
 
 		/*
 		 * If the next timer is ahead of time forward to current
 		 * jiffies, otherwise forward to the next expiry time:
+		 * - 如果最近的到期时间晚于当前时间，则更新clk为当前时间后直接
+		 *   返回。
 		 */
 		if (time_after(next, now)) {
 			/*
@@ -1770,11 +1914,18 @@ static int collect_expired_timers(struct timer_base *base,
 			base->clk = now;
 			return 0;
 		}
+		/*
+		 * 最近的到期时间早于当前时间，更新clk为已经错过的到期时间
+		 * - 该时间早于当前时间
+		 */
 		base->clk = next;
 	}
+	/*
+	 * 开始收集
+	 */
 	return __collect_expired_timers(base, heads);
 }
-#else
+#else /* CONFIG_NO_HZ_COMMON */
 static inline int collect_expired_timers(struct timer_base *base,
 					 struct hlist_head *heads)
 {
@@ -1792,6 +1943,9 @@ void update_process_times(int user_tick)
 
 	/* Note: this timer irq context must be accounted for as well. */
 	account_process_tick(p, user_tick);
+	/*
+	 * 推动低分辨率定时器
+	 */
 	run_local_timers();
 	/*
 	 * 处理rcu相关
@@ -1801,6 +1955,9 @@ void update_process_times(int user_tick)
 	if (in_irq())
 		irq_work_tick();
 #endif
+	/*
+	 * 调度器tick
+	 */
 	scheduler_tick();
 	if (IS_ENABLED(CONFIG_POSIX_TIMERS))
 		run_posix_cpu_timers();
@@ -1815,10 +1972,19 @@ static inline void __run_timers(struct timer_base *base)
 	struct hlist_head heads[LVL_DEPTH];
 	int levels;
 
+	/*
+	 * 如果jiffies在base->clk之前，则返回
+	 */
 	if (!time_after_eq(jiffies, base->clk))
 		return;
 
+	/*
+	 * 未开启CONFIG_PREEMPT_RT时，本函数为空
+	 */
 	timer_base_lock_expiry(base);
+	/*
+	 * 关中断，加锁
+	 */
 	raw_spin_lock_irq(&base->lock);
 
 	/*
@@ -1839,13 +2005,25 @@ static inline void __run_timers(struct timer_base *base)
 
 	while (time_after_eq(jiffies, base->clk)) {
 
+		/*
+		 * 收集所有已经到期的定时器
+		 */
 		levels = collect_expired_timers(base, heads);
 		base->clk++;
 
+		/*
+		 * 按级别从高到低处理所有到期定时器
+		 */
 		while (levels--)
 			expire_timers(base, heads + levels);
 	}
+	/*
+	 * 解锁，开中断
+	 */
 	raw_spin_unlock_irq(&base->lock);
+	/*
+	 * 如果未配置CONFIG_PREEMPT_RT，本函数为空
+	 */
 	timer_base_unlock_expiry(base);
 }
 
@@ -1863,13 +2041,23 @@ static __latent_entropy void run_timer_softirq(struct softirq_action *h)
 
 /*
  * Called by the local, per-CPU timer interrupt on SMP.
+ * - 这个处理的是低分辨率定时器
  */
 void run_local_timers(void)
 {
+	/*
+	 * 获取当前cpu下standard下标的timer_base
+	 */
 	struct timer_base *base = this_cpu_ptr(&timer_bases[BASE_STD]);
 
+	/*
+	 * 当hrtimer未真正进入高精度模式前，由低分辨率timer_list推动其工作；
+	 */
 	hrtimer_run_queues();
-	/* Raise the softirq only if required. */
+	/*
+	 * Raise the softirq only if required.
+	 * - 如果当前jiffies在timer_base->clk之前，说明无定时器到期，退出即可；
+	 */
 	if (time_before(jiffies, base->clk)) {
 		if (!IS_ENABLED(CONFIG_NO_HZ_COMMON))
 			return;
@@ -1878,6 +2066,10 @@ void run_local_timers(void)
 		if (time_before(jiffies, base->clk))
 			return;
 	}
+	/*
+	 * 走到这里，说明有timer_list到期了，通过软中断来执行timer_list中的函数
+	 * - 处理函数是run_timer_softirq()
+	 */
 	raise_softirq(TIMER_SOFTIRQ);
 }
 
@@ -2110,8 +2302,9 @@ void __init init_timers(void)
 	 */
 	init_timer_cpus();
 	/*
-	 * 设置定时器的软中断处理函数
-	 * 时钟中断后，会触发该软中断执行以推动时间子系统中的工作；
+	 * 设置低分辨率定时器的软中断处理函数
+	 * - 时钟中断后，会触发该软中断执行以推动时间子系统中的工作；
+	 *   > 参见：run_local_timers()
 	 */
 	open_softirq(TIMER_SOFTIRQ, run_timer_softirq);
 }

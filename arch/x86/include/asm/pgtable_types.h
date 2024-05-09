@@ -18,6 +18,12 @@
 #define _PAGE_BIT_DIRTY		6	/* was written to (raised by CPU) */
 #define _PAGE_BIT_PSE		7	/* 4 MB (or 2MB) page */
 #define _PAGE_BIT_PAT		7	/* on 4KB pages */
+/*
+ * 仅当entry指向页面（1G、2M的巨型页，以及普通的4K页）时有意义，指向下一级页表
+ * 时此位被硬件忽略。
+ * - 该位置含义：Global; if CR4.PGE = 1, determines whether the translation is
+ *               global (see Section 4.10); ignored otherwise
+ */
 #define _PAGE_BIT_GLOBAL	8	/* Global TLB entry PPro+ */
 #define _PAGE_BIT_SOFTW1	9	/* available for programmer */
 #define _PAGE_BIT_SOFTW2	10	/* " */

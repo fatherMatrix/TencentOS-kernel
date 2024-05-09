@@ -3507,10 +3507,19 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	if (!next->mm) {                                // to kernel
 		enter_lazy_tlb(prev->active_mm, next);
 
+		/*
+		 * 如果要切换到内核线程，则将内核线程的active_mm设置为prev的
+		 * active_mm
+		 */
 		next->active_mm = prev->active_mm;
 		if (prev->mm)                           // from user
 			mmgrab(prev->active_mm);
 		else
+		/*
+		 * 如果内核线程要被剥夺执行权，那么会将其active_mm设置为NULL；
+		 * - 这也是为什么crash去看内核线程时其active_mm几乎都为NULL，即
+		 *   这些内核线程没有处于运行状态；
+		 */
 			prev->active_mm = NULL;
 	} else {                                        // to user
 		membarrier_switch_mm(rq, prev->active_mm, next->mm);

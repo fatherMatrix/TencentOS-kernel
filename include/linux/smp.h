@@ -16,6 +16,9 @@
 
 typedef void (*smp_call_func_t)(void *info);
 struct __call_single_data {
+	/*
+	 * 作为链表元素加入ipi目标cpu的call_single_queue链表
+	 */
 	struct llist_node llist;
 	smp_call_func_t func;
 	void *info;

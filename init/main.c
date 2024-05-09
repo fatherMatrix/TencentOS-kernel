@@ -872,6 +872,9 @@ asmlinkage __visible void __init start_kernel(void)
 	delayacct_init();
 
 	poking_init();
+	/*
+	 * 动态指令替换在这里面
+	 */
 	check_bugs();
 
 	acpi_subsystem_init();

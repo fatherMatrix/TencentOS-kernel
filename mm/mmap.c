@@ -1458,8 +1458,11 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 #endif
 		return -ENOMEM;
 
-	/* Obtain the address to map to. we verify (or select) it and ensure
+	/*
+	 * Obtain the address to map to. we verify (or select) it and ensure
 	 * that it represents a valid section of the address space.
+	 *
+	 * 在虚地址空间中寻找一个合适的区域
 	 */
 	addr = get_unmapped_area(file, addr, len, pgoff, flags);
 	if (offset_in_page(addr))
@@ -1613,9 +1616,9 @@ unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 	unsigned long retval;
 
 	if (!(flags & MAP_ANONYMOUS)) {
-		/*
-		 * 如果不是匿名页，即是文件页
-		 */
+	/*
+	 * 如果不是匿名页，即是文件页
+	 */
 		audit_mmap_fd(fd, flags);
 		/*
 		 * 获取fd对应的file结构体
@@ -1624,7 +1627,7 @@ unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 		if (!file)
 			return -EBADF;
 		/*
-		 * 通过file->f_op字段是否只想hugepage相关的操作方法判断是否是巨型页
+		 * 通过file->f_op字段是否指向hugepage相关的操作方法判断是否是巨型页
 		 */
 		if (is_file_hugepages(file))
 			len = ALIGN(len, huge_page_size(hstate_file(file)));
@@ -1632,12 +1635,16 @@ unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 		if (unlikely(flags & MAP_HUGETLB && !is_file_hugepages(file)))
 			goto out_fput;
 	} else if (flags & MAP_HUGETLB) {
-		/*
-		 * 匿名巨型页
-		 */
+	/*
+	 * 匿名页，且是巨型页
+	 * - 不能是透明巨型页吗？
+	 */
 		struct user_struct *user = NULL;
 		struct hstate *hs;
 
+		/*
+		 * 根据MAP_HUGE_2MB、MAP_HUGE_1GB参数在hstates数组中选择hstate
+		 */
 		hs = hstate_sizelog((flags >> MAP_HUGE_SHIFT) & MAP_HUGE_MASK);
 		if (!hs)
 			return -EINVAL;
@@ -1776,7 +1783,9 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 			return -ENOMEM;
 	}
 
-	/* Clear old maps */
+	/*
+	 * Clear old maps
+	 */
 	while (find_vma_links(mm, addr, addr + len, &prev, &rb_link,
 			      &rb_parent)) {
 		if (do_munmap(mm, addr, len, uf))

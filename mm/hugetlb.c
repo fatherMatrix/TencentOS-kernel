@@ -51,6 +51,7 @@ int hugetlb_max_hstate __read_mostly;
 unsigned int default_hstate_idx;
 /*
  * 不同页大小的巨型页池
+ * - 对于x86，只有2M和1G
  */
 struct hstate hstates[HUGE_MAX_HSTATE];
 /*

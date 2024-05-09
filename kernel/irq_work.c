@@ -21,6 +21,11 @@
 #include <asm/processor.h>
 
 
+/*
+ * irq_work机制相关
+ * - 其他cpu发给本cpu的irq_work会挂在这两个链表上
+ *   > 链表元素是
+ */
 static DEFINE_PER_CPU(struct llist_head, raised_list);
 static DEFINE_PER_CPU(struct llist_head, lazy_list);
 

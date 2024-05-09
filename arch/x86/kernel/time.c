@@ -58,6 +58,11 @@ static irqreturn_t timer_interrupt(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+/*
+ * 这个只是处理开机时刻的0号中断，后面会有专门的Local timer interrupt取代0号中断
+ * - Local timer interrupt的中断处理函数是apic_timer_interrupt()
+ *   > 参见init_IRQ()
+ */
 static struct irqaction irq0  = {
 	.handler = timer_interrupt,
 	.flags = IRQF_NOBALANCING | IRQF_IRQPOLL | IRQF_TIMER,

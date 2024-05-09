@@ -28,9 +28,13 @@ enum {
 	CSD_FLAG_SYNCHRONOUS	= 0x02,
 };
 
+/*
+ * 每个cpu一个call_function_data结构体
+ */
 struct call_function_data {
 	/*
 	 * 结构体类型为__call_single_data
+	 * - Note: 本字段也是percpu的
 	 */
 	call_single_data_t	__percpu *csd;
 	cpumask_var_t		cpumask;
@@ -39,6 +43,9 @@ struct call_function_data {
 
 static DEFINE_PER_CPU_ALIGNED(struct call_function_data, cfd_data);
 
+/*
+ * 本cpu应该执行的ipi call的链表头，链表元素是call_function_data->csd->llist
+ */
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct llist_head, call_single_queue);
 
 static void flush_smp_call_function_queue(bool warn_cpu_offline);
@@ -242,6 +249,9 @@ static void flush_smp_call_function_queue(bool warn_cpu_offline)
 				csd->func);
 	}
 
+	/*
+	 * 处理smp_call_function_xxx()
+	 */
 	llist_for_each_entry_safe(csd, csd_next, entry, llist) {
 		smp_call_func_t func = csd->func;
 		void *info = csd->info;
@@ -261,6 +271,7 @@ static void flush_smp_call_function_queue(bool warn_cpu_offline)
 	 * Smp functions above are typically synchronous so they
 	 * better run first since some other CPUs may be busy waiting
 	 * for them.
+	 * - 顺便处理irq work
 	 */
 	irq_work_run();
 }
@@ -497,6 +508,8 @@ void smp_call_function_many(const struct cpumask *mask,
 	/*
 	 * 每个cpu有一个call_function_data结构体，结构体内部又有一个percpu的
 	 * __call_single_data结构体；
+	 * - cfd_data是通过DEFINE_PER_CPU_ALIGNED()宏定义的call_function_data类
+	 *   型的percpu变量
 	 */
 	cfd = this_cpu_ptr(&cfd_data);
 

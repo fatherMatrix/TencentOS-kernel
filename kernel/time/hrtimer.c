@@ -1748,6 +1748,8 @@ static inline void __hrtimer_peek_ahead_timers(void) { }
 
 /*
  * Called from run_local_timers in hardirq context every jiffy
+ * - 当hrtimer还未真正进入高精度模式前，其底层是靠低分辨率定时器timer_list驱动
+ *   的。本函数的作用即是在这种情况下，推动hrtimer工作。
  */
 void hrtimer_run_queues(void)
 {
@@ -1761,6 +1763,11 @@ void hrtimer_run_queues(void)
 	 */
 	if (__hrtimer_hres_active(cpu_base))
 		return;
+
+	/*
+	 * 走到这里，说明此时的hrtimer还未进入高精度模式，需要靠低分辨率的定时器
+	 * timer_list来推动hrtimer工作；
+	 */
 
 	/*
 	 * This _is_ ugly: We have to check periodically, whether we

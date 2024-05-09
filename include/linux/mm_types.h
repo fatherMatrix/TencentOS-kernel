@@ -284,6 +284,9 @@ struct page {
 	 * Usage count. *DO NOT USE DIRECTLY*. See page_ref.h
 	 * - page_count()的返回值
 	 * - get_page()操作的值
+	 * - 当alloc_page()返回一个page后，该page的refcount被设置为1
+	 *   > 参见：post_alloc_hook() -> set_page_refcounted() -> ...
+	 *   > 对于多个连续page，仅设置了head page的refcount
 	 */
 	atomic_t _refcount;
 
@@ -492,6 +495,9 @@ struct core_state {
 };
 
 struct kioctx_table;
+/*
+ * 对进程用户态内存空间的描述
+ */
 struct mm_struct {
 	struct {
 		/*

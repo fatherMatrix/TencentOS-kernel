@@ -2278,6 +2278,8 @@ extern int nommu_shrink_inode_mappings(struct inode *, size_t, size_t);
 /* interval_tree.c */
 /*
  * 详见INTERVAL_TREE_DEFINE宏
+ * - 该宏的使用在interval_tree.c
+ *   > gtags搜不到
  */
 void vma_interval_tree_insert(struct vm_area_struct *node,
 			      struct rb_root_cached *root);
@@ -2295,6 +2297,11 @@ struct vm_area_struct *vma_interval_tree_iter_next(struct vm_area_struct *node,
 	for (vma = vma_interval_tree_iter_first(root, start, last);	\
 	     vma; vma = vma_interval_tree_iter_next(vma, start, last))
 
+/*
+ * 详见INTERVAL_TREE_DEFINE宏
+ * - 该宏的使用在interval_tree.c
+ *   > gtags搜不到
+ */
 void anon_vma_interval_tree_insert(struct anon_vma_chain *node,
 				   struct rb_root_cached *root);
 void anon_vma_interval_tree_remove(struct anon_vma_chain *node,

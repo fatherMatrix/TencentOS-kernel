@@ -25,6 +25,9 @@
  *               global (see Section 4.10); ignored otherwise
  */
 #define _PAGE_BIT_GLOBAL	8	/* Global TLB entry PPro+ */
+/*
+ * 9-10位都是ignore
+ */
 #define _PAGE_BIT_SOFTW1	9	/* available for programmer */
 #define _PAGE_BIT_SOFTW2	10	/* " */
 #define _PAGE_BIT_SOFTW3	11	/* " */

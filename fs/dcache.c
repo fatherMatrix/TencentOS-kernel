@@ -333,6 +333,10 @@ static inline void __d_clear_type_and_inode(struct dentry *dentry)
 {
 	unsigned flags = READ_ONCE(dentry->d_flags);
 
+	/*
+	 * 这将导致dentry被判定为negative
+	 * - 具体参见d_is_negative() -> d_is_miss()
+	 */
 	flags &= ~(DCACHE_ENTRY_TYPE | DCACHE_FALLTHRU);
 	WRITE_ONCE(dentry->d_flags, flags);
 	dentry->d_inode = NULL;
@@ -372,7 +376,7 @@ static void dentry_unlink_inode(struct dentry * dentry)
 	 */
 	raw_write_seqcount_begin(&dentry->d_seq);
 	/*
-	 * 清除dentry->d_inode，将dentry装换为negative状态
+	 * 清除dentry->d_inode，将dentry转换为negative状态
 	 * - 但并未将dentry从dentry_hashtable上取下
 	 */
 	__d_clear_type_and_inode(dentry);
@@ -727,6 +731,7 @@ static inline bool retain_dentry(struct dentry *dentry)
  * dentry->d_lock must be held, returns with it unlocked.
  * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * Returns dentry requiring refcount drop, or NULL if we're done.
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  */
 static struct dentry *dentry_kill(struct dentry *dentry)
 	__releases(dentry->d_lock)
@@ -998,6 +1003,12 @@ void dput(struct dentry *dentry)
 
 		/*
 		 * 返回true表示缓存该dentry到dcache；
+		 * - 但内部还是减小了引用计数的，只是inode还在
+		 * - xfs在这个函数下似乎永远返回true
+		 *   > 对于retain_dentry()返回true的情况，在什么地方实际释放
+		 *     dentry呢？总不能一直保持在内存中吧？
+		 *     x prune_dcache_sb()
+		 *
 		 * 返回false表示立即删除该dentry；
 		 */
 		if (likely(retain_dentry(dentry))) {
@@ -1008,6 +1019,9 @@ void dput(struct dentry *dentry)
 		/*
 		 * 立即删除该dentry
 		 * - 此时我们持有dentry->d_lock
+		 *
+		 * dentry_kill()返回的事dentry的parent dentry，我们要循环减小引
+		 * 用计数；
 		 */
 		dentry = dentry_kill(dentry);
 	}
@@ -1951,6 +1965,9 @@ struct dentry *d_alloc(struct dentry * parent, const struct qstr *name)
 	/*
 	 * don't need child lock because it is not subject
 	 * to concurrency here
+	 * - 新建子dentry时需要增加父dentry的引用计数
+	 *   > 对应的释放在哪里呢？
+	 *     x dput()中的while循环和dentry_kill()的返回值配合完成
 	 */
 	__dget_dlock(parent);
 	/*
@@ -2705,6 +2722,7 @@ void d_delete(struct dentry * dentry)
 	 * 如果该dentry有其他的使用者，那么我们不再考虑将其保留在内存中，而是将
 	 * 其从哈希表上摘除，在稍后将其从内存中删除；
 	 * - 结果：dentry从dentry_hashtable中摘下，但保留了d_inode
+	 *   > 此时如果再有对相同路径的查找，怎么办？
 	 */
 		__d_drop(dentry);
 		spin_unlock(&dentry->d_lock);

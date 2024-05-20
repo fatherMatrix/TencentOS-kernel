@@ -496,7 +496,7 @@ unsigned long __ref init_memory_mapping(unsigned long start,
 	 * page去映射；
 	 * - PUD huge page = 1G
 	 * - PMD huge page = 2M
-	 * x86_64当前只支持着这种大小的巨型页；
+	 * x86_64当前只支持这种大小的巨型页；
 	 */
 	nr_range = split_mem_range(mr, 0, start, end);
 
@@ -703,6 +703,8 @@ void __init init_mem_mapping(void)
 	/*
 	 * If the allocation is in bottom-up direction, we setup direct mapping
 	 * in bottom-up, otherwise we setup direct mapping in top-down.
+	 *
+	 * 这里是做直接映射，映射所有物理内存
 	 */
 	if (memblock_bottom_up()) {
 		unsigned long kernel_end = __pa_symbol(_end);

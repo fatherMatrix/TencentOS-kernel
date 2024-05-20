@@ -1882,6 +1882,7 @@ void iput(struct inode *inode)
 retry:
 	/*
 	 * 只有当inode->i_count减为0时，才会进入if内部
+	 * - inode->i_count减为0对xfs则意味着调用了prune_dcache_sb()
 	 * - 如果i_count减为0，则会获取inode->i_lock
 	 */
 	if (atomic_dec_and_lock(&inode->i_count, &inode->i_lock)) {

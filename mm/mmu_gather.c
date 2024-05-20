@@ -181,9 +181,15 @@ void tlb_remove_table(struct mmu_gather *tlb, void *table)
 static void tlb_flush_mmu_free(struct mmu_gather *tlb)
 {
 #ifdef CONFIG_HAVE_RCU_TABLE_FREE
+/*
+ * tkernel4: CONFIG_HAVE_RCU_TABLE_FREE=y
+ */
 	tlb_table_flush(tlb);
 #endif
 #ifndef CONFIG_HAVE_MMU_GATHER_NO_GATHER
+/*
+ * tkernel4: CONFIG_HAVE_MMU_GATHER_NO_GATHER is not set
+ */
 	tlb_batch_pages_flush(tlb);
 #endif
 }

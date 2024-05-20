@@ -1160,6 +1160,7 @@ void __init setup_arch(char **cmdline_p)
 	/*
 	 * 前面建立了level2_kernel_pgt中的0-512MB的页表映射，这里要清除
 	 * 除了代码段之外的页表；
+	 * - 代码段的页表要保留，该页表就是后面内核正常运行时使用的页表
 	 */
 	cleanup_highmap();
 

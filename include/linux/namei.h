@@ -36,6 +36,11 @@ enum {LAST_NORM, LAST_ROOT, LAST_DOT, LAST_DOTDOT, LAST_BIND};
 #define LOOKUP_PARENT		0x0010
 #define LOOKUP_NO_REVAL		0x0080
 #define LOOKUP_JUMPED		0x1000
+/*
+ * 表示nameidata->root已经被设置好了
+ * - filename_lookup()中如果指定了root，则设置nd->root并配置LOOKUP_ROOT标志
+ * - 在path_lookupat()中判断如果已经有LOOKUP_ROOT标志了，则无需再次set_root()
+ */
 #define LOOKUP_ROOT		0x2000
 #define LOOKUP_ROOT_GRABBED	0x0008
 

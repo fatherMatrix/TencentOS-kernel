@@ -36,12 +36,14 @@
  * The gap is to allow a space for LDT remap for PTI (1 pgd slot) and space for
  * a hypervisor (16 slots). Choosing 16 slots for a hypervisor is arbitrary,
  * but it's what Xen requires.
+ *
+ * 直接映射的起始虚拟地址
  */
 #define __PAGE_OFFSET_BASE_L5	_AC(0xff11000000000000, UL)
 #define __PAGE_OFFSET_BASE_L4	_AC(0xffff888000000000, UL)
 
 /*
- * __PAGE_OFFSET是对所有物理内存的直接映射的起始地址；
+ * __PAGE_OFFSET是对所有物理内存的直接映射的起始虚拟地址
  */
 #ifdef CONFIG_DYNAMIC_MEMORY_LAYOUT
 #define __PAGE_OFFSET           page_offset_base
@@ -51,6 +53,7 @@
 
 /*
  * __START_KERNEL_map用来映射内核image
+ * - 内核代码段的起始虚拟地址
  */
 #define __START_KERNEL_map	_AC(0xffffffff80000000, UL)
 

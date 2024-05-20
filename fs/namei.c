@@ -934,7 +934,7 @@ static void set_root(struct nameidata *nd)
 			seq = read_seqcount_begin(&fs->seq);
 			nd->root = fs->root;
 			nd->root_seq = __read_seqcount_begin(&nd->root.dentry->d_seq);
-			/* 如果不想等，则重试 */
+			/* 如果不相等，则重试 */
 		} while (read_seqcount_retry(&fs->seq, seq));
 	} else {
 		/*
@@ -1196,8 +1196,8 @@ const char *get_link(struct nameidata *nd)
 {
 	/* 
 	 * 在walk_component -> step_into -> pick_link中向stack中存放的符号链接
-	 * 信息。但那个时候只是存放了stack[depth - 1]->link字段，没有解析对应
-	 * 的name字段
+	 * 信息。但那个时候只是存放了stack[depth - 1]->link字段和对应的seq，没
+	 * 有解析对应的name字段
 	 */
 	struct saved *last = nd->stack + nd->depth - 1;
 	struct dentry *dentry = last->link.dentry;
@@ -1229,14 +1229,25 @@ const char *get_link(struct nameidata *nd)
 		 * 是在pick_link()中赋值的，赋值的入参inode是从seqcount临界区内
 		 * 读出来的。
 		 *
-		 * 那么，该inode本身的内容一定是可用的，对于非xfs的文件系统，该
-		 * inode在删除后，rcu临界区内是一直不变化的，因此是安全的；
+		 * 那么，该inode本身的内容一定是可用的；
 		 *
-		 * 对于非xfs，即便在这个小窗口内，dentry被重新链接到了新建的
-		 * inode（肯定是同路径的啦，毕竟只有同路径才可能使用相同的
-		 * dentry），新的inode肯定也不是当前的inode，因为当前的inode
-		 * 内存还没释放，slab不可能多次分配同一个内存地址。
-		 * 但对于xfs，这就有可能了！
+		 * 对于非xfs的文件系统：
+		 * - 该inode在删除后，rcu临界区内是一直不变化的，因此是安全的；
+		 * - 即便在这个小窗口内，dentry被重新链接到了新建的inode（肯定是
+		 *   同路径的啦，毕竟只有同路径才可能使用相同的dentry），新的
+		 *   inode肯定也不是当前的inode，因为当前的inode内存还没释放，
+		 *   slab不可能多次分配同一个内存地址。
+		 *   > 那此时inode本来对应了新的inode，这个时候使用老的inode进行
+		 *     软链接的解析，不会出错误吗？
+		 *     x 后面应该会找不到
+		 *
+		 * 对于xfs:
+		 * - inode可能被reinit到一个非软链接文件，导致get_link指针为NULL
+		 *
+		 * ------------------------------------------------------------
+		 *
+		 * xfs:
+		 * - xfs_vn_get_link_inline()
 		 */
 		get = inode->i_op->get_link;
 		if (nd->flags & LOOKUP_RCU) {
@@ -1793,10 +1804,13 @@ static struct dentry *__lookup_hash(const struct qstr *name,
 }
 
 /*
+ * 作用：
+ * - 在nd->path.dentry中查找nd->last表示的子dentry，并将结果通过path返回
+ *
  * 返回值：
- * ret >  0	表示成功找到
- * ret == 0	表示内存中没有，且成功切换到ref-walk模式
- * ret <  0	表示错误
+ * - ret >  0	表示成功找到
+ * - ret == 0	表示内存中没有，且成功切换到ref-walk模式
+ * - ret <  0	表示错误
  */
 static int lookup_fast(struct nameidata *nd,
 		       struct path *path, struct inode **inode,
@@ -2200,6 +2214,12 @@ static inline int step_into(struct nameidata *nd, struct path *path,
 	 * make sure that d_is_symlink above matches inode
 	 *
 	 * pick_link()中为什么没有再检查了？
+	 * - 这里为什么要进行检查？
+	 *   > dentry->d_seq可以保护dentry和inode的对应关系，这里的检查目的是确
+	 *     保我们上面得到的inode是和dentry对应的。
+	 *   > 得到inode后，vfs假定inode在rcu临界区中是不变的，所以后边就不需要
+	 *     再检查了
+	 *     x 这就给了xfs inode reuse产生crash的机会
 	 */
 	if (nd->flags & LOOKUP_RCU) {
 		if (read_seqcount_retry(&path->dentry->d_seq, seq))
@@ -2325,7 +2345,8 @@ static int walk_component(struct nameidata *nd, int flags)
 	}
 
 	/*
-	 * 走到这里，说明找到了dentry，且不为负状态
+	 * 走到这里，说明找到了nd->last对应的子dentry，且不为负状态
+	 * - 子dentry存放在path中
 	 */
 
 	/*
@@ -2792,6 +2813,9 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	nd->flags = flags | LOOKUP_JUMPED | LOOKUP_PARENT;
 	nd->depth = 0;
 	if (flags & LOOKUP_ROOT) {
+	/*
+	 * 有LOOKUP_ROOT标志，表示nd->root已经被配置好了，是直接可用的
+	 */
 		struct dentry *root = nd->root.dentry;
 		struct inode *inode = root->d_inode;
 		if (*s && unlikely(!d_can_lookup(root)))
@@ -2816,6 +2840,11 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		}
 		return s;
 	}
+
+	/*
+	 * 走到这里，说明没有LOOKUP_ROOT标志，即nd->root未被配置。此处对其进行
+	 * 配置
+	 */
 
 	/*
 	 * 根文件系统的挂载点是强制为NULL吗？
@@ -2920,6 +2949,7 @@ static const char *trailing_symlink(struct nameidata *nd)
 	nd->flags |= LOOKUP_PARENT;
 	/*
 	 * 最后一层软链接之外的软链接会在link_path_walk()中的循环中被处理干净
+	 * - 所以这里肯定是index为0的软链接
 	 */
 	nd->stack[0].name = NULL;
 	s = get_link(nd);
@@ -3005,9 +3035,10 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 		&& ((err = lookup_last(nd)) > 0)) {
 		/*
 		 * 进入到这里，说明最后一项是个符号链接，所以要重新进入while循
-		 * 环中的link_path_walk()和lookup_last。
+		 * 环中的link_path_walk()和lookup_last()。
 		 *
-		 * 如果最后一项不是符号链接，则整个while循环直接结束了
+		 * 如果最后一项不是符号链接，则整lookup_last()返回0，整个while
+		 * 循环直接结束。
 		 */ 
 		s = trailing_symlink(nd);
 	}

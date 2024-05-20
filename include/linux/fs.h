@@ -1782,6 +1782,7 @@ struct super_block {
 	 * dentry->lockref减小到0的dentry链表；
 	 * - 链表元素是dentry->d_lru
 	 * - 参见 dput() -> retain_dentry() -> d_lru_add()
+	 * - 经crash验证，其中的dentry确实lockref都为0，但保留有对应的inode
 	 */
 	struct list_lru		s_dentry_lru;
 	/*

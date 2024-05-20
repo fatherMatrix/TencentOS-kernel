@@ -9,6 +9,10 @@
 struct fs_struct {
 	int users;
 	spinlock_t lock;
+	/*
+	 * RCU模式下保护root（等？）
+	 * - 参见set_root()
+	 */
 	seqcount_t seq;
 	int umask;
 	int in_exec;

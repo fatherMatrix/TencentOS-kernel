@@ -338,6 +338,9 @@ unsigned long __startup_secondary_64(void)
 /* Wipe all early page tables except for the kernel symbol map */
 static void __init reset_early_page_tables(void)
 {
+	/*
+	 * 只是在pgd中清空了恒等映射的pgd entry，但其实内存中还存在
+	 */
 	memset(early_top_pgt, 0, sizeof(pgd_t)*(PTRS_PER_PGD-1));
 	next_early_pgt = 0;
 	/*

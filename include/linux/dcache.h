@@ -105,6 +105,11 @@ extern struct dentry_stat_t dentry_stat;
 struct dentry {
 	/* RCU lookup touched fields */
 	unsigned int d_flags;		/* protected by d_lock */
+	/*
+	 * 保护dentry：
+	 * - 设置dentry和inode的关系时，会更新d_seq
+	 * - ... ...
+	 */
 	seqcount_t d_seq;		/* per dentry seqlock */
 	/*
 	 * 第一个链表
@@ -442,6 +447,10 @@ static inline unsigned __d_entry_type(const struct dentry *dentry)
 
 static inline bool d_is_miss(const struct dentry *dentry)
 {
+	/*
+	 * DCACHE_MISS_TYPE是全0，即dentry->d_flags中啥都没有
+	 * - 参见__d_clear_type_and_inode()
+	 */
 	return __d_entry_type(dentry) == DCACHE_MISS_TYPE;
 }
 

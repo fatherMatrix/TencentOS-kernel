@@ -135,6 +135,9 @@ static void anon_vma_chain_free(struct anon_vma_chain *anon_vma_chain)
 	kmem_cache_free(anon_vma_chain_cachep, anon_vma_chain);
 }
 
+/*
+ * 将vma、avc、anon_vma关联起来
+ */
 static void anon_vma_chain_link(struct vm_area_struct *vma,
 				struct anon_vma_chain *avc,
 				struct anon_vma *anon_vma)
@@ -181,6 +184,9 @@ int __anon_vma_prepare(struct vm_area_struct *vma)
 
 	might_sleep();
 
+	/*
+	 * 分配一个anon_vma_chain结构
+	 */
 	avc = anon_vma_chain_alloc(GFP_KERNEL);
 	if (!avc)
 		goto out_enomem;
@@ -261,6 +267,10 @@ static inline void unlock_anon_vma_root(struct anon_vma *root)
  */
 int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 {
+	/*
+	 * dst是子进程vm_area_struct
+	 * src是父进程vm_area_struct
+	 */
 	struct anon_vma_chain *avc, *pavc;
 	struct anon_vma *root = NULL;
 
@@ -277,6 +287,11 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 		}
 		anon_vma = pavc->anon_vma;
 		root = lock_anon_vma_root(root, anon_vma);
+		/*
+		 * dst是子进程的vm_area_struct
+		 * avc是子进程自己新分配的anon_vma_chain
+		 * anon_vma是父进程的anon_vma
+		 */
 		anon_vma_chain_link(dst, avc, anon_vma);
 
 		/*
@@ -329,6 +344,7 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 	/*
 	 * First, attach the new VMA to the parent VMA's anon_vmas,
 	 * so rmap can find non-COWed pages in child processes.
+	 * - 将子进程的vma对应的avc链接近父进程vma对应的anon_vma中
 	 */
 	error = anon_vma_clone(vma, pvma);
 	if (error)
@@ -338,7 +354,10 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 	if (vma->anon_vma)
 		return 0;
 
-	/* Then add our own anon_vma. */
+	/*
+	 * Then add our own anon_vma.
+	 * - 分配vma自己的anon_vma
+	 */
 	anon_vma = anon_vma_alloc();
 	if (!anon_vma)
 		goto out_error;
@@ -384,9 +403,18 @@ void unlink_anon_vmas(struct vm_area_struct *vma)
 	 * from newest to oldest, ensuring the root anon_vma gets freed last.
 	 */
 	list_for_each_entry_safe(avc, next, &vma->anon_vma_chain, same_vma) {
+	/*
+	 * 遍历vma中的所有avc
+	 */
 		struct anon_vma *anon_vma = avc->anon_vma;
 
+		/*
+		 * 锁住相关部分的anon_vma子树
+		 */
 		root = lock_anon_vma_root(root, anon_vma);
+		/*
+		 * 将avc跟某个anon_vma断开联系
+		 */
 		anon_vma_interval_tree_remove(avc, &anon_vma->rb_root);
 
 		/*
@@ -395,14 +423,34 @@ void unlink_anon_vmas(struct vm_area_struct *vma)
 		 */
 		if (RB_EMPTY_ROOT(&anon_vma->rb_root.rb_root)) {
 			anon_vma->parent->degree--;
+			/*
+			 * 如果anon_vma中不再包含任何avc了，则进行continue动作
+			 * - 不包含任何avc的anon_vma可以被删除了，但我们不能在持
+			 *   锁期间进行删除，只能对应avc保留在vma->anon_vma_chain
+			 *   链表中，等待放锁后再遍历删除
+			 */
 			continue;
 		}
 
+		/*
+		 * 将avc在vma->anon_vma_chain链表上取下
+		 */
 		list_del(&avc->same_vma);
+		/*
+		 * 释放avc的内存
+		 */
 		anon_vma_chain_free(avc);
 	}
+	/*
+	 * 处理vma所在进程自己的anon_vma
+	 * - 循环中的RB_EMPTY_ROOT()已经减过一次了，这里是做什么？
+	 *   > 对应初始化中的那个1？
+	 */
 	if (vma->anon_vma)
 		vma->anon_vma->degree--;
+	/*
+	 * 解锁anon_vma子树
+	 */
 	unlock_anon_vma_root(root);
 
 	/*
@@ -414,6 +462,9 @@ void unlink_anon_vmas(struct vm_area_struct *vma)
 		struct anon_vma *anon_vma = avc->anon_vma;
 
 		VM_WARN_ON(anon_vma->degree);
+		/*
+		 * 释放对应的anon_vma
+		 */
 		put_anon_vma(anon_vma);
 
 		list_del(&avc->same_vma);
@@ -1052,7 +1103,7 @@ static void __page_set_anon_rmap(struct page *page,
 	anon_vma = (void *) anon_vma + PAGE_MAPPING_ANON;
 	page->mapping = (struct address_space *) anon_vma;
 	/*
-	 * page->index表示page映射到vma中的第几页；
+	 * page->index表示page映射到进程地址空间中的第几页
 	 */
 	page->index = linear_page_index(vma, address);
 }
@@ -1309,6 +1360,7 @@ static void page_remove_anon_compound_rmap(struct page *page)
  * @compound:	uncharge the page as compound or small page
  *
  * The caller needs to hold the pte lock.
+ * - 这里似乎只是处理page->_mapcount这类工作
  */
 void page_remove_rmap(struct page *page, bool compound)
 {
@@ -1318,9 +1370,17 @@ void page_remove_rmap(struct page *page, bool compound)
 	if (compound)
 		return page_remove_anon_compound_rmap(page);
 
-	/* page still mapped by someone else? */
+	/*
+	 * page still mapped by someone else?
+	 * - atomic_add_negative()是加上-1后判断是否小于0
+	 *   > 如果不小于0，则还有其他映射，返回
+	 */
 	if (!atomic_add_negative(-1, &page->_mapcount))
 		return;
+
+	/*
+	 * 走到这里，说明该page已经没有映射了，进行回收之前的操作？
+	 */
 
 	/*
 	 * We use the irq-unsafe __{inc|mod}_zone_page_stat because
@@ -1780,6 +1840,11 @@ void __put_anon_vma(struct anon_vma *anon_vma)
 	struct anon_vma *root = anon_vma->root;
 
 	anon_vma_free(anon_vma);
+	/*
+	 * 当root anon_vma->refcount减小到0后，其才会被释放
+	 * - 这意味着整棵anon_vma子树上的节点都被释放了，整个父子进程树都要消失
+	 *   了
+	 */
 	if (root != anon_vma && atomic_dec_and_test(&root->refcount))
 		anon_vma_free(root);
 }

@@ -27,6 +27,9 @@
  * pointing to this anon_vma once its vma list is empty.
  */
 struct anon_vma {
+	/*
+	 * root的实际意义在于定位一个page/vma可能存在于的最高父进程
+	 */
 	struct anon_vma *root;		/* Root of this anon_vma tree */
 	struct rw_semaphore rwsem;	/* W: modification, R: walking the list */
 	/*
@@ -35,6 +38,10 @@ struct anon_vma {
 	 * the duration of the operation. A caller that takes
 	 * the reference is responsible for clearing up the
 	 * anon_vma if they are the last user on release
+	 * - 操作点：
+	 *   > 初始化：anon_vma_alloc()
+	 *   > 增加：anon_vma_fork() -> get_anon_vma()
+	 *   > 减小：unlink_anon_vmas() -> put_anon_vma()
 	 */
 	atomic_t refcount;
 
@@ -43,9 +50,25 @@ struct anon_vma {
 	 *
 	 * This counter is used for making decision about reusing anon_vma
 	 * instead of forking new one. See comments in function anon_vma_clone.
+	 * - 这里引入了一个还未修复的CVE: CVE-2022-42703
+	 *   > 引入的upstream patch: 7a3ef208e662f4b63d43a23f61a64a129c525bbc
+	 *   > 修复的upstream patch: 2555283eb40df89945557273121e9393ef9b542b
+	 * - 操作点：
+	 *   > 初始化：anon_vma_alloc()
+	 *   > 增加：anon_vma_fork() / anon_vma_prepare()
+	 *   > 减小：unlink_anon_vmas()
+	 *   > 使用：anon_vma_clone()
 	 */
 	unsigned degree;
 
+	/*
+	 * 这个其实是为了anon_vma重用才引入的
+	 * - 事实上，我们并不关心anon_vma自己组成的树的结构，我们只需要知道某个
+	 *   vma是从哪个进程的vma/anon_vma开始继承过来的即可（用于插入/删除时的
+	 *   lock），因此理论上只需要关注root字段即可。
+	 *   > 这也解释了为什么我们可以重用父进程的anon_vma，因为anon_vma在子树
+	 *     上的位置并没有什么含义。有含义的树是anon_vma->rb_root这棵avc树
+	 */
 	struct anon_vma *parent;	/* Parent of this anon_vma */
 
 	/*
@@ -57,9 +80,9 @@ struct anon_vma {
 	 * mm_take_all_locks() (mm_all_locks_mutex).
 	 */
 
-	/* Interval tree of private "related" vmas */
 	/*
-	 * 树根，元素是anon_vma_chain->rb；
+	 * Interval tree of private "related" vmas
+	 * - 树根，元素是anon_vma_chain->rb，这是一棵区间树
 	 */
 	struct rb_root_cached rb_root;
 };

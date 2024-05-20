@@ -1030,6 +1030,10 @@ static unsigned long zap_pte_range(struct mmu_gather *tlb,
 	tlb_change_page_size(tlb, PAGE_SIZE);
 again:
 	init_rss_vec(rss);
+	/*
+	 * 获取addr对应的pte entry的指针
+	 * - 返回时对pte table加了锁
+	 */
 	start_pte = pte_offset_map_lock(mm, pmd, addr, &ptl);
 	pte = start_pte;
 	flush_tlb_batched_pending(mm);
@@ -1051,6 +1055,10 @@ again:
 		if (pte_present(ptent)) {
 			struct page *page;
 
+			/*
+			 * 获取pte指向的物理页对应的page结构体
+			 * - 这个page此时肯定是4KB的，因为这里都走到pte了嘛
+			 */
 			page = vm_normal_page(vma, addr, ptent);
 			if (unlikely(details) && page) {
 				/*
@@ -1064,9 +1072,16 @@ again:
 			}
 			/*
 			 * 将pte清零
+			 * - ptent返回原来的值
+			 *   > 为什么还要返回原来的值？上面的ptent = *pte还会发
+			 *     生改变吗？
+			 *     x 页表项的某些位是硬件设置的，所以要这么干？
 			 */
 			ptent = ptep_get_and_clear_full(mm, addr, pte,
 							tlb->fullmm);
+			/*
+			 * 记录需要冲刷tlb的虚地址空间
+			 */
 			tlb_remove_tlb_entry(tlb, pte, addr);
 			if (unlikely(!page))
 				continue;
@@ -1083,6 +1098,9 @@ again:
 			rss[mm_counter(page)]--;
 			/*
 			 * 取消该页的反向映射
+			 * - 没看明白，这里已经可以通过页表正向获取本mm_struct中
+			 *   的对应页表项了，还需要RMAP做什么？
+			 *   > 看该函数的实现，似乎只是处理了_mapcount等工作
 			 */
 			page_remove_rmap(page, false);
 			if (unlikely(page_mapcount(page) < 0))
@@ -1090,6 +1108,7 @@ again:
 			/*
 			 * 将该页记录到mmu_gather结构中，当达到一定数量后批量释
 			 * 放；
+			 * - 批量释放什么？
 			 */
 			if (unlikely(__tlb_remove_page(tlb, page))) {
 				force_flush = 1;
@@ -1152,6 +1171,9 @@ again:
 	/* Do the actual TLB flush before dropping ptl */
 	if (force_flush)
 		tlb_flush_mmu_tlbonly(tlb);
+	/*
+	 * 解锁pte table
+	 */
 	pte_unmap_unlock(start_pte, ptl);
 
 	/*
@@ -1265,6 +1287,9 @@ void unmap_page_range(struct mmu_gather *tlb,
 	unsigned long next;
 
 	BUG_ON(addr >= end);
+	/*
+	 * x86下是空操作
+	 */
 	tlb_start_vma(tlb, vma);
 	pgd = pgd_offset(vma->vm_mm, addr);
 	do {
@@ -3105,9 +3130,11 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	 * from a different thread.
 	 *
 	 * pte_alloc_map() is safe to use under down_write(mmap_sem) or when
+	 *                                      ^^^^^^^^^^
 	 * parallel threads are excluded by other means.
 	 *
 	 * Here we only have down_read(mmap_sem).
+	 *                        ^^^^
 	 */
 	if (pte_alloc(vma->vm_mm, vmf->pmd))
 		return VM_FAULT_OOM;
@@ -3158,6 +3185,9 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	if (vma->vm_flags & VM_WRITE)
 		entry = pte_mkwrite(pte_mkdirty(entry));
 
+	/*
+	 * 获取pte table的锁并返回当前pte
+	 */
 	vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd, vmf->address,
 			&vmf->ptl);
 	if (!pte_none(*vmf->pte))
@@ -3176,6 +3206,9 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	}
 
 	inc_mm_counter_fast(vma->vm_mm, MM_ANONPAGES);
+	/*
+	 * 设置新分配的page的anon_vma
+	 */
 	page_add_new_anon_rmap(page, vma, vmf->address, false);
 	mem_cgroup_commit_charge(page, memcg, false, false);
 	lru_cache_add_active_or_unevictable(page, vma);
@@ -3971,8 +4004,13 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
 		 * pmd from under us anymore at this point because we hold the
 		 * mmap_sem read mode and khugepaged takes it in write mode.
 		 * So now it's safe to run pte_offset_map().
+		 *
+		 * 找到page fault发生地址的pte指针
 		 */
 		vmf->pte = pte_offset_map(vmf->pmd, vmf->address);
+		/*
+		 * 读取此时的pte entry
+		 */
 		vmf->orig_pte = *vmf->pte;
 
 		/*
@@ -3994,6 +4032,9 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
 		if (vma_is_anonymous(vmf->vma))
 			return do_anonymous_page(vmf);
 		else
+		/*
+		 * 文件页，调用fault()方法
+		 */
 			return do_fault(vmf);
 	}
 

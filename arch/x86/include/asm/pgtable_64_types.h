@@ -95,6 +95,10 @@ extern unsigned int ptrs_per_p4d;
  */
 #define PTRS_PER_PTE	512
 
+/*
+ * 表示一个pmd entry可以覆盖的内存大小
+ * - 请注意是1个pmd entry
+ */
 #define PMD_SIZE	(_AC(1, UL) << PMD_SHIFT)
 #define PMD_MASK	(~(PMD_SIZE - 1))
 #define PUD_SIZE	(_AC(1, UL) << PUD_SHIFT)

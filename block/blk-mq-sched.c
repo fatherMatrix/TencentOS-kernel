@@ -479,6 +479,9 @@ void blk_mq_sched_insert_requests(struct blk_mq_hw_ctx *hctx,
 
 	e = hctx->queue->elevator;
 	if (e && e->type->ops.insert_requests)
+	/*
+	 * 如果有调度器，则将request插入调度器
+	 */
 		e->type->ops.insert_requests(hctx, list, false);
 	else {
 		/*
@@ -487,10 +490,18 @@ void blk_mq_sched_insert_requests(struct blk_mq_hw_ctx *hctx,
 		 * us one extra enqueue & dequeue to sw queue.
 		 */
 		if (!hctx->dispatch_busy && !e && !run_queue_async) {
+		/*
+		 * 如果没有调度器，且硬件队列此时不忙，则将reqeust直接下发到硬
+		 * 件队列
+		 */
 			blk_mq_try_issue_list_directly(hctx, list);
 			if (list_empty(list))
 				goto out;
 		}
+		/*
+		 * 没有调度器，且硬件队列此时是忙的，则将request插入软件队列，
+		 * 并在硬件队列中标记对应软件队列中有请求
+		 */
 		blk_mq_insert_requests(hctx, ctx, list);
 	}
 

@@ -33,7 +33,11 @@ struct list_lru_one {
 
 struct list_lru_memcg {
 	struct rcu_head		rcu;
-	/* array of per cgroup lists, indexed by memcg_cache_id */
+	/*
+	 * array of per cgroup lists, indexed by memcg_cache_id
+	 * - crash调试时要注意本结构体打印出来后，lru字段的值时lru字段本身的地
+	 *   址，要使用rd命令读取lru的地址才是其中的元素。
+	 */
 	struct list_lru_one	*lru[0];
 };
 
@@ -51,7 +55,8 @@ struct list_lru_node {
 
 struct list_lru {
 	/*
-	 * 应该是每个cpu一个节点
+	 * 每个numa节点一个node
+	 * - node是一个数组
 	 */
 	struct list_lru_node	*node;
 #ifdef CONFIG_MEMCG_KMEM

@@ -97,9 +97,9 @@ struct page {
 			/*
 			 * 如果是文件页，则表示在文件中的偏移，单位是页;
 			 * 如果是匿名页，则设置为page虚拟地址/PAGE_SIZE；
-			 * - 也有版本是在对应vma中的偏移，单位是页；但这里不是；
+			 * - 也有版本是在进程地址空间中的偏移，单位是页；
 			 *   其含义本质上依赖于vma->pgoff的含义；
-			 * - 参见__page_set_anon_rmap()和insert_vm_struct()
+			 *   > 参见__page_set_anon_rmap()和insert_vm_struct()
 			 * 如果是pcp中的页，则表示其迁移类型
 			 * - index用来表示migrate type只能是当page处于伙伴系统
 			 *   中时才能用，free_page()时先查一次位图，更新到index
@@ -449,6 +449,12 @@ struct vm_area_struct {
 	 */
 	struct list_head anon_vma_chain; /* Serialized by mmap_sem &
 					  * page_table_lock */
+	/*
+	 * vma所属进程自己的anon_vma
+	 * - 当发生cow page fault时，将新分配的page->mapping指向这个anon_vma，
+	 *   这样一来后面再查找这个page的RMAP时就只需要从这个进程的anon_vma子树
+	 *   开始查了；
+	 */
 	struct anon_vma *anon_vma;	/* Serialized by page_table_lock */
 
 	/* Function pointers to deal with this struct. */

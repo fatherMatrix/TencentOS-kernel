@@ -111,6 +111,9 @@ struct irqaction {
 	irq_handler_t		handler;
 	void			*dev_id;
 	void __percpu		*percpu_dev_id;
+	/*
+	 * 一个irq可以对应一个irqaction的链表，依次调用执行
+	 */
 	struct irqaction	*next;
 	irq_handler_t		thread_fn;
 	struct task_struct	*thread;

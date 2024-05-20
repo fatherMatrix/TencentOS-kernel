@@ -239,11 +239,16 @@ struct mmu_gather {
 	struct mmu_table_batch	*batch;
 #endif
 
+	/*
+	 * tlb冲刷时的虚拟地址区间
+	 * > 参见：__tlb_adjust_range()
+	 */
 	unsigned long		start;
 	unsigned long		end;
 	/*
 	 * we are in the middle of an operation to clear
 	 * a full mm and can make some optimizations
+	 * 清空的区域是0 ~ -1
 	 */
 	unsigned int		fullmm : 1;
 
@@ -277,6 +282,9 @@ struct mmu_gather {
 #ifndef CONFIG_HAVE_MMU_GATHER_NO_GATHER
 	struct mmu_gather_batch *active;
 	struct mmu_gather_batch	local;
+	/*
+	 * unmap过程中记录下要释放的page
+	 */
 	struct page		*__pages[MMU_GATHER_BUNDLE];
 
 #ifdef CONFIG_HAVE_MMU_GATHER_PAGE_SIZE

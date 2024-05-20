@@ -1029,7 +1029,13 @@ static inline int pgd_none(pgd_t pgd)
 #define pgd_offset_k(address) pgd_offset(&init_mm, (address))
 
 
+/*
+ * 物理内存直接映射的起始地址在pgd中的index
+ */
 #define KERNEL_PGD_BOUNDARY	pgd_index(PAGE_OFFSET)
+/*
+ * pgd table中指向内核地址空间的pgd entry数量
+ */
 #define KERNEL_PGD_PTRS		(PTRS_PER_PGD - KERNEL_PGD_BOUNDARY)
 
 #ifndef __ASSEMBLY__

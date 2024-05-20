@@ -757,6 +757,10 @@ __kernel_physical_mapping_init(unsigned long paddr_start,
 	unsigned long vaddr, vaddr_start, vaddr_end, vaddr_next, paddr_last;
 
 	paddr_last = paddr_end;
+	/*
+	 * 这里这个__va()责任重大，它就是吧物理地址加上PAGE_OFFSET后返回
+	 * - 这就导致了我们这里建立的直接映射都处于init_top_pgt中的直接映射区
+	 */
 	vaddr = (unsigned long)__va(paddr_start);
 	vaddr_end = (unsigned long)__va(paddr_end);
 	vaddr_start = vaddr;

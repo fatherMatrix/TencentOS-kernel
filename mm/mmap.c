@@ -1315,6 +1315,15 @@ struct anon_vma *find_mergeable_anon_vma(struct vm_area_struct *vma)
 	struct anon_vma *anon_vma;
 	struct vm_area_struct *near;
 
+	/*
+	 * 此时子进程的vma刚刚从vm_area_dup()中复制出来，其中绝大部分字段还是和
+	 * 父进程的vma一直的
+	 * - 其中就包括了vm_prev/vm_next字段，这意味着此时遍历的其实是父进程的
+	 *   vma链表
+	 * - 和父进程共用anon_vma合理吗？
+	 *   > 是ok的，我们只需要通过anon_vma找到某个vma即可，反正try_to_unmap()
+	 *     中是会判断page->index和vma的关系的
+	 */
 	near = vma->vm_next;
 	if (!near)
 		goto try_prev;
@@ -2823,7 +2832,11 @@ int __do_munmap(struct mm_struct *mm, unsigned long start, size_t len,
 	 */
 	arch_unmap(mm, start, end);
 
-	/* Find the first overlapping VMA */
+	/*
+	 * Find the first overlapping VMA
+	 * - 找到的是第一个vma->end > start的vma
+	 *   > 但并不保证vma->start <= start
+	 */
 	vma = find_vma(mm, start);
 	if (!vma)
 		return 0;
@@ -3235,6 +3248,8 @@ void exit_mmap(struct mm_struct *mm)
 	/* Use -1 here to ensure all VMAs in the mm are unmapped */
 	/*
 	 * 处理mm_struct中包含的所有vma
+	 * - 这里是通过address正向查找本mm_struct中的pte
+	 *   > RMAP重点是通过page找到多个mm_struct中的所有pte
 	 */
 	unmap_vmas(&tlb, vma, 0, -1);
 	/*
@@ -3250,6 +3265,9 @@ void exit_mmap(struct mm_struct *mm)
 	while (vma) {
 		if (vma->vm_flags & VM_ACCOUNT)
 			nr_accounted += vma_pages(vma);
+		/*
+		 * 释放vma本身所占的内存
+		 */
 		vma = remove_vma(vma);
 		cond_resched();
 	}
@@ -3294,6 +3312,7 @@ int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
 		/*
 		 * 对于文件vma，vma->vm_pgoff保存的是相对文件头的偏移，单位是页；
 		 * 对于匿名vma，vma->vm_pgoff保存的直接就是vma->vm_start的页；
+		 * - 即在地址空间中的偏移
 		 * - 也有版本是0，但这里不是；
 		 */
 		vma->vm_pgoff = vma->vm_start >> PAGE_SHIFT;

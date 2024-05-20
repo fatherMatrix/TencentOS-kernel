@@ -121,6 +121,9 @@ static void pgd_ctor(struct mm_struct *mm, pgd_t *pgd)
 	if (CONFIG_PGTABLE_LEVELS == 2 ||
 	    (CONFIG_PGTABLE_LEVELS == 3 && SHARED_KERNEL_PMD) ||
 	    CONFIG_PGTABLE_LEVELS >= 4) {
+	/*
+	 * 拷贝主内核页表中属于内核地址空间的部分到pgd的对应条目中
+	 */
 		clone_pgd_range(pgd + KERNEL_PGD_BOUNDARY,
 				swapper_pg_dir + KERNEL_PGD_BOUNDARY,
 				KERNEL_PGD_PTRS);
@@ -292,9 +295,15 @@ static void pgd_prepopulate_pmd(struct mm_struct *mm, pgd_t *pgd, pmd_t *pmds[])
 	pud_t *pud;
 	int i;
 
+	/*
+	 * 正常情况，没有CONFIG_X86_PAE时这里就返回了
+	 */
 	if (PREALLOCATED_PMDS == 0) /* Work around gcc-3.4.x bug */
 		return;
 
+	/*
+	 * 为什么可以直接使用p4d和pud两级页表？一定存在吗？
+	 */
 	p4d = p4d_offset(pgd, 0);
 	pud = pud_offset(p4d, 0);
 
@@ -384,6 +393,7 @@ static inline pgd_t *_pgd_alloc(void)
 	/*
 	 * If no SHARED_KERNEL_PMD, PAE kernel is running as a Xen domain.
 	 * We allocate one page for pgd.
+	 * - 对于64位系统，SHARED_KERNEL_PMD恒为0
 	 */
 	if (!SHARED_KERNEL_PMD)
 		return (pgd_t *)__get_free_pages(GFP_PGTABLE_USER,
@@ -433,6 +443,10 @@ pgd_t *pgd_alloc(struct mm_struct *mm)
 
 	mm->pgd = pgd;
 
+	/*
+	 * 对于非CONFIG_X86_PAE的情况，PREALLOCATED_PMDS为0，内部相当于没有操作
+	 * - 当前正常情况就是这样
+	 */
 	if (preallocate_pmds(mm, pmds, PREALLOCATED_PMDS) != 0)
 		goto out_free_pgd;
 

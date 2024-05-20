@@ -370,6 +370,10 @@ struct vm_area_struct *vm_area_dup(struct vm_area_struct *orig)
 	struct vm_area_struct *new = kmem_cache_alloc(vm_area_cachep, GFP_KERNEL);
 
 	if (new) {
+		/*
+		 * 拷贝父进程对应vm_area_struct的值
+		 * - 所以此时子进程的vma还是串联到父进程的vma链表中的
+		 */
 		*new = *orig;
 		INIT_LIST_HEAD(&new->anon_vma_chain);
 	}
@@ -499,6 +503,9 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 	LIST_HEAD(uf);
 
 	uprobe_start_dup_mmap();
+	/*
+	 * 锁住父进程的mm_struct
+	 */
 	if (down_write_killable(&oldmm->mmap_sem)) {
 		retval = -EINTR;
 		goto fail_uprobe_end;
@@ -528,6 +535,9 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 	if (retval)
 		goto out;
 
+	/*
+	 * 拷贝父进程mm_struct中的vm_area_struct
+	 */
 	prev = NULL;
 	for (mpnt = oldmm->mmap; mpnt; mpnt = mpnt->vm_next) {
 		struct file *file;
@@ -552,16 +562,25 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 				goto fail_nomem;
 			charge = len;
 		}
+		/*
+		 * 分配新的vm_area_struct
+		 */
 		tmp = vm_area_dup(mpnt);
 		if (!tmp)
 			goto fail_nomem;
 		retval = vma_dup_policy(mpnt, tmp);
 		if (retval)
 			goto fail_nomem_policy;
+		/*
+		 * 设置新分配的vm_area_struct属于子进程的mm_struct
+		 */
 		tmp->vm_mm = mm;
 		retval = dup_userfaultfd(tmp, &uf);
 		if (retval)
 			goto fail_nomem_anon_vma_fork;
+		/*
+		 * 配置子进程vm_area_struct对应的RMAP
+		 */
 		if (tmp->vm_flags & VM_WIPEONFORK) {
 			/* VM_WIPEONFORK gets a clean slate in the child. */
 			tmp->anon_vma = NULL;
@@ -652,7 +671,7 @@ static inline void mm_free_pgd(struct mm_struct *mm)
 {
 	pgd_free(mm, mm->pgd);
 }
-#else
+#else /* CONFIG_MMU */
 static int dup_mmap(struct mm_struct *mm, struct mm_struct *oldmm)
 {
 	down_write(&oldmm->mmap_sem);
@@ -1387,6 +1406,12 @@ static struct mm_struct *dup_mm(struct task_struct *tsk,
 
 	memcpy(mm, oldmm, sizeof(*mm));
 
+	/*
+	 * 分配pgd table并拷贝父进程pgd中kernel部分的pgd entry
+	 * - 除pgd table之外的内核态页表都是共享的
+	 *   > pgd table之所以不能共享是因为在x86架构下pgd table中包含用户态地
+	 *     址空间的页表
+	 */
 	if (!mm_init(mm, tsk, mm->user_ns))
 		goto fail_nomem;
 
@@ -1440,6 +1465,9 @@ static int copy_mm(unsigned long clone_flags, struct task_struct *tsk)
 	vmacache_flush(tsk);
 
 	if (clone_flags & CLONE_VM) {
+	/*
+	 * 如果是创建新线程，则共享mm_struct
+	 */
 		mmget(oldmm);
 		mm = oldmm;
 		goto good_mm;

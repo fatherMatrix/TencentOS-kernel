@@ -89,6 +89,9 @@ static inline void native_pmd_clear(pmd_t *pmd)
 static inline pte_t native_ptep_get_and_clear(pte_t *xp)
 {
 #ifdef CONFIG_SMP
+	/*
+	 * 注意xchg()，这里返回的是页表清零之前的原值
+	 */
 	return native_make_pte(xchg(&xp->pte, 0));
 #else
 	/* native_local_ptep_get_and_clear,

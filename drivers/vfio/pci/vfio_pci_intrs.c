@@ -122,6 +122,9 @@ static irqreturn_t vfio_intx_handler(int irq, void *dev_id)
 	spin_lock_irqsave(&vdev->irqlock, flags);
 
 	if (!vdev->pci_2_3) {
+	/*
+	 * 如果不支持interrupt masking
+	 */
 		disable_irq_nosync(vdev->pdev->irq);
 		vdev->ctx[0].masked = true;
 		ret = IRQ_HANDLED;

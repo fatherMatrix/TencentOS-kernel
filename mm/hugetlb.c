@@ -5149,6 +5149,10 @@ pte_t *huge_pte_offset(struct mm_struct *mm,
 	if (!p4d_present(*p4d))
 		return NULL;
 
+	/*
+	 * 从pud开始，就有可能是hugepage或者被swap了
+	 */
+
 	pud = pud_offset(p4d, addr);
 	pud_entry = READ_ONCE(*pud);
 	if (sz != PUD_SIZE && pud_none(pud_entry))

@@ -510,11 +510,20 @@ static ktime_t __hrtimer_next_event_base(struct hrtimer_cpu_base *cpu_base,
 	struct hrtimer_clock_base *base;
 	ktime_t expires;
 
+	/*
+	 * 根据位图遍历所有包含hrtimer的hrtimer_clock_base
+	 */
 	for_each_active_base(base, cpu_base, active) {
 		struct timerqueue_node *next;
 		struct hrtimer *timer;
 
+		/*
+		 * 取出红黑树的最左节点
+		 */
 		next = timerqueue_getnext(&base->active);
+		/*
+		 * 根据红黑树节点得到hrtimer结构体
+		 */
 		timer = container_of(next, struct hrtimer, node);
 		if (timer == exclude) {
 			/* Get to the next timer in the queue. */
@@ -524,6 +533,9 @@ static ktime_t __hrtimer_next_event_base(struct hrtimer_cpu_base *cpu_base,
 
 			timer = container_of(next, struct hrtimer, node);
 		}
+		/*
+		 * 将到期时间统一调整到单调时间？
+		 */
 		expires = ktime_sub(hrtimer_get_expires(timer), base->offset);
 		if (expires < expires_next) {
 			expires_next = expires;
@@ -576,8 +588,14 @@ __hrtimer_get_next_event(struct hrtimer_cpu_base *cpu_base, unsigned int active_
 	ktime_t expires_next = KTIME_MAX;
 
 	if (!cpu_base->softirq_activated && (active_mask & HRTIMER_ACTIVE_SOFT)) {
+	/*
+	 * 如果当前未唤醒HRTIMER_SOFTIRQ，且当前查找的是软定时器
+	 */
 		active = cpu_base->active_bases & HRTIMER_ACTIVE_SOFT;
 		cpu_base->softirq_next_timer = NULL;
+		/*
+		 * 查找下一个到期的hrtimer
+		 */
 		expires_next = __hrtimer_next_event_base(cpu_base, NULL,
 							 active, KTIME_MAX);
 
@@ -692,6 +710,9 @@ hrtimer_force_reprogram(struct hrtimer_cpu_base *cpu_base, int skip_equal)
 	if (!__hrtimer_hres_active(cpu_base) || cpu_base->hang_detected)
 		return;
 
+	/*
+	 * 对下层时钟事件设备进行编程
+	 */
 	tick_program_event(cpu_base->expires_next, 1);
 }
 
@@ -1009,12 +1030,21 @@ static void __remove_hrtimer(struct hrtimer *timer,
 	struct hrtimer_cpu_base *cpu_base = base->cpu_base;
 	u8 state = timer->state;
 
-	/* Pairs with the lockless read in hrtimer_is_queued() */
+	/*
+	 * Pairs with the lockless read in hrtimer_is_queued()
+	 * - 修改当前定时器的状态
+	 */
 	WRITE_ONCE(timer->state, newstate);
 	if (!(state & HRTIMER_STATE_ENQUEUED))
 		return;
 
+	/*
+	 * 将要删除的hrtimer从对应红黑树中删除
+	 */
 	if (!timerqueue_del(&base->active, &timer->node))
+		/*
+		 * 如果红黑树被删空了，在hrtimer_cpu_base中标注一下
+		 */
 		cpu_base->active_bases &= ~(1 << base->index);
 
 	/*
@@ -1024,6 +1054,8 @@ static void __remove_hrtimer(struct hrtimer *timer,
 	 * cpu_base->next_timer. So the worst thing what can happen is
 	 * an superflous call to hrtimer_force_reprogram() on the
 	 * remote cpu later on if the same timer gets enqueued again.
+	 * - 只要当要删除的定时器是将要到期的定时器时才重新编程lapic
+	 *   > lapic的timer就是每次设置一个
 	 */
 	if (reprogram && timer == cpu_base->next_timer)
 		hrtimer_force_reprogram(cpu_base, 1);
@@ -1049,6 +1081,10 @@ remove_hrtimer(struct hrtimer *timer, struct hrtimer_clock_base *base, bool rest
 		 * rare case and less expensive than a smp call.
 		 */
 		debug_deactivate(timer);
+		/*
+		 * 当前定时器处于激活状态，且在本cpu上，则需要重新编程
+		 * - lapic的嘛
+		 */
 		reprogram = base->cpu_base == this_cpu_ptr(&hrtimer_bases);
 
 		if (!restart)
@@ -1107,19 +1143,31 @@ static int __hrtimer_start_range_ns(struct hrtimer *timer, ktime_t tim,
 {
 	struct hrtimer_clock_base *new_base;
 
-	/* Remove an active timer from the queue: */
+	/*
+	 * Remove an active timer from the queue:
+	 * - 如果当前hrtimer处于红黑树中，则先移除
+	 */
 	remove_hrtimer(timer, base, true);
 
+	/*
+	 * 如果tim表示的是相对时间，则计算其绝对时间
+	 */
 	if (mode & HRTIMER_MODE_REL)
 		tim = ktime_add_safe(tim, base->get_time());
 
 	tim = hrtimer_update_lowres(timer, tim, mode);
 
+	/*
+	 * 设置hrtimer的软、硬到期时间
+	 */
 	hrtimer_set_expires_range_ns(timer, tim, delta_ns);
 
 	/* Switch the timer base, if necessary: */
 	new_base = switch_hrtimer_base(timer, base, mode & HRTIMER_MODE_PINNED);
 
+	/*
+	 * 将hrtimer插入对应红黑树并做标记
+	 */
 	return enqueue_hrtimer(timer, new_base, mode);
 }
 
@@ -1148,11 +1196,23 @@ void hrtimer_start_range_ns(struct hrtimer *timer, ktime_t tim,
 	else
 		WARN_ON_ONCE(!(mode & HRTIMER_MODE_HARD) ^ !timer->is_hard);
 
+	/*
+	 * 锁定hrtimer对应的hrtimer_clock_base
+	 */
 	base = lock_hrtimer_base(timer, &flags);
 
+	/*
+	 * 激活定时器
+	 */
 	if (__hrtimer_start_range_ns(timer, tim, delta_ns, mode, base))
+		/*
+		 * 如果激活成功，则重编程
+		 */
 		hrtimer_reprogram(timer, true);
 
+	/*
+	 * 放锁
+	 */
 	unlock_hrtimer_base(timer, &flags);
 }
 EXPORT_SYMBOL_GPL(hrtimer_start_range_ns);
@@ -1411,6 +1471,9 @@ static void __hrtimer_init(struct hrtimer *timer, clockid_t clock_id,
 
 	memset(timer, 0, sizeof(struct hrtimer));
 
+	/*
+	 * 获得当前cpu上的hrtimer_cpu_base结构体的地址
+	 */
 	cpu_base = raw_cpu_ptr(&hrtimer_bases);
 
 	/*
@@ -1421,6 +1484,9 @@ static void __hrtimer_init(struct hrtimer *timer, clockid_t clock_id,
 	if (clock_id == CLOCK_REALTIME && mode & HRTIMER_MODE_REL)
 		clock_id = CLOCK_MONOTONIC;
 
+	/*
+	 * 计算clock的类型
+	 */
 	base = softtimer ? HRTIMER_MAX_CLOCK_BASES / 2 : 0;
 	base += hrtimer_clockid_to_base(clock_id);
 	timer->is_soft = softtimer;
@@ -1775,6 +1841,8 @@ void hrtimer_run_queues(void)
 	 * switch happens with xtime_lock held. Notification from
 	 * there only sets the check bit in the tick_oneshot code,
 	 * otherwise we might deadlock vs. xtime_lock.
+	 * - 此时还是处于低精度模式的，检查是否切换到oneshot模式并开启高精度定
+	 *   时器
 	 */
 	if (tick_check_oneshot_change(!hrtimer_is_hres_enabled())) {
 		hrtimer_switch_to_hres();
@@ -2128,11 +2196,13 @@ int hrtimers_dead_cpu(unsigned int scpu)
 void __init hrtimers_init(void)
 {
 	/*
-	 * 初始化当前cpu的hrtimer_cpu_base结构体
+	 * 初始化bsp cpu的hrtimer_cpu_base结构体
+	 * - 其他cpu的初始化: cpuhp_hp_states[CPUHP_HRTIMERS_PREPARE]
 	 */
 	hrtimers_prepare_cpu(smp_processor_id());
 	/*
 	 * 设置高精度定时器的软中断处理函数
+	 * - 这个软中断用来处理hrtimer中的软限制定时器
 	 */
 	open_softirq(HRTIMER_SOFTIRQ, hrtimer_run_softirq);
 }

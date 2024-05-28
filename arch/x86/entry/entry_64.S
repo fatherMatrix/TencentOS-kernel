@@ -367,6 +367,7 @@ END(ret_from_fork)
 /*
  * Build the entry stubs with some assembler magic.
  * We pack 1 stub into every 8-byte block.
+ * - 这里会通过idt_setup_apic_and_irq_gates()设置到中断向量表中
  */
 	.align 8
 ENTRY(irq_entries_start)

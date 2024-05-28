@@ -7,7 +7,14 @@
 
 
 struct timerqueue_node {
+	/*
+	 * 将自己加入到红黑树中
+	 * - 根节点是hrtimer_clock_base->active
+	 */
 	struct rb_node node;
+	/*
+	 * 硬超时时间
+	 */
 	ktime_t expires;
 };
 

@@ -779,6 +779,9 @@ static void __clocksource_select(bool skipcur)
 found:
 	if (curr_clocksource != best && !timekeeping_notify(best)) {
 		pr_info("Switched to clocksource %s\n", best->name);
+		/*
+		 * 设置当前的时钟源
+		 */
 		curr_clocksource = best;
 	}
 }

@@ -123,6 +123,10 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 #endif /* _LINUX_TRACEPOINT_H */
 
 /*
+ * 本文件的include #ifdef保护到上面就结束了
+ * - 原因：--+
+ *           |
+ *           V
  * Note: we keep the TRACE_EVENT and DECLARE_TRACE outside the include
  *  file ifdef protection.
  *  This is due to the way trace events work. If a file includes two

@@ -24,6 +24,9 @@
  * timer stops in C3 state.
  */
 
+/*
+ * tick广播设备
+ */
 static struct tick_device tick_broadcast_device;
 static cpumask_var_t tick_broadcast_mask __cpumask_var_read_mostly;
 static cpumask_var_t tick_broadcast_on __cpumask_var_read_mostly;

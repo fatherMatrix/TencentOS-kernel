@@ -581,6 +581,8 @@ _xfs_buf_obj_cmp(
 		 * it stale has not yet committed. i.e. we are
 		 * reallocating a busy extent. Skip this buffer and
 		 * continue searching for an exact match.
+		 * - 这说明在绝大部分情况下，xfs是不允许对任意地址进行任意长度
+		 *   的读取的；
 		 */
 		ASSERT(bp->b_flags & XBF_STALE);
 		return 1;
@@ -648,6 +650,9 @@ xfs_buf_find(
 
 	*found_bp = NULL;
 
+	/*
+	 * 这里似乎默认了xfs_buf_map中每个sector都是首尾相连的？
+	 */
 	for (i = 0; i < nmaps; i++)
 		cmap.bm_len += map[i].bm_len;
 
@@ -672,6 +677,9 @@ xfs_buf_find(
 			    xfs_daddr_to_agno(btp->bt_mount, cmap.bm_bn));
 
 	spin_lock(&pag->pag_buf_lock);
+	/*
+	 * 其中对比了xfs_buf的起始地址和长度
+	 */
 	bp = rhashtable_lookup_fast(&pag->pag_buf_hash, &cmap,
 				    xfs_buf_hash_params);
 	/*

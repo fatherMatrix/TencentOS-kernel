@@ -628,6 +628,10 @@ static void __blk_mq_complete_request(struct request *rq)
 		shared = cpus_share_cache(cpu, ctx->cpu);
 
 	if (cpu != ctx->cpu && !shared && cpu_online(ctx->cpu)) {
+	/*
+	 * 如果当前cpu不是下发该request的cpu，且两者不共享cache，则使用IPI通知
+	 * 下发request的cpu进行处理
+	 */
 		rq->csd.func = __blk_mq_complete_request_remote;
 		rq->csd.info = rq;
 		rq->csd.flags = 0;
@@ -2887,6 +2891,9 @@ struct request_queue *blk_mq_init_sq_queue(struct blk_mq_tag_set *set,
 	int ret;
 
 	memset(set, 0, sizeof(*set));
+	/*
+	 * 该字段最终赋值给request_queue->mq_ops字段
+	 */
 	set->ops = ops;
 	set->nr_hw_queues = 1;
 	set->nr_maps = 1;

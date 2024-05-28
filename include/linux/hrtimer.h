@@ -115,18 +115,34 @@ enum hrtimer_restart {
  * The hrtimer structure must be initialized by hrtimer_init()
  */
 struct hrtimer {
+	/*
+	 * hrtimer在一棵红黑树上排队，树的最左节点即为最快到期的定时器
+	 */
 	struct timerqueue_node		node;
+	/*
+	 * 表示该定时器的软超时时间。高精度定时器一般都有一个到期的时间范围，而
+	 * 不像（低精度）定时器那样就是一个时间点。这个时间范围的前时间点就是软
+	 * 超时时间，而后一个时间点就是硬超时时间。
+	 * 达到软超时时间后，还可以再拖一会再调用超时回调函数，而到达硬超时时间
+	 * 后就不能再拖了。
+	 */
 	ktime_t				_softexpires;
 	/*
 	 * 定时器到期时的回调函数
 	 */
 	enum hrtimer_restart		(*function)(struct hrtimer *);
+	/*
+	 * 指向包含本hrtimer的hrtimer_clock_base
+	 */
 	struct hrtimer_clock_base	*base;
 	/*
 	 * HRTIMER_STATE_INACTIVE: 未激活
 	 * HRTIMER_STATE_ENQUEUED: 已激活（入列）
 	 */ 
 	u8				state;
+	/*
+	 * 表示本定时器的时间是否为相对时间
+	 */
 	u8				is_rel;
 	u8				is_soft;
 	u8				is_hard;
@@ -172,11 +188,13 @@ struct hrtimer_sleeper {
 struct hrtimer_clock_base {
 	/*
 	 * 返指回所属的hrtimer_cpu_base结构体;
-	 * hrtimer_clock_base本身是作为数组元素嵌入到hrtimer_cpu_base中的字段的
+	 * - hrtimer_clock_base本身是作为数组元素嵌入到
+	 *   hrtimer_cpu_base->clock_base中的
 	 */
 	struct hrtimer_cpu_base	*cpu_base;
 	/*
 	 * 区分本hrtimer_clock_base所属的类别
+	 * - 即本hrtimer_clock_base在hrtimer_cpu_base->clock_base[]数组中的下标
 	 */
 	unsigned int		index;
 	clockid_t		clockid;
@@ -184,10 +202,13 @@ struct hrtimer_clock_base {
 	struct hrtimer		*running;
 	/*
 	 * 红黑树根节点
-	 * 其中的元素是hrtimer结构体；链接元素是rb_node node;
+	 * - 其中的元素是hrtimer结构体；链接元素是rb_node node;
 	 */
 	struct timerqueue_head	active;
 	ktime_t			(*get_time)(void);
+	/*
+	 * 表示当前时间类型和单调时间之间的差值
+	 */
 	ktime_t			offset;
 } __hrtimer_clock_base_align;
 
@@ -197,10 +218,17 @@ struct hrtimer_clock_base {
  * - 带SOFT的表示软定时器，都在软中断中处理
  */
 enum  hrtimer_base_type {
+	/*
+	 * 硬的
+	 */
 	HRTIMER_BASE_MONOTONIC,
 	HRTIMER_BASE_REALTIME,
 	HRTIMER_BASE_BOOTTIME,
 	HRTIMER_BASE_TAI,
+
+	/*
+	 * 软的
+	 */
 	HRTIMER_BASE_MONOTONIC_SOFT,
 	HRTIMER_BASE_REALTIME_SOFT,
 	HRTIMER_BASE_BOOTTIME_SOFT,
@@ -239,17 +267,38 @@ enum  hrtimer_base_type {
  * Note: next_timer is just an optimization for __remove_hrtimer().
  *	 Do not dereference the pointer because it is not reliable on
  *	 cross cpu removals.
+ * - 每个cpu单独管理自己的hrtimer，本结构体是percpu的
+ *   > percpu变量为hrtimer_bases
  */
 struct hrtimer_cpu_base {
 	raw_spinlock_t			lock;
+	/*
+	 * 绑定到的cpu编号
+	 */
 	unsigned int			cpu;
+	/*
+	 * 位图，表示clock_base数组中哪个类型的hrtimer_clock_base中有定时器
+	 */
 	unsigned int			active_bases;
 	unsigned int			clock_was_set_seq;
+	/*
+	 * 是否已经处于高精度模式下
+	 */
 	unsigned int			hres_active		: 1,
+	/*
+	 * 是否正在执行hrtimer_interrupt()硬中断处理程序
+	 */
 					in_hrtirq		: 1,
 					hang_detected		: 1,
+	/*
+	 * 是否唤醒了HRTIMER_SOFTIRQ软中断处理程序
+	 * - 不保证一定执行了
+	 */
 					softirq_activated       : 1;
 #ifdef CONFIG_HIGH_RES_TIMERS
+	/*
+	 * 一共执行了多少次hrtimer_interrupt()中断处理程序
+	 */
 	unsigned int			nr_events;
 	unsigned short			nr_retries;
 	unsigned short			nr_hangs;
@@ -259,9 +308,21 @@ struct hrtimer_cpu_base {
 	spinlock_t			softirq_expiry_lock;
 	atomic_t			timer_waiters;
 #endif
+	/*
+	 * 该cpu上即将到期的定时器的到期时间
+	 */
 	ktime_t				expires_next;
+	/*
+	 * 该cpu上即将到期的定时器
+	 */
 	struct hrtimer			*next_timer;
+	/*
+	 * 该cpu上即将到期的软定时器的到期时间
+	 */
 	ktime_t				softirq_expires_next;
+	/*
+	 * 该cpu上即将到期的软定时器
+	 */
 	struct hrtimer			*softirq_next_timer;
 	struct hrtimer_clock_base	clock_base[HRTIMER_MAX_CLOCK_BASES];
 } ____cacheline_aligned;

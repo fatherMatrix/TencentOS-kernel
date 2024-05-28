@@ -1121,9 +1121,11 @@ static void local_apic_timer_interrupt(void)
 	inc_irq_stat(apic_timer_irqs);
 
 	/*
-	 * 对应的是hrtimer_interrupt
+	 * TICKDEV_MODE_ONESHOT模式下，对应的是hrtimer_interrupt()
 	 * - crash得到的结果
 	 *   > 对应的设置点在tick_init_highres()
+	 *
+	 * TICKDEV_MODE_PERIODIC模式下，对应的是tick_handle_periodic()
 	 */
 	evt->event_handler(evt);
 }
@@ -1149,6 +1151,10 @@ __visible void __irq_entry smp_apic_timer_interrupt(struct pt_regs *regs)
 	 * interrupt lock, which is the WrongThing (tm) to do.
 	 */
 	entering_ack_irq();
+	/*
+	 * 这种arch相关的tracepoint定义参见：
+	 * - DEFINE_IRQ_VECTOR_EVENT()
+	 */
 	trace_local_timer_entry(LOCAL_TIMER_VECTOR);
 	local_apic_timer_interrupt();
 	trace_local_timer_exit(LOCAL_TIMER_VECTOR);

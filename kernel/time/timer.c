@@ -208,6 +208,7 @@ EXPORT_SYMBOL(jiffies_64);
  * 每个cpu对应一个timer_base，用于管理本cpu上的定时器
  * - 可使用base确定定时器在哪个cpu上运行
  *   > 低分辨率定时器？
+ *     x timer_base是给低分辨率定时器使用的
  */
 struct timer_base {
 	raw_spinlock_t		lock;

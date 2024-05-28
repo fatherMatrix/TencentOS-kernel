@@ -24,6 +24,7 @@
 
 /*
  * Tick devices
+ * - Tick设备的percpu变量
  */
 DEFINE_PER_CPU(struct tick_device, tick_cpu_device);
 /*
@@ -45,6 +46,7 @@ ktime_t tick_period;		/* 时钟周期的长度，单位是纳秒 */
  *    TICK_DO_TIMER_NONE, i.e. a non existing CPU. So the next cpu which looks
  *    at it will take over and keep the time keeping alive.  The handover
  *    procedure also covers cpu hotplug.
+ * - 表示由系统上哪个cpu的tick_device来负责更新jiffies
  */
 int tick_do_timer_cpu __read_mostly = TICK_DO_TIMER_BOOT;
 #ifdef CONFIG_NO_HZ_FULL
@@ -80,6 +82,9 @@ int tick_is_oneshot_available(void)
 
 /*
  * Periodic tick
+ * - 传统Tick层的clock_event_device->evt_handler()
+ *   > 当启用高精度定时器后，传统Tick层被取消掉，转而使用Tick模拟层
+ *   > 对比Tick模拟层：tick_sched_timer()
  */
 static void tick_periodic(int cpu)
 {
@@ -89,8 +94,14 @@ static void tick_periodic(int cpu)
 		/* Keep track of the next tick event */
 		tick_next_period = ktime_add(tick_next_period, tick_period);
 
+		/*
+		 * 更新jiffies
+		 */
 		do_timer(1);
 		write_sequnlock(&jiffies_lock);
+		/*
+		 * 更新timekeeper
+		 */
 		update_wall_time();
 	}
 
@@ -215,6 +226,9 @@ static void tick_setup_device(struct tick_device *td,
 		 * this cpu:
 		 */
 		if (tick_do_timer_cpu == TICK_DO_TIMER_BOOT) {
+		/*
+		 * 此时没有cpu负责更新jiffies，让当前cpu负责这个工作
+		 */
 			tick_do_timer_cpu = cpu;
 
 			tick_next_period = ktime_get();
@@ -349,7 +363,10 @@ void tick_check_new_device(struct clock_event_device *newdev)
 	td = &per_cpu(tick_cpu_device, cpu);
 	curdev = td->evtdev;
 
-	/* cpu local device ? */
+	/*
+	 * cpu local device ?
+	 * - 检查新的clock_event_device是否可以用到当前的cpu上
+	 */
 	if (!tick_check_percpu(curdev, newdev, cpu))
 		goto out_bc;
 

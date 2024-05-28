@@ -44,10 +44,20 @@ struct itimerval {
 /*
  * The IDs of the various system clocks (for POSIX.1b interval timers):
  */
+/*
+ * 墙上时钟，起始点为linux epoch，可以人为设置
+ */
 #define CLOCK_REALTIME			0
+/*
+ * 单调时钟，起始点为linux epoch，不可以认为设置，只能由NTP设置
+ * - 起始点也可以是BOOTTIME
+ */
 #define CLOCK_MONOTONIC			1
 #define CLOCK_PROCESS_CPUTIME_ID	2
 #define CLOCK_THREAD_CPUTIME_ID		3
+/*
+ * 单调时钟 + 不能被NTP设置
+ */
 #define CLOCK_MONOTONIC_RAW		4
 #define CLOCK_REALTIME_COARSE		5
 #define CLOCK_MONOTONIC_COARSE		6

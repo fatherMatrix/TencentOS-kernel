@@ -2685,11 +2685,18 @@ EXPORT_SYMBOL(d_hash_and_lookup);
  *   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  *
  * Usually, we want to just turn this into
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * a negative dentry, but if anybody else is
+ * ^^^^^^^^^^^^^^^^^  oooooooooooooooooooooo
  * currently using the dentry or the inode
+ * ooooooooooooooooooooooooooooooooooooooo
  * we can't do that and we fall back on removing
+ * ooooooooooooooooooooooooooooooooooooooooooooo
  * it from the hash queues and waiting for
+ * oooooooooooooooooooooooooooo^^^^^^^^^^^
+ *                             哪里wait了？
  * it to be deleted later when it has no users
+ * ooooooooooooooooooooooooooooooooooooooooooo
  */
  
 /**
@@ -2714,6 +2721,7 @@ void d_delete(struct dentry * dentry)
 	 * 如果我们是dentry唯一的拥有者，那么我们可以将该dentry转变为negative状
 	 * 态，然后将其保留在内存中；
 	 * - 结果：dentry保留在dentry_hashtable中，但为negative状态
+	 *   > 此时hash cache lookup还是可以找到一个negative的状态的
 	 */
 		dentry->d_flags &= ~DCACHE_CANT_MOUNT;
 		dentry_unlink_inode(dentry);
@@ -2723,6 +2731,7 @@ void d_delete(struct dentry * dentry)
 	 * 其从哈希表上摘除，在稍后将其从内存中删除；
 	 * - 结果：dentry从dentry_hashtable中摘下，但保留了d_inode
 	 *   > 此时如果再有对相同路径的查找，怎么办？
+	 *     x hash cache lookup查找会失败，此时会重新分配一个dentry
 	 */
 		__d_drop(dentry);
 		spin_unlock(&dentry->d_lock);

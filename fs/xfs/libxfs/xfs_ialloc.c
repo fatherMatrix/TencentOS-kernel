@@ -1618,6 +1618,9 @@ xfs_dialloc_ag(
 	if (!pagino)
 		pagino = be32_to_cpu(agi->agi_newino);
 
+	/*
+	 * xfs_difree()是文件inode对应的删除操作
+	 */
 	cur = xfs_inobt_init_cursor(mp, tp, agbp, agno, XFS_BTNUM_FINO);
 
 	error = xfs_check_agi_freecount(cur, agi);

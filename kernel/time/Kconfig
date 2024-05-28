@@ -70,12 +70,14 @@ choice
 	prompt "Timer tick handling"
 	default NO_HZ_IDLE if NO_HZ
 
+# 无论何时，都有周期性的tick。即便是在idle时
 config HZ_PERIODIC
 	bool "Periodic timer ticks (constant rate, no dynticks)"
 	help
 	  This option keeps the tick running periodically at a constant
 	  rate, even when the CPU doesn't need it.
 
+# 在idle时不再发生tick，仅仅在必要的时候才发送，这用于省电
 config NO_HZ_IDLE
 	bool "Idle dynticks system (tickless idle)"
 	depends on !ARCH_USES_GETTIMEOFFSET && GENERIC_CLOCKEVENTS
@@ -87,6 +89,7 @@ config NO_HZ_IDLE
 
 	  Most of the time you want to say Y here.
 
+# 非idle时也有可能停止tick，目前系统上都未开启该选项
 config NO_HZ_FULL
 	bool "Full dynticks system (tickless)"
 	# NO_HZ_COMMON dependency

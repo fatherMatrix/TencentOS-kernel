@@ -20,6 +20,10 @@
  */
 static inline int page_is_file_cache(struct page *page)
 {
+	/*
+	 * 诶，竟然是看有没有后备swap
+	 * - 文件页没有后备swap，因为其后备是文件系统
+	 */
 	return !PageSwapBacked(page);
 }
 

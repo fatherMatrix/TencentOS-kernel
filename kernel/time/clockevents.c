@@ -522,7 +522,8 @@ void clockevents_config_and_register(struct clock_event_device *dev,
 	 */
 	clockevents_config(dev, freq);
 	/*
-	 *
+	 * 将设备注册到clockevent_devices链表中
+	 * - 如果需要，替换当前设备
 	 */
 	clockevents_register_device(dev);
 }

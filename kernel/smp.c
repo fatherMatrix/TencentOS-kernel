@@ -35,6 +35,9 @@ struct call_function_data {
 	/*
 	 * 结构体类型为__call_single_data
 	 * - Note: 本字段也是percpu的
+	 * - 这个percpu的指针指向的内存谁分配的？啥时候分配的？
+	 *   > smpcfd_prepare_cpu()
+	 * - 本字段中的llist作为链表元素挂入ipi目标cpu的call_single_queue链表
 	 */
 	call_single_data_t	__percpu *csd;
 	cpumask_var_t		cpumask;

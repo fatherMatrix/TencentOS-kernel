@@ -1868,6 +1868,11 @@ xfs_inactive_ifree(
 	xfs_ilock(ip, XFS_ILOCK_EXCL);
 	xfs_trans_ijoin(tp, ip, XFS_ILOCK_EXCL);
 
+	/*
+	 * inode释放
+	 * - 在磁盘上释放inode，此时内存中是没有对该inode的引用的，该inode目前处
+	 *   于unlink list上
+	 */
 	error = xfs_ifree(tp, ip);
 	ASSERT(xfs_isilocked(ip, XFS_ILOCK_EXCL));
 	if (error) {
@@ -2979,17 +2984,27 @@ xfs_ifree(
 	 * Pull the on-disk inode from the AGI unlinked list.
 	 *
 	 * 处理unlinked list及反向查找的哈希表
-	 * - 删除ip
-	 * - 重新连接剩余元素
+	 * - 在unlinked list中删除ip
+	 * - 重新连接unlinked list中的剩余元素
 	 */
 	error = xfs_iunlink_remove(tp, ip);
 	if (error)
 		return error;
 
+	/*
+	 * 在磁盘上删除该inode
+	 * - 更新allocated inode tree和free inode tree
+	 * - inode对应的文件数据所占用的磁盘什么时候删除？
+	 *   > 瞎啊，不就在下面吗？
+	 */
 	error = xfs_difree(tp, ip->i_ino, &xic);
 	if (error)
 		return error;
 
+	/*
+	 * 删除data fork和attr fork占用的磁盘
+	 * - cow fork仅在内存中存在，磁盘上并不存在
+	 */
 	xfs_ifree_local_data(ip, XFS_DATA_FORK);
 	xfs_ifree_local_data(ip, XFS_ATTR_FORK);
 

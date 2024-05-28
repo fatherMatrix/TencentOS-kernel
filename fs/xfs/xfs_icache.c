@@ -253,7 +253,7 @@ xfs_inode_set_reclaim_tag(
 			   XFS_ICI_RECLAIM_TAG);
 	/*
 	 * 设置xarray树的tag
-	 * - 其中会唤醒reclaim_worker
+	 * - 其中会唤醒xfs_reclaim_worker
 	 */
 	xfs_perag_set_reclaim_tag(pag);
 	/*

@@ -270,6 +270,9 @@ static struct inode *alloc_inode(struct super_block *sb)
 		 * - 也就是说，xfs不会调用alloc_inode；
 		 * - 其inode的分配在xfs_dir_inode_operations.create()方法中；
 		 *
+		 * 对hugetlbfs来说，这里调用的是hugetlbfs_alloc_inode()，分配的
+		 * 大结构体中内嵌了vfs inode；
+		 *
 		 * 所以，这里结束时我们有了一个ext4_inode_info
 		 */
 		inode = ops->alloc_inode(sb);
@@ -1068,6 +1071,11 @@ repeat:
 #define LAST_INO_BATCH 1024
 static DEFINE_PER_CPU(unsigned int, last_ino);
 
+/*
+ * 为什么不能是文件系统独立的呢？
+ * - 用完了怎么办？
+ *   > 18446744073709551616，这么多，用的完？
+ */
 unsigned int get_next_ino(void)
 {
 	unsigned int *p = &get_cpu_var(last_ino);

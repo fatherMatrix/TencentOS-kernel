@@ -152,6 +152,10 @@ bool page_vma_mapped_walk(struct page_vma_mapped_walk *pvmw)
 		goto next_pte;
 
 	if (unlikely(PageHuge(pvmw->page))) {
+	/*
+	 * PageHuge()仅对hugetlbfs返回true
+	 * - 参见：PageTransHuge()
+	 */
 		/* when pud is not present, pte will be NULL */
 		pvmw->pte = huge_pte_offset(mm, pvmw->address, page_size(page));
 		if (!pvmw->pte)
@@ -163,6 +167,9 @@ bool page_vma_mapped_walk(struct page_vma_mapped_walk *pvmw)
 			return not_found(pvmw);
 		return true;
 	}
+	/*
+	 * 走到这里，说明不是巨型页
+	 */
 restart:
 	pgd = pgd_offset(mm, pvmw->address);
 	if (!pgd_present(*pgd))

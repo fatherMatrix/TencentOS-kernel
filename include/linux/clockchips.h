@@ -35,7 +35,13 @@ struct module;
 enum clock_event_state {
 	CLOCK_EVT_STATE_DETACHED,
 	CLOCK_EVT_STATE_SHUTDOWN,
+	/*
+	 * 周期设备，一般用于低精度
+	 */
 	CLOCK_EVT_STATE_PERIODIC,
+	/*
+	 * 单次触发设备，一般用于高精度
+	 */
 	CLOCK_EVT_STATE_ONESHOT,
 	CLOCK_EVT_STATE_ONESHOT_STOPPED,
 };
@@ -97,21 +103,54 @@ enum clock_event_state {
  * @list:		list head for the management code
  * @owner:		module reference
  *
- * 参见clocksource的注释；
+ * 时钟时间设备（定时设备），时间到了后会向cpu发送中断
+ * - 参见clocksource的注释；
+ * - 系统中所有的clock_event_device都挂在了全局链表clockevent_devices中
+ *   > 注册：clockevents_config_and_register()
  */
 struct clock_event_device {
+	/*
+	 * 当定时器触发条件满足后，会中断处理器。中断处理函数
+	 * smp_apic_timer_interrupt()中会调用本回调函数。
+	 * - 典型值：
+	 *   > hrtimer_interrupt()
+	 *   > ... ...
+	 */
 	void			(*event_handler)(struct clock_event_device *);
+	/*
+	 * 设置下一次触发的时间
+	 * - 参数为时钟源的周期
+	 */
 	int			(*set_next_event)(unsigned long evt, struct clock_event_device *);
+	/*
+	 * 设置下一次触发的时间
+	 * - 参数为ktime
+	 */
 	int			(*set_next_ktime)(ktime_t expires, struct clock_event_device *);
 	/*
 	 * 下次事件触发的绝对时间
 	 */
 	ktime_t			next_event;
+	/*
+	 * 本定时设备能分辨的最大时间间隔
+	 * - 超过这个值后就会回滚了，即单次定时能设定的最大时间间隔
+	 */
 	u64			max_delta_ns;
+	/*
+	 * 本定时设备能分辨的最小时间间隔
+	 * - 受限于设备的时钟精度
+	 */
 	u64			min_delta_ns;
 	u32			mult;
 	u32			shift;
+	/*
+	 * 本定时设备的状态
+	 */
 	enum clock_event_state	state_use_accessors;
+	/*
+	 * 本定时设备的特性
+	 * - 参见CLOCK_EVT_FEAT_xxx
+	 */
 	unsigned int		features;
 	unsigned long		retries;
 

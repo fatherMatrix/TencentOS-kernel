@@ -86,6 +86,9 @@ static void tick_do_update_jiffies64(ktime_t now)
 				   ktime_add_ns(last_jiffies_update,
 						incr * ticks));
 		}
+		/*
+		 * 更新jiffies
+		 */
 		do_timer(++ticks);
 
 		/* Keep the tick_next_period variable up to date */
@@ -95,6 +98,9 @@ static void tick_do_update_jiffies64(ktime_t now)
 		return;
 	}
 	write_sequnlock(&jiffies_lock);
+	/*
+	 * 更新timekeeper
+	 */
 	update_wall_time();
 }
 
@@ -1278,6 +1284,8 @@ void tick_irq_enter(void)
 /*
  * We rearm the timer until we get disabled by the idle code.
  * Called with interrupts disabled.
+ * - 开启高精度定时器后的Tick模拟层
+ *   > 对比传统Tick层：tick_periodic()
  */
 static enum hrtimer_restart tick_sched_timer(struct hrtimer *timer)
 {
@@ -1286,6 +1294,9 @@ static enum hrtimer_restart tick_sched_timer(struct hrtimer *timer)
 	struct pt_regs *regs = get_irq_regs();
 	ktime_t now = ktime_get();
 
+	/*
+	 * 推动jiffies和timekeeper
+	 */
 	tick_sched_do_timer(ts, now);
 
 	/*
@@ -1293,6 +1304,9 @@ static enum hrtimer_restart tick_sched_timer(struct hrtimer *timer)
 	 * no valid regs pointer
 	 */
 	if (regs)
+		/*
+		 * 更新process
+		 */
 		tick_sched_handle(ts, regs);
 	else
 		ts->next_tick = 0;

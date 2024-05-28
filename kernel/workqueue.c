@@ -2375,6 +2375,10 @@ __acquires(&pool->lock)
 	 */
 	set_work_pool_and_clear_pending(work, pool->id);
 
+	/*
+	 * 放锁
+	 * - 对应的加锁在外边
+	 */
 	spin_unlock_irq(&pool->lock);
 
 	lock_map_acquire(&pwq->wq->lockdep_map);
@@ -2414,6 +2418,9 @@ __acquires(&pool->lock)
 	lock_map_release(&lockdep_map);
 	lock_map_release(&pwq->wq->lockdep_map);
 
+	/*
+	 * 工作队列核心并不相信工作函数的编写者，所以这里进行必要的状态检查
+	 */
 	if (unlikely(in_atomic() || lockdep_depth(current) > 0)) {
 		pr_err("BUG: workqueue leaked lock or atomic: %s/0x%08x/%d\n"
 		       "     last function: %ps\n",
@@ -2430,6 +2437,7 @@ __acquires(&pool->lock)
 	 * indefinitely requeue itself while all other CPUs are trapped in
 	 * stop_machine. At the same time, report a quiescent RCU state so
 	 * the same condition doesn't freeze RCU.
+	 * - 啊，每执行完一个工作之后，这里会考虑睡眠一会儿，这避免了软死锁
 	 */
 	cond_resched();
 
@@ -2597,6 +2605,10 @@ sleep:
 	worker_enter_idle(worker);
 	__set_current_state(TASK_IDLE);
 	spin_unlock_irq(&pool->lock);
+	/*
+	 * 调度出去
+	 * - 所以，工作队列在这里会调度出去保证不会softlockup
+	 */
 	schedule();
 	goto woke_up;
 }

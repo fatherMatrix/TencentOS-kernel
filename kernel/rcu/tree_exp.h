@@ -770,6 +770,7 @@ static int rcu_print_task_exp_stall(struct rcu_node *rnp)
 
 /**
  * synchronize_rcu_expedited - Brute-force RCU grace period
+ * - 在synchronize_rcu()的基础上加速宽限期的结束
  *
  * Wait for an RCU grace period, but expedite it.  The basic idea is to
  * IPI all non-idle non-nohz online CPUs.  The IPI handler checks whether

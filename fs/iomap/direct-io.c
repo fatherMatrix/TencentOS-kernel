@@ -587,6 +587,7 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	 * writing.  If this invalidation fails, tough, the write will
 	 * still work, but racing two incompatible write paths is a
 	 * pretty crazy thing to do, so we don't support it 100%.
+	 * - 我靠，这里尝试将page cache清除！
 	 */
 	ret = invalidate_inode_pages2_range(mapping,
 			start >> PAGE_SHIFT, end >> PAGE_SHIFT);

@@ -12,6 +12,15 @@ enum tick_device_mode {
 /*
  * 这是对时钟事件源设备的一层包装
  * - 在引入动态时钟特性时引入；
+ *
+ * - 是percpu的：tick_cpu_device
+ *   > 每当系统中发现新的clock_event_device时，都会检查是否适合作为tick_device
+ *     新的底层设备
+ *     x 参见：tick_check_new_device()
+ *
+ * - 当使用高精度时钟时，tick_device（Tick层）的工作完全屏蔽，交由tick_sched（
+ *   由hrtimer模拟的tick层操作来负责
+ *   > Tick层的主要工作就是tick来临时处理调度、timer_list等
  */
 struct tick_device {
 	struct clock_event_device *evtdev;
@@ -53,8 +62,20 @@ enum tick_nohz_mode {
  * @timer_expires_base:	Base time clock monotonic for @timer_expires
  * @next_timer:		Expiry time of next expiring timer for debugging purpose only
  * @tick_dep_mask:	Tick dependency mask - is set, if someone needs the tick
+ * - 在启用了高精度定时器的情况下，Tick层（tick_handle_periodic）不再被调用，使
+ *   用tick_sched来模拟
+ *   > 该模拟还考虑了动态时钟的情况，即停掉定时器以省电
+ *   > 该结构体是percpu的：tick_cpu_sched
+ *   > 操作：
+ *     x 初始化：tick_setup_sched_timer()
+ *                 sched_timer.function = tick_sched_timer
  */
 struct tick_sched {
+	/*
+	 * 在高精度定时器启用情况下，用来模拟tick的hrtimer
+	 * - function是tick_sched_timer()
+	 *   > 参见：tick_setup_sched_timer()
+	 */
 	struct hrtimer			sched_timer;
 	unsigned long			check_clocks;
 	enum tick_nohz_mode		nohz_mode;

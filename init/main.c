@@ -742,12 +742,12 @@ asmlinkage __visible void __init start_kernel(void)
 	 */
 	init_IRQ();
 	/*
-	 * 初始化tick子系统
+	 * 初始化tick层
 	 */
 	tick_init();
 	rcu_init_nohz();
 	/*
-	 * 初始化普通定时器
+	 * 初始化低精度定时器
 	 */
 	init_timers();
 	/*
@@ -755,6 +755,9 @@ asmlinkage __visible void __init start_kernel(void)
 	 */
 	hrtimers_init();
 	softirq_init();
+	/*
+	 * 初始化时间维护层
+	 */
 	timekeeping_init();
 
 	/*

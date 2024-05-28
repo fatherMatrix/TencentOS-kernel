@@ -228,6 +228,10 @@ struct file *alloc_file_pseudo(struct inode *inode, struct vfsmount *mnt,
 	struct path path;
 	struct file *file;
 
+	/*
+	 * dentry在这里创建以便于后期查找？
+	 * - parent是自己？
+	 */
 	path.dentry = d_alloc_pseudo(mnt->mnt_sb, &this);
 	if (!path.dentry)
 		return ERR_PTR(-ENOMEM);

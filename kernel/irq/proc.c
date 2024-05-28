@@ -138,6 +138,9 @@ static ssize_t write_irq_affinity(int type, struct file *file,
 		const char __user *buffer, size_t count, loff_t *pos)
 {
 	unsigned int irq = (int)(long)PDE_DATA(file_inode(file));
+	/*
+	 * 这个数据类型是一个指针
+	 */
 	cpumask_var_t new_value;
 	int err;
 

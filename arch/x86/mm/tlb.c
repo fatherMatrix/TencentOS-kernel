@@ -110,6 +110,16 @@ static void choose_new_asid(struct mm_struct *next, u64 next_tlb_gen,
 	*need_flush = true;
 }
 
+/*
+ * 在x86架构中，当pcid开启时，对cr3的mov操作：
+ * - 当源操作数的bit63为0时，会自动清除local tlb entry
+ * - 当源操作数的bit63为1时，不会自动清除local tlb entry
+ *   > 参见sdm v3: 4.10.4.1 Operations that Invalidate TLBs and Paging-Structure Caches
+ *
+ * 什么是local tlb entry？
+ * - local tlb entry：不在进程间共享的tlb，主要用于用户态地址空间
+ *   > 对应到x86就是非global page
+ */
 static void load_new_mm_cr3(pgd_t *pgdir, u16 new_asid, bool need_flush)
 {
 	unsigned long new_mm_cr3;
@@ -118,6 +128,10 @@ static void load_new_mm_cr3(pgd_t *pgdir, u16 new_asid, bool need_flush)
 		invalidate_user_asid(new_asid);
 		new_mm_cr3 = build_cr3(pgdir, new_asid);
 	} else {
+		/*
+		 * 操作数bit63设置为了1
+		 * - 表示下一次mov cr3时不需要flush local tlb
+		 */
 		new_mm_cr3 = build_cr3_noflush(pgdir, new_asid);
 	}
 
@@ -400,11 +414,17 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		if (real_prev != &init_mm) {
 			VM_WARN_ON_ONCE(!cpumask_test_cpu(cpu,
 						mm_cpumask(real_prev)));
+			/*
+			 * 上个mm_struct被切换走了，所以将上个mm_struct中对应本
+			 * cpu的位图清空
+			 */
 			cpumask_clear_cpu(cpu, mm_cpumask(real_prev));
 		}
 
 		/*
 		 * Start remote flushes and then read tlb_gen.
+		 * - 在被切换进来的mm_struct中的位图中标记本cpu
+		 *   > 所以mm_struct中的位图表示当前正在使用该mm_struct的cpu
 		 */
 		if (next != &init_mm)
 			cpumask_set_cpu(cpu, mm_cpumask(next));
@@ -463,6 +483,8 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
  * The scheduler reserves the right to call enter_lazy_tlb() several times
  * in a row.  It will notify us that we're going back to a real mm by
  * calling switch_mm_irqs_off().
+ *
+ * 有没有exit_lazy_tlb()哇？
  */
 void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk)
 {
@@ -654,6 +676,9 @@ static void flush_tlb_func_remote(void *info)
 
 	inc_irq_stat(irq_tlb_count);
 
+	/*
+	 * 如果当前cpu上的mm_struct不是要flush的目标mm_struct，则退出
+	 */
 	if (f->mm && f->mm != this_cpu_read(cpu_tlbstate.loaded_mm))
 		return;
 
@@ -800,6 +825,10 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 		local_irq_enable();
 	}
 
+	/*
+	 * 这里的mm_cpumask()是否是记录了该mm_struct在哪些cpu上运行的呢？
+	 * - 最终IPI目标cpu执行的处理函数为：flush_tlb_func_remote()
+	 */
 	if (cpumask_any_but(mm_cpumask(mm), cpu) < nr_cpu_ids)
 		flush_tlb_others(mm_cpumask(mm), info);
 

@@ -665,6 +665,9 @@ static void timekeeping_update(struct timekeeper *tk, unsigned int action)
 		ntp_clear();
 	}
 
+	/*
+	 * 更新闰秒状态
+	 */
 	tk_update_leap_state(tk);
 	tk_update_ktime_data(tk);
 
@@ -1535,6 +1538,9 @@ void __init timekeeping_init(void)
 	struct clocksource *clock;
 	unsigned long flags;
 
+	/*
+	 * 尝试获取当前的实时时间
+	 */
 	read_persistent_wall_and_boot_offset(&wall_time, &boot_offset);
 	if (timespec64_valid_settod(&wall_time) &&
 	    timespec64_to_ns(&wall_time) > 0) {

@@ -772,10 +772,16 @@ static struct inode *hugetlbfs_get_inode(struct super_block *sb,
 			return NULL;
 	}
 
+	/*
+	 * 分配了一个hugetlbfs_inode_info
+	 */
 	inode = new_inode(sb);
 	if (inode) {
 		struct hugetlbfs_inode_info *info = HUGETLBFS_I(inode);
 
+		/*
+		 * 这个ino为啥不能是文件系统独立的呢？
+		 */
 		inode->i_ino = get_next_ino();
 		inode_init_owner(inode, dir, mode);
 		lockdep_set_class(&inode->i_mapping->i_mmap_rwsem,
@@ -1380,6 +1386,9 @@ struct file *hugetlb_file_setup(const char *name, size_t size,
 	int hstate_idx;
 	struct file *file;
 
+	/*
+	 * 对应尺寸的hstate在hstates数组中的idx
+	 */
 	hstate_idx = get_hstate_idx(page_size_log);
 	if (hstate_idx < 0)
 		return ERR_PTR(-ENODEV);

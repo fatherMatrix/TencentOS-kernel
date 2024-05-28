@@ -416,6 +416,10 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 queue:
 	lockevent_inc(lock_slowpath);
 pv_queue:
+	/*
+	 * 定义如下：
+	 * - static DEFINE_PER_CPU_ALIGNED(struct qnode, qnodes[MAX_NODES]);
+	 */
 	node = this_cpu_ptr(&qnodes[0].mcs);
 	idx = node->count++;
 	tail = encode_tail(smp_processor_id(), idx);
@@ -601,3 +605,22 @@ EXPORT_SYMBOL(queued_spin_lock_slowpath);
 #include "qspinlock.c"
 
 #endif
+
+/*
+ * 如果看不明白上边做了什么的话，gcc -E预处理一下下面的演示代码：
+ * #ifndef __ZJL__
+ * #define FUNC native_func
+ * #endif // __ZJL__
+ *
+ * int FUNC()
+ * {
+ *	return 0;
+ * }
+ *
+ * #ifndef __ZJL__
+ * #define __ZJL__
+ * #undef FUNC
+ * #define FUNC pv_func
+ * #include "a.c"
+ * #endif
+ */

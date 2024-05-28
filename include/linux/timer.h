@@ -14,6 +14,16 @@
  * ^^^^^^^^
  *    ? - 从字段expires来看，只能是低分辨率定时器了
  *        > 高分辨率定时器如何组织？
+ *          x struct hrtimer
+ *      - 推动过程：
+ *        > tick_sched_handle
+ *            update_process_times
+ *              run_local_timers
+ *                raise_softirq(TIMER_SOFTIRQ)
+ *
+ *          ... irq_exit ...
+ *            run_timer_softirq
+ *              __run_timers
  */
 struct timer_list {
 	/*

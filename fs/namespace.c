@@ -3930,6 +3930,7 @@ void __init mnt_init(void)
 		printk(KERN_WARNING "%s: kobj create error\n", __func__);
 	/*
 	 * 注册shmem_fs_type文件系统类型
+	 * - tmpfs就是shmemfs
 	 */
 	shmem_init();
 	/*

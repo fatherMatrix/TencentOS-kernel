@@ -976,6 +976,9 @@ static int __pci_enable_msix(struct pci_dev *dev, struct msix_entry *entries,
 	if (!pci_msi_supported(dev, nvec))
 		return -EINVAL;
 
+	/*
+	 * 获取设备支持的中断向量数
+	 */
 	nr_entries = pci_msix_vec_count(dev);
 	if (nr_entries < 0)
 		return nr_entries;

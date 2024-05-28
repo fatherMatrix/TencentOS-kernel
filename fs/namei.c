@@ -4996,8 +4996,9 @@ out:
 	if (!error && !(dentry->d_flags & DCACHE_NFSFS_RENAMED)) {
 		fsnotify_link_count(target);
 		/*
-		 * 减少dentry对inode的引用计数
-		 * - 只是根据lockref判断要不要操作inode，但并未真正减小dentry自己的引用计数；
+		 * 里面有两种处理，导致返回后dentry有两种可能的状态：
+		 * - 保留在dentry_hashtable，但为negative状态
+		 * - 在dentry_hashtable上摘下来，但保留了指向inode的指针
 		 */
 		d_delete(dentry);
 	}

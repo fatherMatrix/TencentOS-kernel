@@ -40,6 +40,8 @@ typedef struct xfs_inode {
 	struct xfs_ifork	*i_cowfp;	/* copy on write extents */
 	/*
 	 * 文件数据的b+树
+	 * - 应该是只有data fork、attr fork、cow fork在内存中有incore形式的树，
+	 *   其他的tree应该都是磁盘形式的树？
 	 */
 	struct xfs_ifork	i_df;		/* data fork */
 

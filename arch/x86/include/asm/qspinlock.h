@@ -41,6 +41,8 @@ static __always_inline u32 queued_fetch_set_pending_acquire(struct qspinlock *lo
  *   作用域内、#include "qspinlock.c"之前写了一句：
  *   	#define queued_spin_lock_slowpath       __pv_queued_spin_lock_slowpath
  *   从而生成__pv_xxx代码；
+ *
+ * ----- 如果上边的看不懂，就去看kernel/locking/qspinlock.c最后的注释 ---------
  */
 extern void native_queued_spin_lock_slowpath(struct qspinlock *lock, u32 val);
 extern void __pv_init_lock_hash(void);

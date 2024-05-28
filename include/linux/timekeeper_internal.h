@@ -90,9 +90,23 @@ struct tk_read_base {
  * accelerate the VDSO update for CLOCK_BOOTTIME.
  */
 struct timekeeper {
+	/*
+	 * 单调时间
+	 */
 	struct tk_read_base	tkr_mono;
+	/*
+	 * 原始单调时间
+	 */
 	struct tk_read_base	tkr_raw;
+	/*
+	 * CLOCK_REALTIME时钟，当前时间距离linux epoch的秒数
+	 */
 	u64			xtime_sec;
+	/*
+	 * CLOCK_MONOTONIC时钟，当前时间距离linux epoch的秒数
+	 * - CLOCK_MONOTONIC相对于CLOCK_REALTIME的一个限制是不可以被人为设置
+	 *   > 但仍然接受NTP的设置
+	 */
 	unsigned long		ktime_sec;
 	struct timespec64	wall_to_monotonic;
 	ktime_t			offs_real;

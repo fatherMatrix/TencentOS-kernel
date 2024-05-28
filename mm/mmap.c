@@ -1647,6 +1647,8 @@ unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 	/*
 	 * 匿名页，且是巨型页
 	 * - 不能是透明巨型页吗？
+	 *   > hugetlbfs要映射到特殊的hugetlbfs文件上，thp巨型页在下面的
+	 *     vm_mmap_pgoff()中处理即可
 	 */
 		struct user_struct *user = NULL;
 		struct hstate *hs;
@@ -1664,6 +1666,10 @@ unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 		 * taken when vm_ops->mmap() is called
 		 * A dummy user value is used because we are not locking
 		 * memory so no accounting is necessary
+		 * - 文件系统类型：hugetlbfs_fs_type
+		 *   > inode_operations: hugetlbfs_inode_operations
+		 *   > file_operations: hugetlbfs_file_operations
+		 *   > inode->i_mapping->a_ops: hugetlbfs_aops
 		 */
 		file = hugetlb_file_setup(HUGETLB_ANON_FILE, len,
 				VM_NORESERVE,

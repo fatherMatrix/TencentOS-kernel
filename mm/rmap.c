@@ -1902,6 +1902,9 @@ static void rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
 	if (!anon_vma)
 		return;
 
+	/*
+	 * pgoff_xxx表示page在其虚拟地址空间的页偏移
+	 */
 	pgoff_start = page_to_pgoff(page);
 	pgoff_end = pgoff_start + hpage_nr_pages(page) - 1;
 	/*
@@ -1909,7 +1912,13 @@ static void rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
 	 */
 	anon_vma_interval_tree_foreach(avc, &anon_vma->rb_root,
 			pgoff_start, pgoff_end) {
+		/*
+		 * 取得avc所对应的vm_area_struct
+		 */
 		struct vm_area_struct *vma = avc->vma;
+		/*
+		 * 获得page在此vm_area_struct中对应的虚拟地址
+		 */
 		unsigned long address = vma_address(page, vma);
 
 		cond_resched();

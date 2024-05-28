@@ -164,6 +164,12 @@ static inline void *irq_desc_get_handler_data(struct irq_desc *desc)
  */
 static inline void generic_handle_irq_desc(struct irq_desc *desc)
 {
+	/*
+	 * 很多：
+	 * - handle_level_irq()
+	 * - handle_edge_irq()
+	 * - ...
+	 */
 	desc->handle_irq(desc);
 }
 

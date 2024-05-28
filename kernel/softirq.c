@@ -74,6 +74,10 @@ static void wakeup_softirqd(void)
 	/* Interrupts are disabled: no need to stop preemption */
 	struct task_struct *tsk = __this_cpu_read(ksoftirqd);
 
+	/*
+	 * run_ksoftirqd()
+	 * - 参见：softirq_threads
+	 */
 	if (tsk && tsk->state != TASK_RUNNING)
 		wake_up_process(tsk);
 }

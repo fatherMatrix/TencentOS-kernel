@@ -38,7 +38,7 @@ struct iov_iter {
 	 */
 	unsigned int type;
 	size_t iov_offset;			/* 待处理iovec的待处理第一个字节在iovec中的偏移 */
-	size_t count;				/* iovec数组中所有元素的总字节数 */
+	size_t count;				/* iovec数组中所有元素的总字节数，待处理？ */
 	/*
 	 * 这是个数组，该数组不同元素间不要求内存地址连续；但对于某一个元素，其
 	 * page必须连续；

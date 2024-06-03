@@ -2681,7 +2681,13 @@ static void unmap_region(struct mm_struct *mm,
 	lru_add_drain();
 	tlb_gather_mmu(&tlb, mm, start, end);
 	update_hiwater_rss(mm);
+	/*
+	 * 解除vma中页的映射
+	 */
 	unmap_vmas(&tlb, vma, start, end);
+	/*
+	 * 删除不必要的页表？
+	 */
 	free_pgtables(&tlb, vma, prev ? prev->vm_end : FIRST_USER_ADDRESS,
 				 next ? next->vm_start : USER_PGTABLES_CEILING);
 	tlb_finish_mmu(&tlb, start, end);
@@ -2859,6 +2865,7 @@ int __do_munmap(struct mm_struct *mm, unsigned long start, size_t len,
 	 * Note: mremap's move_vma VM_ACCOUNT handling assumes a partially
 	 * unmapped vm_area_struct will remain in use: so lower split_vma
 	 * places tmp vma above, and higher split_vma places tmp vma below.
+	 * - start处于第一个vma的中间，我们需要将该vma拆分开
 	 */
 	if (start > vma->vm_start) {
 		int error;
@@ -2910,6 +2917,7 @@ int __do_munmap(struct mm_struct *mm, unsigned long start, size_t len,
 
 	/*
 	 * unlock any mlock()ed ranges before detaching vmas
+	 * - 解锁所有mlock()控制的vma
 	 */
 	if (mm->locked_vm) {
 		struct vm_area_struct *tmp = vma;
@@ -2923,7 +2931,10 @@ int __do_munmap(struct mm_struct *mm, unsigned long start, size_t len,
 		}
 	}
 
-	/* Detach vmas from rbtree */
+	/*
+	 * Detach vmas from rbtree
+	 * - 将目标vma全部从mm_struct的红黑树中摘下来
+	 */
 	if (!detach_vmas_to_be_unmapped(mm, vma, prev, end))
 		downgrade = false;
 
@@ -2950,6 +2961,9 @@ static int __vm_munmap(unsigned long start, size_t len, bool downgrade)
 	struct mm_struct *mm = current->mm;
 	LIST_HEAD(uf);
 
+	/*
+	 * 写锁锁定mm_struct->mmap_sem
+	 */
 	if (down_write_killable(&mm->mmap_sem))
 		return -EINTR;
 

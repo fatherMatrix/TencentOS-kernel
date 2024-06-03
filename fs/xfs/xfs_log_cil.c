@@ -772,6 +772,10 @@ xlog_cil_push(
 	 * 每次push都要生成一个新的xfs_cil_ctx
 	 */
 	new_ctx = kmem_zalloc(sizeof(*new_ctx), KM_NOFS);
+	/*
+	 * 给新分配的xfs_cil_ctx分配xlog_ticket
+	 * - 这个ticket的作用是？
+	 */
 	new_ctx->ticket = xlog_cil_ticket_alloc(log);
 
 	down_write(&cil->xc_ctx_lock);

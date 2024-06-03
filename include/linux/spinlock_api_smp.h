@@ -123,6 +123,9 @@ static inline unsigned long __raw_spin_lock_irqsave(raw_spinlock_t *lock)
 
 static inline void __raw_spin_lock_irq(raw_spinlock_t *lock)
 {
+	/*
+	 * 先关中断，后加自旋锁
+	 */
 	local_irq_disable();
 	preempt_disable();
 	spin_acquire(&lock->dep_map, 0, 0, _RET_IP_);

@@ -78,6 +78,9 @@
  */
 #ifndef O_SYNC
 #define __O_SYNC	04000000
+/*
+ * 同时包含SYNC和DSYNC
+ */
 #define O_SYNC		(__O_SYNC|O_DSYNC)
 #endif
 

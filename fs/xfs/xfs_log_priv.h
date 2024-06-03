@@ -479,6 +479,7 @@ struct xlog {
 	 * l_iclog_hsize = l_iclog_heads << BBSHIFT
 	 * - 参见xlog_alloc_log() -> xlog_get_iclog_buffer_size()
 	 * - 一个header占一个sector吗？
+	 *   > 之所以要这么大是和xlog_pack_data()有关
 	 */
 	int			l_iclog_hsize;  /* size of iclog header */
 	int			l_iclog_heads;  /* # of iclog header sectors */

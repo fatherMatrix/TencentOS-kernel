@@ -1680,6 +1680,9 @@ xfs_fs_fill_super(
 	if (error)
 		goto out_free_stats;
 
+	/*
+	 * 将mount系统调用的参数转换到xfs_mount结构体中
+	 */
 	error = xfs_finish_flags(mp);
 	if (error)
 		goto out_free_sb;

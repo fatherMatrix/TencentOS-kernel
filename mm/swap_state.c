@@ -285,6 +285,9 @@ void delete_from_swap_cache(struct page *page)
  */
 static inline void free_swap_cache(struct page *page)
 {
+	/*
+	 * trylock_page()意味着只有当我们是该page的唯一拥有者时才这么操作
+	 */
 	if (PageSwapCache(page) && !page_mapped(page) && trylock_page(page)) {
 		try_to_free_swap(page);
 		unlock_page(page);

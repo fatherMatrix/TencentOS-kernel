@@ -463,8 +463,14 @@ xfs_dio_write_end_io(
 	 */
 	spin_lock(&ip->i_flags_lock);
 	if (offset + size > i_size_read(inode)) {
+		/*
+		 * 更新vfs inode i_size
+		 */
 		i_size_write(inode, offset + size);
 		spin_unlock(&ip->i_flags_lock);
+		/*
+		 * 更新磁盘上的size
+		 */
 		error = xfs_setfilesize(ip, offset, size);
 	} else {
 		spin_unlock(&ip->i_flags_lock);

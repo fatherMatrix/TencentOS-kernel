@@ -115,6 +115,10 @@ int ext4_sync_file(struct file *file, loff_t start, loff_t end, int datasync)
 	}
 
 	if (!journal) {
+	/*
+	 * 对于没有journal的文件系统，走这里
+	 * - 或者对于没有开启journal机制的ext4，走这里
+	 */
 		ret = __generic_file_fsync(file, start, end, datasync);
 		if (!ret)
 			ret = ext4_sync_parent(inode);
@@ -122,6 +126,10 @@ int ext4_sync_file(struct file *file, loff_t start, loff_t end, int datasync)
 			goto issue_flush;
 		goto out;
 	}
+
+	/*
+	 * 走到这里，说明ext4处于有journal的模式
+	 */
 
 	ret = file_write_and_wait_range(file, start, end);
 	if (ret)

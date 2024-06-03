@@ -21,7 +21,7 @@ typedef __s64			xfs_off_t;	/* <file offset> type */
 typedef unsigned long long	xfs_ino_t;	/* <inode> type */
 /*
  * 绝对磁盘sector号
- * - basic block number，似乎是以512为单位计数的；
+ * - basic block number，以512为单位
  */
 typedef __s64			xfs_daddr_t;	/* <disk address> type */
 typedef __u32			xfs_dev_t;

@@ -1087,6 +1087,9 @@ again:
 				continue;
 
 			if (!PageAnon(page)) {
+			/*
+			 * 文件页
+			 */
 				if (pte_dirty(ptent)) {
 					force_flush = 1;
 					set_page_dirty(page);
@@ -1101,6 +1104,10 @@ again:
 			 * - 没看明白，这里已经可以通过页表正向获取本mm_struct中
 			 *   的对应页表项了，还需要RMAP做什么？
 			 *   > 看该函数的实现，似乎只是处理了_mapcount等工作
+			 *   > unmap_vmas()这类函数根本不需要RMAP，因为这里是从
+			 *     一个虚拟地址找到对应的物理地址，正向遍历页表即可。
+			 *     而RMAP解决的是从一个物理地址找到所有的虚拟地址。
+			 *     x 所以这里是对RMAP辅助数据结构的维护工作
 			 */
 			page_remove_rmap(page, false);
 			if (unlikely(page_mapcount(page) < 0))
@@ -1109,6 +1116,8 @@ again:
 			 * 将该页记录到mmu_gather结构中，当达到一定数量后批量释
 			 * 放；
 			 * - 批量释放什么？
+			 * - 返回值为true表示batch中已经放满了，需要进行一次强制
+			 *   释放；
 			 */
 			if (unlikely(__tlb_remove_page(tlb, page))) {
 				force_flush = 1;

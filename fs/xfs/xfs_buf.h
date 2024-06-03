@@ -116,6 +116,7 @@ typedef void (*xfs_buf_iodone_t)(struct xfs_buf *);
 /*
  * 一个xfs_buf_map可否覆盖多个page呢？
  * - 目前看似乎是可以的，参见 xfs_buf_ioapply_map() 中的相关注释；
+ * - 描述一个磁盘区域
  */
 struct xfs_buf_map {
 	/*
@@ -213,7 +214,7 @@ typedef struct xfs_buf {
 	struct xfs_trans	*b_transp;
 	/*
 	 * 如果b_page_count < 2，则b_pages = b_page_array
-	 * - 参见 xfs_buf_allocate_memory()
+	 * - 参见 xfs_buf_allocate_memory() -> _xfs_buf_get_pages()
 	 */
 	struct page		**b_pages;	/* array of page pointers */
 	/*
@@ -222,6 +223,7 @@ typedef struct xfs_buf {
 	struct page		*b_page_array[XB_PAGES]; /* inline pages */
 	/*
 	 * 每个xfs_buf关联的xfs_buf_map数组，元素个数是b_map_count
+	 * - 分配在xfs_buf_get_map()
 	 */
 	struct xfs_buf_map	*b_maps;	/* compound buffer map */
 	/*

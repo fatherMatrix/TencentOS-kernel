@@ -334,7 +334,16 @@ struct queue_limits {
 	unsigned int		chunk_sectors;
 	unsigned int		max_sectors;
 	unsigned int		max_segment_size;
+	/*
+	 * 更新：blk_queue_physical_block_size()
+	 */
 	unsigned int		physical_block_size;
+	/*
+	 * 初始化：blk_set_default_limits()
+	 * 更新：blk_queue_logical_block_size()
+	 *
+	 * logical_block_size是不能大于physical_block_size的
+	 */
 	unsigned int		logical_block_size;
 	unsigned int		alignment_offset;
 	unsigned int		io_min;

@@ -236,12 +236,17 @@ struct mmu_gather {
 	struct mm_struct	*mm;
 
 #ifdef CONFIG_HAVE_RCU_TABLE_FREE
+	/*
+	 * tkernel4: CONFIG_HAVE_RCU_TABLE_FREE=y
+	 * - 初始时为NULL
+	 *   > 参见：tlb_gather_mmu()
+	 */
 	struct mmu_table_batch	*batch;
 #endif
 
 	/*
-	 * tlb冲刷时的虚拟地址区间
-	 * > 参见：__tlb_adjust_range()
+	 * 记录tlb flush要冲刷的虚拟地址区间
+	 * > 参见：tlb_remove_tlb_entry() -> __tlb_adjust_range()
 	 */
 	unsigned long		start;
 	unsigned long		end;
@@ -260,6 +265,7 @@ struct mmu_gather {
 
 	/*
 	 * we have removed page directories
+	 * - free_pte_range()等会设置这个标志，表示正在释放页表
 	 */
 	unsigned int		freed_tables : 1;
 
@@ -280,7 +286,18 @@ struct mmu_gather {
 	unsigned int		batch_count;
 
 #ifndef CONFIG_HAVE_MMU_GATHER_NO_GATHER
+	/*
+	 * tkernel4: CONFIG_HAVE_MMU_GATHER_NO_GATHER is not set
+	 * - 所以这里是被编译了的
+	 * - 初始时指向local
+	 *   > 参见：tlb_gather_mmu()
+	 * - 作用是当我们通过tlb_remove_tlb_entry()记录了要冲刷的虚拟地址区间后，
+	 *   通过__tlb_remove_page()将对应的page结构体放入本字段；
+	 */
 	struct mmu_gather_batch *active;
+	/*
+	 * 内嵌mmu_gather_batch
+	 */
 	struct mmu_gather_batch	local;
 	/*
 	 * unmap过程中记录下要释放的page

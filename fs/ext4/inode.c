@@ -5554,6 +5554,9 @@ int ext4_write_inode(struct inode *inode, struct writeback_control *wbc)
 		return -EIO;
 
 	if (EXT4_SB(inode->i_sb)->s_journal) {
+		/*
+		 * 如果有事务机制支持，则等待事务提交即可
+		 */
 		if (ext4_journal_current_handle()) {
 			jbd_debug(1, "called recursively, non-PF_MEMALLOC!\n");
 			dump_stack();
@@ -5579,6 +5582,10 @@ int ext4_write_inode(struct inode *inode, struct writeback_control *wbc)
 		/*
 		 * sync(2) will flush the whole buffer cache. No need to do
 		 * it here separately for each inode.
+		 * - 没有事务机制，直接写
+		 *   > ext4还能没有事务机制？
+		 *     x Oh, fuck! ext4还真的可以直接裸奔
+		 *       o tune2fs -O ^has_journal /dev/sdd1
 		 */
 		if (wbc->sync_mode == WB_SYNC_ALL && !wbc->for_sync)
 			sync_dirty_buffer(iloc.bh);
@@ -6263,6 +6270,10 @@ void ext4_dirty_inode(struct inode *inode, int flags)
 
 	if (flags == I_DIRTY_TIME)
 		return;
+
+	/*
+	 * 走到这里，说明不是I_DIRTY_TIME，有可能是长度发生了变化
+	 */
 	handle = ext4_journal_start(inode, EXT4_HT_INODE, 2);
 	if (IS_ERR(handle))
 		goto out;

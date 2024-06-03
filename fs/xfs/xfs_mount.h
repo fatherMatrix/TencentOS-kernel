@@ -194,7 +194,13 @@ typedef struct xfs_mount {
 	uint64_t		m_resblks;	/* total reserved blocks */
 	uint64_t		m_resblks_avail;/* available reserved blocks */
 	uint64_t		m_resblks_save;	/* reserved blks @ remount,ro */
+	/*
+	 * mkfs.xfs -d sunit
+	 */
 	int			m_dalign;	/* stripe unit */
+	/*
+	 * mkfs.xfs -d swidth
+	 */
 	int			m_swidth;	/* stripe width */
 	/*
 	 * 该字段在xfs_sb_mount_common()中配置为sb_sectlog - BBSHIFT

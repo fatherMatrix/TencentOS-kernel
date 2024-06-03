@@ -944,6 +944,10 @@ struct block_device *bdget(dev_t dev)
 		bdev->bd_contains = NULL;
 		bdev->bd_super = NULL;
 		bdev->bd_inode = inode;
+		/*
+		 * bdev fs inode的i_blocksize()来自哪里？
+		 * - 设备注册的时候？
+		 */
 		bdev->bd_block_size = i_blocksize(inode);
 		bdev->bd_part_count = 0;
 		bdev->bd_invalidated = 0;

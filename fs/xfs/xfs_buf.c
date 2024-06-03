@@ -853,6 +853,7 @@ found:
 	/*
 	 * xfs_buf_allocate_memory() 中如果是通过alloc_pages()分配得到的，那么
 	 * bp->b_addr是空的，但相对应的内存在b_pages数组中；
+	 * - 此时属于_XBF_PAGES
 	 */
 	if (!bp->b_addr) {
 		/*
@@ -1073,6 +1074,7 @@ xfs_buf_read_uncached(
 /*
  * xfs_buf_get()的简化版本
  * - 不需要查找cache
+ *   > 因此参数中只需要一个长度即可，无需起始位置来做cache查找
  * - 分配的尺寸不需要考虑小于PAGE_SIZE
  */
 xfs_buf_t *
@@ -1086,12 +1088,19 @@ xfs_buf_get_uncached(
 	struct xfs_buf		*bp;
 	DEFINE_SINGLE_BUF_MAP(map, XFS_BUF_DADDR_NULL, numblks);
 
-	/* flags might contain irrelevant bits, pass only what we care about */
+	/*
+	 * flags might contain irrelevant bits, pass only what we care about
+	 * - 直接进行内存分配
+	 *   > 完全略过cache
+	 */
 	bp = _xfs_buf_alloc(target, &map, 1, flags & XBF_NO_IOACCT);
 	if (unlikely(bp == NULL))
 		goto fail;
 
 	page_count = PAGE_ALIGN(numblks << BBSHIFT) >> PAGE_SHIFT;
+	/*
+	 * 分配xfs_buf->b_pages
+	 */
 	error = _xfs_buf_get_pages(bp, page_count);
 	if (error)
 		goto fail_free_buf;

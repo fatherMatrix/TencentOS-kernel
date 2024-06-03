@@ -333,6 +333,9 @@ struct kiocb {
 	 */
 	void (*ki_complete)(struct kiocb *iocb, long ret, long ret2);
 	void			*private;
+	/*
+	 * 填充在new_sync_write()
+	 */
 	int			ki_flags;
 	u16			ki_hint;
 	u16			ki_ioprio; /* See linux/ioprio.h */
@@ -548,8 +551,13 @@ struct block_device {
 	 */
 	struct block_device *	bd_contains;
 	/*
-	 * 最初来源于i_blocksize(inode)；
+	 * 最初来源于i_blocksize(bdev fs inode)；
 	 * - 详见bdget()
+	 *   > bdev fs inode的i_blocksize来自哪里？
+	 *     x set_init_blocksize()
+	 *         bdev_logical_block_size()
+	 *           queue_logical_block_size()
+	 *             request_queue->queue_limits->logical_block_size
 	 */
 	unsigned		bd_block_size;
 	/*
@@ -3167,6 +3175,9 @@ extern int sync_file_range(struct file *file, loff_t offset, loff_t nbytes,
  */
 static inline ssize_t generic_write_sync(struct kiocb *iocb, ssize_t count)
 {
+	/*
+	 * xxx_SYNC是包含了xxx_DSYNC的
+	 */
 	if (iocb->ki_flags & IOCB_DSYNC) {
 		int ret = vfs_fsync_range(iocb->ki_filp,
 				iocb->ki_pos - count, iocb->ki_pos - 1,

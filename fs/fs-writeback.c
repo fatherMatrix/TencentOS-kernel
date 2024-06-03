@@ -1586,6 +1586,10 @@ __writeback_single_inode(struct inode *inode, struct writeback_control *wbc)
 		 * xfs没有这个函数，怎么办？
 		 * - xfs delayed log机制中的AIL部分使得xfs不需要这个函数
 		 *   > 参见：upstream 8a9c9980f24f6d86e0ec0150ed35fba45d0c9f88
+		 *
+		 * ext4: ext4_write_inode()
+		 * - 按道理说，ext4有事务机制，为什么还需要这个东西呢？
+		 *   > 该函数内，对于有事务支持时，仅等待事务完成；
 		 */
 		int err = write_inode(inode, wbc);
 		if (ret == 0)
@@ -2458,6 +2462,7 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 		 * NOTE：was_dirty为0恰恰表示这个inode在本次调用
 		 *       mark_inode_dirty_sync()前没有dirty标志，那么本次调用就
 		 *       有义务触发相关writeback操作；
+		 *       - 诶，回写操作不是应该由事务机制完成吗？
 		 */
 		if (!was_dirty) {
 			struct bdi_writeback *wb;

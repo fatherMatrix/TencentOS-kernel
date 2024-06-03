@@ -714,6 +714,8 @@ struct transaction_s
 	 * list match each other one for one at all times. [j_list_lock]
 	 *
 	 * iobuf list是哪个？
+	 * - 目前已经变成了临时变量io_bufs
+	 *   > 参见：jbd2_journal_commit_transaction()
 	 */
 	struct journal_head	*t_shadow_list;
 

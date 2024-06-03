@@ -117,6 +117,11 @@ the sequence will be in one of the following forms::
 	   set_pte(pte_pointer, new_pte_val);
 	   flush_tlb_page(vma, addr);
 
+flush_cache_xxx()要在flush_tlb_xxx()前面，原因是：
+- 对于VIVT的cache，其对cache的正确访问依赖于virtual -> physical的地址转换，
+  我们需要在更改这个转换之前进行cache的flush。否则，cache将会被flush到错误
+  的物理地址中；
+
 The cache level flush will always be first, because this allows
 us to properly handle systems whose caches are strict and require
 a virtual-->physical translation to exist for a virtual address

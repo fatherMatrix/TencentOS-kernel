@@ -2035,6 +2035,10 @@ static blk_qc_t blk_mq_make_request(struct request_queue *q, struct bio *bio)
 	 * - 有空要好好看一下，比如iommu的dma remapping用了吗？怎么用的？
 	 */
 	blk_queue_bounce(q, &bio);
+	/*
+	 * 分裂bio，一个大的因素是request_queue的限制
+	 * - 参见：request_queue->limits->logical_block_size
+	 */
 	__blk_queue_split(q, &bio, &nr_segs);
 
 	if (!bio_integrity_prep(bio))

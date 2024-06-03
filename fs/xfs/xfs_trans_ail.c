@@ -918,6 +918,9 @@ xfs_trans_ail_init(
 	INIT_LIST_HEAD(&ailp->ail_buf_list);
 	init_waitqueue_head(&ailp->ail_empty);
 
+	/*
+	 * 一开始去睡眠了
+	 */
 	ailp->ail_task = kthread_run(xfsaild, ailp, "xfsaild/%s",
 			ailp->ail_mount->m_fsname);
 	if (IS_ERR(ailp->ail_task))

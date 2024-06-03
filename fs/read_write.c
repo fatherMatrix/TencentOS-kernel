@@ -489,6 +489,7 @@ static ssize_t new_sync_write(struct file *filp, const char __user *buf, size_t 
 	/* 
 	 * struct kiocb保存了设备侧的位置信息
 	 * struct iov_iter保存了内存侧的位置信息
+	 * - 还包括了访问标志的转换
 	 */
 	init_sync_kiocb(&kiocb, filp);
 	/* 保存要写入的数据在文件中的偏移 */

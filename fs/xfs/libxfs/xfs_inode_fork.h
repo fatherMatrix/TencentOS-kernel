@@ -65,7 +65,11 @@ struct xfs_ifork {
  * - 有该标志表示当前的extents处于btree状态，反之处于list状态
  * - 该标志位的作用与XFS_IFORK_FORMAT()宏重复，后期全部整合到了
  *   xfs_ifork->if_format中
- *   > 参见：upstream f7e67b20ecbbcb9180c888a5c4fde267935e075f
+ *   > 参见：upstream commit:
+ *     x f7e67b20ecbbcb9180c888a5c4fde267935e075f
+ *     x b2197a36c0ef5b35a0ed83de744610a462da1ad3: remove XFS_IFEXTENTS
+ *     x 0779f4a68d4df539a7ea624f7e1560f48aa46ad9: remove XFS_IFINLINE
+ *     x ac1e067211d1476dae304e8881c10b40c90614d5: remove XFS_IFBROOT
  */
 #define	XFS_IFBROOT	0x04	/* i_broot points to the bmap b-tree root */
 

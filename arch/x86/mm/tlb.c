@@ -79,6 +79,9 @@ static void choose_new_asid(struct mm_struct *next, u64 next_tlb_gen,
 	u16 asid;
 
 	if (!static_cpu_has(X86_FEATURE_PCID)) {
+	/*
+	 * 如果cpu没有这个特性，那么没办法，每次mov cr3时都会刷空local tlb
+	 */
 		*new_asid = 0;
 		*need_flush = true;
 		return;
@@ -430,6 +433,9 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 			cpumask_set_cpu(cpu, mm_cpumask(next));
 		next_tlb_gen = atomic64_read(&next->context.tlb_gen);
 
+		/*
+		 * 这里是pcid
+		 */
 		choose_new_asid(next, next_tlb_gen, &new_asid, &need_flush);
 
 		/* Let nmi_uaccess_okay() know that we're changing CR3. */
@@ -578,6 +584,9 @@ static void flush_tlb_func_common(const struct flush_tlb_info *f,
 		 * paging-structure cache to avoid speculatively reading
 		 * garbage into our TLB.  Since switching to init_mm is barely
 		 * slower than a minimal flush, just switch to init_mm.
+		 * - 由于切换到init_mm几乎不比minimal flush慢，因此只需切换到
+		 *   init_mm即可。
+		 *   > 如何定义minimal flush？
 		 *
 		 * This should be rare, with native_flush_tlb_others skipping
 		 * IPIs to lazy TLB mode CPUs.
@@ -726,8 +735,11 @@ void native_flush_tlb_others(const struct cpumask *cpumask,
 
 	/*
 	 * If no page tables were freed, we can skip sending IPIs to
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * CPUs in lazy TLB mode. They will flush the CPU themselves
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * at the next context switch.
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 *
 	 * However, if page tables are getting freed, we need to send the
 	 * IPI everywhere, to prevent CPUs in lazy TLB mode from tripping
@@ -738,6 +750,15 @@ void native_flush_tlb_others(const struct cpumask *cpumask,
 		smp_call_function_many(cpumask, flush_tlb_func_remote,
 			       (void *)info, 1);
 	else
+		/*
+		 * 对于正处于lazy tlb状态的cpu，不发送ipi
+		 * - 如果未开启PCID，那么lazy tlb的cpu下次切换到非内核线程（可
+		 *   能访问到用户态地址空间的task）时，会自动flush local tlb
+		 * - 但是如果开启了PCID，那么lazy tlb的cpu下次切换到非内核线程
+		 *   时不会flush呀。这不就有问题了吗？
+		 *   > 还要观察ctx_id和tlb_gen的关系决定是否flush
+		 *     x 参见：switch_mm_irqs_off() -> choose_new_asid()
+		 */
 		on_each_cpu_cond_mask(tlb_is_not_lazy, flush_tlb_func_remote,
 				(void *)info, 1, GFP_ATOMIC, cpumask);
 }
@@ -812,7 +833,10 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 		end = TLB_FLUSH_ALL;
 	}
 
-	/* This is also a barrier that synchronizes with switch_mm(). */
+	/*
+	 * This is also a barrier that synchronizes with switch_mm().
+	 * - 因为这个mm_struct要被flush了，所以增加其对应的tlb_gen
+	 */
 	new_tlb_gen = inc_mm_tlb_gen(mm);
 
 	info = get_flush_tlb_info(mm, start, end, stride_shift, freed_tables,

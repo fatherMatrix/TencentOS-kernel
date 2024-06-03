@@ -668,6 +668,10 @@ xfs_log_mount(
 		ASSERT(mp->m_flags & XFS_MOUNT_RDONLY);
 	}
 
+	/*
+	 * 分配一个xlog
+	 * - 创建了CIL，但未创建AIL
+	 */
 	mp->m_log = xlog_alloc_log(mp, log_target, blk_offset, num_bblks);
 	if (IS_ERR(mp->m_log)) {
 		error = PTR_ERR(mp->m_log);
@@ -1590,6 +1594,13 @@ xlog_alloc_log(
 	if (!log->l_ioend_workqueue)
 		goto out_free_iclog;
 
+	/*
+	 * 创建CIL
+	 * - 创建的CIL是空的
+	 *
+	 * AIL什么时候创建？
+	 * - AIL要考虑disk log space中现有的数据，因此肯定不是空的
+	 */
 	error = xlog_cil_init(log);
 	if (error)
 		goto out_destroy_workqueue;

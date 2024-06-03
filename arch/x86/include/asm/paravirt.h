@@ -73,6 +73,9 @@ static inline void flush_tlb_others(const struct cpumask *cpumask,
 
 static inline void paravirt_tlb_remove_table(struct mmu_gather *tlb, void *table)
 {
+	/*
+	 * tlb_remove_table
+	 */
 	PVOP_VCALL2(mmu.tlb_remove_table, tlb, table);
 }
 

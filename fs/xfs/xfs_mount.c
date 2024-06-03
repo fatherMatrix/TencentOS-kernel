@@ -289,6 +289,7 @@ xfs_readsb(
 	 * get the sb_sectsize out of the superblock and
 	 * then reread with the proper length.
 	 * We don't verify it yet, because it may not be complete.
+	 * - 先获取设备的sector size
 	 */
 	sector_size = xfs_getsize_buftarg(mp->m_ddev_targp);
 	buf_ops = NULL;
@@ -649,6 +650,9 @@ xfs_mountfs(
 	uint			quotaflags = 0;
 	int			error = 0;
 
+	/*
+	 * 初始化xfs_mount结构体
+	 */
 	xfs_sb_mount_common(mp, sbp);
 
 	/*

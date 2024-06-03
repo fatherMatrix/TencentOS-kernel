@@ -1315,6 +1315,9 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 		} while (--count && --batch_free && !list_empty(list));
 	}
 
+	/*
+	 * 锁住zone
+	 */
 	spin_lock(&zone->lock);
 	isolated_pageblocks = has_isolate_pageblock(zone);
 
@@ -1333,6 +1336,9 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 		__free_one_page(page, page_to_pfn(page), zone, 0, mt);
 		trace_mm_page_pcpu_drain(page, 0, mt);
 	}
+	/*
+	 * 开锁zone
+	 */
 	spin_unlock(&zone->lock);
 }
 
@@ -1434,9 +1440,15 @@ static void __free_pages_ok(struct page *page, unsigned int order)
 		return;
 
 	migratetype = get_pfnblock_migratetype(page, pfn);
+	/*
+	 * 这里关闭了中断
+	 */
 	local_irq_save(flags);
 	__count_vm_events(PGFREE, 1 << order);
 	free_one_page(page_zone(page), page, pfn, order, migratetype);
+	/*
+	 * 开中断
+	 */
 	local_irq_restore(flags);
 }
 
@@ -3139,8 +3151,14 @@ void free_unref_page(struct page *page)
 	if (!free_unref_page_prepare(page, pfn))
 		return;
 
+	/*
+	 * 关中断
+	 */
 	local_irq_save(flags);
 	free_unref_page_commit(page, pfn);
+	/*
+	 * 开中断
+	 */
 	local_irq_restore(flags);
 }
 
@@ -3161,6 +3179,9 @@ void free_unref_page_list(struct list_head *list)
 		set_page_private(page, pfn);
 	}
 
+	/*
+	 * 关中断
+	 */
 	local_irq_save(flags);
 	list_for_each_entry_safe(page, next, list, lru) {
 		unsigned long pfn = page_private(page);
@@ -3179,6 +3200,9 @@ void free_unref_page_list(struct list_head *list)
 			local_irq_save(flags);
 		}
 	}
+	/*
+	 * 开中断
+	 */
 	local_irq_restore(flags);
 }
 

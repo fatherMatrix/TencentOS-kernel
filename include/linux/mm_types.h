@@ -930,6 +930,7 @@ enum tlb_flush_reason {
   * 把匿名页换出到交换区的时候，需要在页表项中存储页在交换区中的位置，页表项存
   * 储交换区位置的格式由各种处理器架构自己定义，数据类型swp_entry_t是处理器架构
   * 无关的。
+  * - 通过pte_to_swp_entry()将一个pte转换为swp_entry_t
   */
 typedef struct {
 	/* 

@@ -3288,6 +3288,9 @@ generic_file_direct_write(struct kiocb *iocb, struct iov_iter *from)
 		pos += written;
 		write_len -= written;
 		if (pos > i_size_read(inode) && !S_ISBLK(inode->i_mode)) {
+			/*
+			 * 更新vfs inode->i_size
+			 */
 			i_size_write(inode, pos);
 			mark_inode_dirty(inode);
 		}
@@ -3463,7 +3466,7 @@ EXPORT_SYMBOL(generic_perform_write);
  * This function does *not* take care of syncing data in case of O_SYNC write.
  * A caller has to handle it. This is mainly due to the fact that we want to
  * avoid syncing under i_mutex.
- * 注意：这个函数是不做同步操作的！
+ * 注意：这个函数是不做数据同步操作的！
  *
  * Return:
  * * number of bytes written, even for truncated writes

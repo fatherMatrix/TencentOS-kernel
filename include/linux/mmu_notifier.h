@@ -473,6 +473,9 @@ static inline void mmu_notifier_range_init(struct mmu_notifier_range *range,
 	__young;							\
 })
 
+/*
+ * tkernel4定义了CONFIG_MMU_NOTIFIER，所以是这里
+ */
 #define	ptep_clear_flush_notify(__vma, __address, __ptep)		\
 ({									\
 	unsigned long ___addr = __address & PAGE_MASK;			\

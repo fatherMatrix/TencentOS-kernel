@@ -115,6 +115,7 @@ struct memcg_shrinker_map {
 
 /*
  * per-zone information in memory controller.
+ * - 每个numa node一个
  */
 struct mem_cgroup_per_node {
 	struct lruvec		lruvec;
@@ -1023,6 +1024,9 @@ static inline struct lruvec *lock_page_lruvec_irq(struct page *page)
 	return &pgdat->__lruvec;
 }
 
+/*
+ * 未定义CONFIG_MEMCG时，lru在pglist_data中
+ */
 static inline struct lruvec *lock_page_lruvec_irqsave(struct page *page,
 		unsigned long *flagsp)
 {

@@ -2521,6 +2521,11 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 		} else {
 			inc_mm_counter_fast(mm, MM_ANONPAGES);
 		}
+		/*
+		 * 先冲刷cache
+		 * - 这个一定要在修改virtual -> physical映射之前做
+		 *   > 参见Documentation/core-api/cachetlb.rst
+		 */
 		flush_cache_page(vma, vmf->address, pte_pfn(vmf->orig_pte));
 		entry = mk_pte(new_page, vma->vm_page_prot);
 		entry = maybe_mkwrite(pte_mkdirty(entry), vma);
@@ -2529,6 +2534,11 @@ static vm_fault_t wp_page_copy(struct vm_fault *vmf)
 		 * pte with the new entry. This will avoid a race condition
 		 * seen in the presence of one thread doing SMC and another
 		 * thread doing COW.
+		 * - 这个主要是防止自修改的代码在fork时产生竞态。参见奔跑吧，
+		 *   linux内核的"为什么要在切换页表项之前刷新tlb"。
+		 *   > 感觉他写的就是一坨屎：明明是"为什么要在切换页表项之前将
+		 *     对应页表项清零"，tlb flush是紧跟在页表项清零之后的自然操
+		 *     作。
 		 */
 		ptep_clear_flush_notify(vma, vmf->address, vmf->pte);
 		page_add_new_anon_rmap(new_page, vma, vmf->address, false);
@@ -3144,6 +3154,17 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	 *
 	 * Here we only have down_read(mmap_sem).
 	 *                        ^^^^
+	 * pte_alloc()和pte_alloc_map()的区别在于后者在调用前者后还会包含一个
+	 * pte_offset_map()操作从pte table中查询address对应的pte entry。但这里
+	 * 并不能确保此pmd entry是一个hugepage pmd entry还是一个指向pte table的
+	 * entry。因为这里我们仅持有了读信号量，可能存在并发的page fault路径把
+	 * 这里改成了hugepage pmd entry。
+	 * - 对于hugepage pmd entry，pte_offset_map()是错误操作；
+	 *
+	 * understand achor A:
+	 * - handle_pte_fault()中的understand achor B处只所以可以直接使用
+	 *   pte_offset_map()是因为该处前面使用pmd_devmap_trans_unstable()判断了
+	 *   那里一定是一个指向pte table的pmd entry
 	 */
 	if (pte_alloc(vma->vm_mm, vmf->pmd))
 		return VM_FAULT_OOM;
@@ -3172,7 +3193,11 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 		goto setpte;
 	}
 
-	/* Allocate our own private page. */
+	/*
+	 * Allocate our own private page.
+	 * - 为什么这个vma会没有对应的anon_vma呢？
+	 *   > mmap()流程中似乎确实没有设置新vma的anon_vma
+	 */
 	if (unlikely(anon_vma_prepare(vma)))
 		goto oom;
 	page = alloc_zeroed_user_highpage_movable(vma, vmf->address);
@@ -3271,6 +3296,9 @@ static vm_fault_t __do_fault(struct vm_fault *vmf)
 		smp_wmb(); /* See comment in __pte_alloc() */
 	}
 
+	/*
+	 * xfs: xfs_file_vm_ops
+	 */
 	ret = vma->vm_ops->fault(vmf);
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY |
 			    VM_FAULT_DONE_COW)))
@@ -3476,6 +3504,9 @@ vm_fault_t alloc_set_pte(struct vm_fault *vmf, struct mem_cgroup *memcg,
 
 	flush_icache_page(vma, page);
 	entry = mk_pte(page, vma->vm_page_prot);
+	/*
+	 * 设置pte中的dirty标记
+	 */
 	if (write)
 		entry = maybe_mkwrite(pte_mkdirty(entry), vma);
 	/* copy-on-write page */
@@ -3733,6 +3764,9 @@ static vm_fault_t do_shared_fault(struct vm_fault *vmf)
 	 */
 	if (vma->vm_ops->page_mkwrite) {
 		unlock_page(vmf->page);
+		/*
+		 * 设置page中的PageDirty
+		 */
 		tmp = do_page_mkwrite(vmf);
 		if (unlikely(!tmp ||
 				(tmp & (VM_FAULT_ERROR | VM_FAULT_NOPAGE)))) {
@@ -3741,6 +3775,9 @@ static vm_fault_t do_shared_fault(struct vm_fault *vmf)
 		}
 	}
 
+	/*
+	 * 设置pte中的dirty标记
+	 */
 	ret |= finish_fault(vmf);
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE |
 					VM_FAULT_RETRY))) {
@@ -4005,7 +4042,10 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
 		 */
 		vmf->pte = NULL;
 	} else {
-		/* See comment in pte_alloc_one_map() */
+		/*
+		 * See comment in pte_alloc_one_map()
+		 * - 如果是pmd巨型页则返回1，直接返回
+		 */
 		if (pmd_devmap_trans_unstable(vmf->pmd))
 			return 0;
 		/*
@@ -4013,6 +4053,12 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
 		 * pmd from under us anymore at this point because we hold the
 		 * mmap_sem read mode and khugepaged takes it in write mode.
 		 * So now it's safe to run pte_offset_map().
+		 * - 这里确信pmd entry是一个常规pmd entry（指向下一级页表），且
+		 *   进入本if分支表明pmd entry不为空（即下一级页表————pte table
+		 *   存在），所以可以绕过alloc过程直接查找对应pte entry。
+		 *   > 为什么确信呢？
+		 *     x 因为上面的pmd_devmap_trans_unstable()
+		 *       o understand achor B
 		 *
 		 * 找到page fault发生地址的pte指针
 		 */
@@ -4107,6 +4153,7 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 	};
 	/*
 	 * hw_error_code中包含X86_PF_WRITE
+	 * - page存在，但无写权限
 	 */
 	unsigned int dirty = flags & FAULT_FLAG_WRITE;
 	struct mm_struct *mm = vma->vm_mm;

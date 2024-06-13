@@ -60,6 +60,10 @@ struct vm_fault;
 
 struct iomap_page_ops;
 
+/*
+ * 用于描述一段连续地文件数据空间到磁盘数据空间的映射
+ * > 既然是连续的，那就隐含了一个iomap结构最多只能处理一个extent
+ */
 struct iomap {
 	/*
 	 * 磁盘偏移

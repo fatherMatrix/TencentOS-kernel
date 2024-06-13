@@ -384,13 +384,16 @@ static void __lru_cache_add(struct page *page)
 {
 	struct pagevec *pvec = &get_cpu_var(lru_add_pvec);
 
+	/*
+	 * 增加page的引用计数
+	 */
 	get_page(page);
 	/*
 	 * pagevec_add()将page加入到per-cpu的pagevec中，并返回pagevec中剩余的槽
 	 * 数；如果返回0，则继续调用__pagevec_lru_add()将pagevec中的page批量挂
 	 * 到memcg中的lru链表上；
 	 *
-	 * 如果page是一个复合页，也要将page绕过pagevec直接放到lru链表里；
+	 * 如果page是一个复合页，也要将pagevec全部放到lru链表里；
 	 * - 里面并没有对复合页做特殊处理，猜测lru_cache_add()本身要求page是首页；
 	 */
 	if (!pagevec_add(pvec, page) || PageCompound(page))

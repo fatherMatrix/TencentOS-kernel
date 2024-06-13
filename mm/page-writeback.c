@@ -2253,6 +2253,9 @@ continue_unlock:
 			 * 没有加好锁，是个BUG();
 			 */
 			BUG_ON(PageWriteback(page));
+			/*
+			 * 清除page和pte的dirty标记
+			 */
 			if (!clear_page_dirty_for_io(page))
 				goto continue_unlock;
 

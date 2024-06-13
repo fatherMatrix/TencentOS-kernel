@@ -87,6 +87,8 @@ struct xfs_ail {
 	/*
 	 * xfsaild() 阶段要写到磁盘上的xfs_buf链表；
 	 * - 链表元素是 xfs_buf->b_list
+	 * - 链表元素的添加在xfsaild_push_item()
+	 * - 链表元素的处理在
 	 */
 	struct list_head	ail_buf_list;
 	wait_queue_head_t	ail_empty;

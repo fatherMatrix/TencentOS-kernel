@@ -1429,6 +1429,9 @@ void do_user_addr_fault(struct pt_regs *regs,
 	 * 2. The access did not originate in userspace.
 	 */
 	if (unlikely(!down_read_trylock(&mm->mmap_sem))) {
+	/*
+	 * down_read_trylock()返回0表示尝试加锁失败
+	 */
 		/*
 		 * 查找ex_table
 		 */
@@ -1441,6 +1444,9 @@ void do_user_addr_fault(struct pt_regs *regs,
 			return;
 		}
 retry:
+		/*
+		 * 尝试加锁失败了，强制加锁
+		 */
 		down_read(&mm->mmap_sem);
 	} else {
 		/*
@@ -1516,6 +1522,10 @@ good_area:
 		return;
 	}
 
+	/*
+	 * 放锁
+	 * - 注意这里是读锁
+	 */
 	up_read(&mm->mmap_sem);
 	if (unlikely(fault & VM_FAULT_ERROR)) {
 		mm_fault_error(regs, hw_error_code, address, fault);

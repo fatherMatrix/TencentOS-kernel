@@ -1267,11 +1267,17 @@ struct lruvec *mem_cgroup_page_lruvec(struct page *page, struct pglist_data *pgd
 		goto out;
 	}
 
+	/*
+	 * 每个page所属的mem_cgroup记录在了page结构体中
+	 */
 	memcg = page->mem_cgroup;
 	VM_WARN_ON_ONCE_PAGE(!memcg, page);
 	if (!memcg)
 		memcg = root_mem_cgroup;
 
+	/*
+	 * mem_cgroup中为每个numa node分配了一个mem_cgroup_per_node
+	 */
 	mz = mem_cgroup_page_nodeinfo(memcg, page);
 	lruvec = &mz->lruvec;
 out:
@@ -1318,6 +1324,9 @@ struct lruvec *lock_page_lruvec_irq(struct page *page)
 struct lruvec *lock_page_lruvec_irqsave(struct page *page, unsigned long *flags)
 {
 	struct lruvec *lruvec;
+	/*
+	 * 获取page所处的内存节点
+	 */
 	struct pglist_data *pgdat = page_pgdat(page);
 
 	rcu_read_lock();

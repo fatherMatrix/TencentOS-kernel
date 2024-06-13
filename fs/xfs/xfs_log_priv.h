@@ -375,6 +375,7 @@ struct xfs_cil {
 	spinlock_t		xc_push_lock ____cacheline_aligned_in_smp;
 	/*
 	 * 要求CIL push到iclog的最新的lsn
+	 * - xc_push_work会依据这个值进行CIL push
 	 */
 	xfs_lsn_t		xc_push_seq;
 	/*
@@ -393,6 +394,10 @@ struct xfs_cil {
 	 * - 目前关联的xfs_cil_ctx保存在本结构体xc_ctx中
 	 */
 	xfs_lsn_t		xc_current_sequence;
+	/*
+	 * xlog_cil_push_work()
+	 * - 参见：xlog_cil_init()
+	 */
 	struct work_struct	xc_push_work;
 } ____cacheline_aligned_in_smp;
 
@@ -564,7 +569,8 @@ struct xlog {
 	 * - 对lsn，参见： xlog_assign_atomic_lsn()
 	 * - 对xlog_grant_head，参见： xlog_assign_grant_head()
 	 *
-	 * l_reserve_head表示log space on disk上已保留的日志尾巴；
+	 * l_reserve_head表示disk log space上已保留的日志尾巴；
+	 * 猜测l_write_head表示disk log space上已经写了的日志尾巴
 	 *
 	 * 这个两个head的区别？
 	 */

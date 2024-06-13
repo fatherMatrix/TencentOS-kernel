@@ -726,6 +726,8 @@ write_retry:
 	trace_xfs_file_buffered_write(ip, iov_iter_count(from), iocb->ki_pos);
 	/*
 	 * 分配delayed blocks
+	 * - 因为是buffer io，所以写入数据的时候并不要求磁盘空间已经分配好了；
+	 *   > 但应该要保证余量满足
 	 */
 	ret = iomap_file_buffered_write(iocb, from, &xfs_iomap_ops);
 	if (likely(ret >= 0))
@@ -1297,8 +1299,16 @@ __xfs_filemap_fault(
 			ret = dax_finish_sync_fault(vmf, pe_size, pfn);
 	} else {
 		if (write_fault)
+		/*
+		 * page已经存在，只是当前pte entry中没有写权限，但用户写了这个
+		 * page
+		 * - 说明已经走过另一个else了
+		 */
 			ret = iomap_page_mkwrite(vmf, &xfs_iomap_ops);
 		else
+		/*
+		 * page不存在，通过这里将page从磁盘上读上来
+		 */
 			ret = filemap_fault(vmf);
 	}
 	xfs_iunlock(XFS_I(inode), XFS_MMAPLOCK_SHARED);

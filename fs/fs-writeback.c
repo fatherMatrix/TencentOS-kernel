@@ -40,6 +40,8 @@
  * Passed into wb_writeback(), essentially a subset of writeback_control
  *
  * 描述一个回写任务；
+ * - 这个结构体看上去只是指定了本次回写任务最多写多少数据到disk上，至于写哪些数
+ *   据由wb_workfn()内部自己决定
  */
 struct wb_writeback_work {
 	/*
@@ -62,6 +64,10 @@ struct wb_writeback_work {
 	unsigned int auto_free:1;	/* free on completion */
 	enum wb_reason reason;		/* why was writeback initiated? */
 
+	/*
+	 * 作为链表元素链入bdi_writeback->work_list
+	 * - 添加函数：wb_queue_work()
+	 */
 	struct list_head list;		/* pending work list */
 	struct wb_completion *done;	/* set if the caller waits */
 };
@@ -170,7 +176,8 @@ static void wb_wakeup(struct bdi_writeback *wb)
 	if (test_bit(WB_registered, &wb->state))
 		/* 
  		 * 这个函数的作用是修改或者queue一个work，这里主要是用来
- 		 * queue一个work
+		 * queue一个work；
+		 * - 工作函数是wb_workfn()
  		 */ 
 		mod_delayed_work(bdi_wq, &wb->dwork, 0);
 	spin_unlock_bh(&wb->work_lock);
@@ -204,6 +211,9 @@ static void wb_queue_work(struct bdi_writeback *wb,
 
 	if (test_bit(WB_registered, &wb->state)) {
 		list_add_tail(&work->list, &wb->work_list);
+		/*
+		 * wb_workfn()
+		 */
 		mod_delayed_work(bdi_wq, &wb->dwork, 0);
 	} else
 		finish_writeback_work(wb, work);
@@ -1343,7 +1353,14 @@ static void queue_io(struct bdi_writeback *wb, struct wb_writeback_work *work,
 	unsigned long time_expire_jif = dirtied_before;
 
 	assert_spin_locked(&wb->list_lock);
+	/*
+	 * 将b_more_io的元素移入b_io的尾部
+	 */
 	list_splice_init(&wb->b_more_io, &wb->b_io);
+	/*
+	 * 将bdi_writeback->b_dirty中的inode移入b_io的尾部
+	 * - 如果有多个super_block，则先将inode按照super_block做排序聚合
+	 */
 	moved = move_expired_inodes(&wb->b_dirty, &wb->b_io, dirtied_before);
 	if (!work->for_sync)
 		time_expire_jif = jiffies - dirtytime_expire_interval * HZ;
@@ -1788,6 +1805,9 @@ static long writeback_sb_inodes(struct super_block *sb,
 			 * when we completed a full scan of b_io.
 			 */
 			spin_unlock(&inode->i_lock);
+			/*
+			 * 将该inode重新放入b_io_more链表
+			 */
 			requeue_io(inode, wb);
 			trace_writeback_sb_inodes_requeue(inode);
 			continue;
@@ -1798,6 +1818,7 @@ static long writeback_sb_inodes(struct super_block *sb,
 		 * We already requeued the inode if it had I_SYNC set and we
 		 * are doing WB_SYNC_NONE writeback. So this catches only the
 		 * WB_SYNC_ALL case.
+		 * - 如果该inode已经处于writeback状态了，则等待其回写结束
 		 */
 		if (inode->i_state & I_SYNC) {
 			/* Wait for I_SYNC. This function drops i_lock... */
@@ -1845,6 +1866,9 @@ static long writeback_sb_inodes(struct super_block *sb,
 		if (!(inode->i_state & I_DIRTY_ALL))
 			wrote++;
 		requeue_inode(inode, tmp_wb, &wbc);
+		/*
+		 * 唤醒在inode_sleep_on_writeback()的进程
+		 */
 		inode_sync_complete(inode);
 		spin_unlock(&inode->i_lock);
 
@@ -1937,6 +1961,9 @@ static long writeback_inodes_wb(struct bdi_writeback *wb, long nr_pages,
  *
  * dirtied_before takes precedence over nr_to_write.  So we'll only write back
  * all dirty pages if they are all attached to "old" mappings.
+ *
+ * writeback核心函数，主要步骤是将dirty inode、expired inode都集中到一个list中，
+ * 然后进行集中处理；
  */
 static long wb_writeback(struct bdi_writeback *wb,
 			 struct wb_writeback_work *work)
@@ -1962,6 +1989,7 @@ static long wb_writeback(struct bdi_writeback *wb,
 		 * run forever. Stop them if there is other work to do
 		 * so that e.g. sync can proceed. They'll be restarted
 		 * after the other works are all done.
+		 * - 如果bdi_writeback->work_list不为空，则break？
 		 */
 		if ((work->for_background || work->for_kupdate) &&
 		    !list_empty(&wb->work_list))
@@ -1987,6 +2015,9 @@ static long wb_writeback(struct bdi_writeback *wb,
 			dirtied_before = jiffies;
 
 		trace_writeback_start(wb, work);
+		/*
+		 * 将各种原因脏的inode收集到bdi_writeback->b_io链表中
+		 */
 		if (list_empty(&wb->b_io))
 			queue_io(wb, work, dirtied_before);
 		if (work->sb)
@@ -2136,6 +2167,9 @@ static long wb_do_writeback(struct bdi_writeback *wb)
 	long wrote = 0;
 
 	set_bit(WB_writeback_running, &wb->state);
+	/*
+	 * 先处理该bdi_writeback上已有的wb_writeback_work
+	 */
 	while ((work = get_next_work_item(wb)) != NULL) {
 		trace_writeback_exec(wb, work);
 		wrote += wb_writeback(wb, work);
@@ -2144,13 +2178,18 @@ static long wb_do_writeback(struct bdi_writeback *wb)
 
 	/*
 	 * Check for a flush-everything request
+	 * - 检查是否需要sync all
 	 */
 	wrote += wb_check_start_all(wb);
 
 	/*
 	 * Check for periodic writeback, kupdated() style
+	 * - 检查是否需要周期性回写
 	 */
 	wrote += wb_check_old_data_flush(wb);
+	/*
+	 * 检查backgroup回写是否需要继续
+	 */
 	wrote += wb_check_background_flush(wb);
 	clear_bit(WB_writeback_running, &wb->state);
 
@@ -2187,6 +2226,7 @@ void wb_workfn(struct work_struct *work)
 		 * bdi_wq can't get enough workers and we're running off
 		 * the emergency worker.  Don't hog it.  Hopefully, 1024 is
 		 * enough for efficient IO.
+		 * - 如果没有足够的worker了，则同步处理
 		 */
 		pages_written = writeback_inodes_wb(wb, 1024,
 						    WB_REASON_FORKER_THREAD);
@@ -2194,6 +2234,9 @@ void wb_workfn(struct work_struct *work)
 	}
 
 	if (!list_empty(&wb->work_list))
+	/*
+	 * 如果还有wb_writeback_work，则直接再次触发wb_workfn()
+	 */
 		wb_wakeup(wb);
 	else if (wb_has_dirty_io(wb) && dirty_writeback_interval)
 		wb_wakeup_delayed(wb);
@@ -2214,6 +2257,9 @@ static void __wakeup_flusher_threads_bdi(struct backing_dev_info *bdi,
 		return;
 
 	list_for_each_entry_rcu(wb, &bdi->wb_list, bdi_node)
+	/*
+	 * 对设备上的每个bdi_writeback，进行操作
+	 */
 		wb_start_writeback(wb, reason);
 }
 
@@ -2227,6 +2273,8 @@ void wakeup_flusher_threads_bdi(struct backing_dev_info *bdi,
 
 /*
  * Wakeup the flusher threads to start writeback of all currently dirty pages
+ *
+ * 遍历当前bdi_list上的所有设备，依次进行flush操作
  */
 void wakeup_flusher_threads(enum wb_reason reason)
 {
@@ -2240,6 +2288,9 @@ void wakeup_flusher_threads(enum wb_reason reason)
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(bdi, &bdi_list, bdi_list)
+	/*
+	 * 遍历每个设备
+	 */
 		__wakeup_flusher_threads_bdi(bdi, reason);
 	rcu_read_unlock();
 }

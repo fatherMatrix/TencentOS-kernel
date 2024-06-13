@@ -56,7 +56,7 @@
  * start, we define "rolling a deferred-op transaction" as follows:
  *
  * > For each xfs_defer_pending item on the dop_intake list,
- *   - Sort the work items in AG order.  XFS locking
+ *   - Sort the work items in AG order.  XFS locking		<- 保证AG order
  *     order rules require us to lock buffers in AG order.
  *   - Create a log intent item for that type.
  *   - Attach it to the pending item.
@@ -109,6 +109,10 @@
  * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * that this happens.
  * ^^^^^^^^^^^^^^^^^^
+ * 已经做的完intent item会log对应的done item，然后未做完的intent item会重新创建
+ * 一个intent item，那未做完的intent item如何处理？
+ * - 哦，这里的未做完指的是本来想做[A, B]，目前仅做了[A, A+x]，还剩余[A+x+1, B]
+ *   未做。
  *
  * This requires some coordination between ->finish_item and
  * defer_finish.  Upon deciding to request a new transaction,
@@ -209,6 +213,8 @@ xfs_defer_create_intents(
 	list_for_each_entry(dfp, &tp->t_dfops, dfp_list) {
 		ops = defer_op_types[dfp->dfp_type];
 		/*
+		 * 创建对应的intent item，并将内嵌的xfs_log_item链接进
+		 * xfs_trans->t_items中
 		 * - xfs_extent_free_create_intent()
 		 * - xfs_rmap_update_create_intent()
 		 * - xfs_refcount_update_create_intent()
@@ -216,10 +222,15 @@ xfs_defer_create_intents(
 		 */
 		dfp->dfp_intent = ops->create_intent(tp, dfp->dfp_count);
 		trace_xfs_defer_create_intent(tp->t_mountp, dfp);
+		/*
+		 * 对同一个xfs_defer_pending中的intent items进行排序
+		 * - 对于xfs_extent_free_item，排序原则是agno
+		 *   > 这就保证了extents free过程中的AG-order
+		 */
 		list_sort(tp->t_mountp, &dfp->dfp_work, ops->diff_items);
 		/*
-		 * 将这个xfs_defer_pending元素中的所有xfs_extent_free_item依次
-		 * log进EFI的尾部xfs_extent数组中
+		 * 将这个xfs_defer_pending元素中的所有intent items依次log进EFI的
+		 * 尾部xfs_extent数组中
 		 *
 		 * - xfs_extent_free_log_item()
 		 * -
@@ -410,11 +421,15 @@ xfs_defer_finish_noroll(
 		xfs_defer_create_intents(*tp);
 		/*
 		 * 将(*tp)->t_dfops移入dop_pending
+		 * - 这里是将(*tp)->t_dfops放到了dop_pending链表的尾部。但在高版
+		 *   本中这里做了修改，将(*tp)->t_dfops放到了dop_pending的头部：
+		 *   > upstream commit 27dada070d59c28a441f1907d2cec891b17dcb26
 		 */
 		list_splice_tail_init(&(*tp)->t_dfops, &dop_pending);
 
 		/*
 		 * Roll the transaction.
+		 * - 提交前面一个xfs_trans
 		 */
 		error = xfs_defer_trans_roll(tp);
 		if (error)
@@ -422,7 +437,8 @@ xfs_defer_finish_noroll(
 
 		/*
 		 * Log an intent-done item for the first pending item.
-		 * - 这里生成的是done items
+		 * - 这里生成的是done items，放入了xfs_trans->t_dfops
+		 *   > 每个循环中只对一个xfs_defer_pending做操作
 		 */
 		dfp = list_first_entry(&dop_pending, struct xfs_defer_pending,
 				       dfp_list);
@@ -479,6 +495,7 @@ xfs_defer_finish_noroll(
 			 * and roll the transaction.  See "Requesting
 			 * a Fresh Transaction while Finishing
 			 * Deferred Work" above.
+			 * - 此时dfp_count中仅包括还没有log done item的
 			 */
 			dfp->dfp_intent = ops->create_intent(*tp,
 					dfp->dfp_count);

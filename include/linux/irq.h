@@ -490,7 +490,7 @@ static inline irq_hw_number_t irqd_to_hwirq(struct irq_data *d)
  * @irq_nmi_teardown:	function called from core code after disabling an NMI
  * @flags:		chip specific flags
  *
- * 表示一个中断控制器
+ * 对中断控制器的抽象，组织芯片特定的处理函数
  */
 struct irq_chip {
 	struct device	*parent_device;

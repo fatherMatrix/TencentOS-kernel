@@ -82,6 +82,9 @@ static inline struct anon_vma *anon_vma_alloc(void)
 
 	anon_vma = kmem_cache_alloc(anon_vma_cachep, GFP_KERNEL);
 	if (anon_vma) {
+		/*
+		 * refcount初始值设置为1
+		 */
 		atomic_set(&anon_vma->refcount, 1);
 		anon_vma->degree = 1;	/* Reference for first vma */
 		anon_vma->parent = anon_vma;
@@ -175,6 +178,7 @@ static void anon_vma_chain_link(struct vm_area_struct *vma,
  * an anon_vma.
  *
  * This must be called with the mmap_sem held for reading.
+ *                              ^^^^^^^^^^^^^^^^^^^^^^^^^
  */
 int __anon_vma_prepare(struct vm_area_struct *vma)
 {
@@ -270,6 +274,10 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 	/*
 	 * dst是子进程vm_area_struct
 	 * src是父进程vm_area_struct
+	 * - 卧槽，如果从split_vma()中调过来，那这两者可不是父子关系，而是兄弟
+	 *   关系；
+	 *   > 对于兄弟关系，没有anon_vma_fork()中的vma->anon_vma = NULL操作，
+	 *     所以这里只是让新vma分配avc连接到anon_vma，anon_vma不会改变
 	 */
 	struct anon_vma_chain *avc, *pavc;
 	struct anon_vma *root = NULL;
@@ -433,12 +441,16 @@ void unlink_anon_vmas(struct vm_area_struct *vma)
 		}
 
 		/*
-		 * 将avc在vma->anon_vma_chain链表上取下
+		 * 走到这里，说明anon_vma的红黑树上还有其他的avc/vma关联。此时直
+		 * 接将avc在vma->anon_vma_chain链表上摘下并释放其内存即可（avc已
+		 * 经从anon_vma的红黑树上摘下了）完成vma的unlink。
+		 *
+		 * - 如果从上面的continue继续循环，说明这个avc从anon_vma上被摘除
+		 *   后，anon_vma的红黑树上已经没有关联的元素了。此时将avc与vma
+		 *   的关联保持，便于下面通过vma找到这类没有元素的anon_vma并将其
+		 *   释放；
 		 */
 		list_del(&avc->same_vma);
-		/*
-		 * 释放avc的内存
-		 */
 		anon_vma_chain_free(avc);
 	}
 	/*
@@ -1085,6 +1097,9 @@ void page_move_anon_rmap(struct page *page, struct vm_area_struct *vma)
 static void __page_set_anon_rmap(struct page *page,
 	struct vm_area_struct *vma, unsigned long address, int exclusive)
 {
+	/*
+	 * 可以得出结论，匿名页的anon_vma来源于vma->anon_vma
+	 */
 	struct anon_vma *anon_vma = vma->anon_vma;
 
 	BUG_ON(!anon_vma);

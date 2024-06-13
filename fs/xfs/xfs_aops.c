@@ -795,6 +795,10 @@ xfs_add_to_ioend(
 	 * 不能合并
 	 */
 	if (!merged) {
+		/*
+		 * 将多个bio通过bio_chain机制链接起来，只有最后一个bio完成后才会
+		 * 调用最后的end_io回调
+		 */
 		if (bio_full(wpc->ioend->io_bio, len))
 			wpc->ioend->io_bio = xfs_chain_bio(wpc->ioend->io_bio);
 		bio_add_page(wpc->ioend->io_bio, page, len, poff);

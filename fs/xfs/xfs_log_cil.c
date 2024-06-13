@@ -1301,6 +1301,9 @@ restart:
 		if (ctx->sequence > sequence)
 			continue;
 		if (!ctx->commit_lsn) {
+		/*
+		 * xfs_cil_ctx->commit_lsn会在xfs_cil_ctx写入iclog之后才会赋值
+		 */
 			/*
 			 * It is still being pushed! Wait for the push to
 			 * complete, then start again from the beginning.

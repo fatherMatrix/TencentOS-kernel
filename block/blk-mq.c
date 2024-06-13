@@ -607,11 +607,19 @@ static void __blk_mq_complete_request(struct request *rq)
 	 *
 	 * So complete IO reqeust in softirq context in case of single queue
 	 * for not degrading IO performance by irqsoff latency.
+	 *
+	 * 如果设备只有一个硬件队列，那么该硬盘只有一个irq，这个时候只有一个cpu
+	 * 来接收这个硬盘的硬中断，所以我们不能在硬中断中做太多处理，将数据的完
+	 * 成工作交给软中断。
 	 */
 	if (q->nr_hw_queues == 1) {
 		__blk_complete_request(rq);
 		return;
 	}
+
+	/*
+	 * 如果设备有多个硬件队列，则可以在硬中断中完成io的complete操作
+	 */
 
 	/*
 	 * For a polled request, always complete locallly, it's pointless

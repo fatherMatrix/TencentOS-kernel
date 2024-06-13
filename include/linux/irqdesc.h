@@ -75,6 +75,10 @@ struct irq_desc {
 	struct irqaction	*action;	/* IRQ action list */
 	unsigned int		status_use_accessors;
 	unsigned int		core_internal_state__do_not_mess_with_it;
+	/*
+	 * 每次disable_irq()就加个1，enable_irq()时减个1
+	 * - 到0表示已经打开了irq
+	 */
 	unsigned int		depth;		/* nested irq disables */
 	unsigned int		wake_depth;	/* nested wake enables */
 	unsigned int		tot_count;

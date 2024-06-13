@@ -122,6 +122,8 @@ flush_cache_xxx()要在flush_tlb_xxx()前面，原因是：
   我们需要在更改这个转换之前进行cache的flush。否则，cache将会被flush到错误
   的物理地址中；
 
+在wp_page_copy()中，我们要先flush_tlb_xxx()，再更新pte；
+
 The cache level flush will always be first, because this allows
 us to properly handle systems whose caches are strict and require
 a virtual-->physical translation to exist for a virtual address

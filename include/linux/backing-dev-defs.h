@@ -127,13 +127,19 @@ struct bdi_writeback_congested {
  * change as blkcg is disabled and enabled higher up in the hierarchy, a wb
  * is tested for blkcg after lookup and removed from index on mismatch so
  * that a new wb for the combination can be created.
+ *
+ * writeback任务的触发点：
+ * - balanced_dirty_ratelimit(): 在generic_perform_write()时触发，用于内存空间
+ *   不足时的pagecache回写及释放
+ * - wakeup_flusher_threads(): 间隔性触发，用于定时回写数据
  */
 struct bdi_writeback {
 	struct backing_dev_info *bdi;	/* our parent bdi */
 
 	unsigned long state;		/* Always use atomic bitops on this */
 	/*
-	 * 上次刷写数据的时间，用于周期性回写数据
+	 * 上次周期性回写数据的时间，用于周期性回写数据
+	 * - 参见: wb_check_start_all()
 	 */
 	unsigned long last_old_flush;	/* last old data flush */
 
@@ -178,6 +184,7 @@ struct bdi_writeback {
 	spinlock_t work_lock;		/* protects work_list & dwork scheduling */
 	/*
 	 * 回写任务列表，链表元素是wb_writeback_work->list
+	 * - 添加函数：wb_queue_work()
 	 */
 	struct list_head work_list;
 	/*
@@ -219,8 +226,16 @@ struct bdi_writeback {
 	KABI_RESERVE(4);
 };
 
+/*
+ * 初始化过程：blk_alloc_queue_node()
+ * 注册过程：add_disk() -> device_add_disk() -> __device_add_disk() ->
+ *           -> bdi_register_owner() -> bdi_register() -> bdi_register_va()
+ */
 struct backing_dev_info {
 	u64 id;
+	/*
+	 * 链入红黑树bdi_tree
+	 */
 	struct rb_node rb_node; /* keyed by ->id */
 	/*
 	 * 将backing_dev_info链入bdi_list全局链表
@@ -241,6 +256,7 @@ struct backing_dev_info {
 	/*
 	 * Sum of avg_write_bw of wbs with dirty inodes.  > 0 if there are
 	 * any dirty wbs, which is depended upon by bdi_has_dirty().
+	 * - 参见queue_io()
 	 */
 	atomic_long_t tot_write_bandwidth;
 
@@ -256,6 +272,9 @@ struct backing_dev_info {
 	 */
 	struct list_head wb_list; /* list of all wbs */
 #ifdef CONFIG_CGROUP_WRITEBACK
+	/*
+	 * bdi_writeback的树，每个memcg对应一个，索引是cgroup_subsys_state->id
+	 */
 	struct radix_tree_root cgwb_tree; /* radix tree of active cgroup wbs */
 	struct rb_root cgwb_congested_tree; /* their congested states */
 	struct mutex cgwb_release_mutex;  /* protect shutdown of wb structs */

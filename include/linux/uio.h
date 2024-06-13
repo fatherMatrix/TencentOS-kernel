@@ -37,8 +37,15 @@ struct iov_iter {
 	 * the caller isn't expecting to drop a page reference when done.
 	 */
 	unsigned int type;
-	size_t iov_offset;			/* 待处理iovec的待处理第一个字节在iovec中的偏移 */
-	size_t count;				/* iovec数组中所有元素的总字节数，待处理？ */
+	/*
+	 * 待处理iovec的待处理第一个字节在iovec中的偏移
+	 */
+	size_t iov_offset;
+	/*
+	 * iovec数组中所有未处理元素的总字节书
+	 * > 记录还有多少字节需要处理
+	 */
+	size_t count;
 	/*
 	 * 这是个数组，该数组不同元素间不要求内存地址连续；但对于某一个元素，其
 	 * page必须连续；

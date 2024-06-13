@@ -3897,6 +3897,10 @@ xfs_log_force_lsn(
 
 	/*
 	 * Push CIL到iclog
+	 * - 进去的lsn是xfs_trans_commit() -> xfs_log_commit_cil()中取出的当前
+	 *   xfs_trans提交到的xfs_cil->xfs_cil_ctx->sequence
+	 * - 出来的是xfs_cil->xfs_cil_ctx->commit_lsn，即这个xfs_cil_ctx被写入的
+	 *   最后一个iclog的h_lsn
 	 */
 	lsn = xlog_cil_force_lsn(mp->m_log, lsn);
 	if (lsn == NULLCOMMITLSN)

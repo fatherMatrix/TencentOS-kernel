@@ -219,11 +219,15 @@ retry:
 		return NULL;
 	}
 
+	/*
+	 * zero page会在vm_normal_page()中返回NULL
+	 */
 	page = vm_normal_page(vma, address, pte);
 	if (!page && pte_devmap(pte) && (flags & FOLL_GET)) {
 		/*
 		 * Only return device mapping pages in the FOLL_GET case since
 		 * they are only valid while holding the pgmap reference.
+		 * - 所以dev mapped page是不会进行get_page()操作的
 		 */
 		*pgmap = get_dev_pagemap(pte_pfn(pte), *pgmap);
 		if (*pgmap)
@@ -237,6 +241,10 @@ retry:
 			goto out;
 		}
 
+		/*
+		 * 如果上面的vm_normal_page()返回了NULL，那么这里直接使用
+		 * pte_page得到对应的pte_page()
+		 */
 		if (is_zero_pfn(pte_pfn(pte))) {
 			page = pte_page(pte);
 		} else {
@@ -858,6 +866,9 @@ retry:
 		}
 		cond_resched();
 
+		/*
+		 * 如果有FOLL_GET，那么get_page()操作会在这里面执行
+		 */
 		page = follow_page_mask(vma, start, foll_flags, &ctx);
 		if (!page) {
 			ret = faultin_page(tsk, vma, start, &foll_flags,
@@ -1032,6 +1043,9 @@ static __always_inline long __get_user_pages_locked(struct task_struct *tsk,
 		BUG_ON(*locked != 1);
 	}
 
+	/*
+	 * FOLL_GET表示对遍历到的page结构体调用get_page()操作
+	 */
 	if (pages)
 		flags |= FOLL_GET;
 

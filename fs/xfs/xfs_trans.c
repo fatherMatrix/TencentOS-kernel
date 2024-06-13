@@ -1031,6 +1031,13 @@ __xfs_trans_commit(
 	WARN_ON_ONCE(!list_empty(&tp->t_dfops) &&
 		     !(tp->t_flags & XFS_TRANS_PERM_LOG_RES));
 	if (!regrant && (tp->t_flags & XFS_TRANS_PERM_LOG_RES)) {
+	/*
+	 * 进入到这里，说明肯定不是xfs_trans_roll()进来的
+	 * - xfs_trans_commit()才能让regrant为false
+	 *   > xfs_trans_roll()到最后一定会经过一次xfs_trans_commit()，那个时候
+	 *     就会处理defer items
+	 * - xfs_defer_finish_noroll()中会一路调回到__xfs_trans_commit(true)
+	 */
 		error = xfs_defer_finish_noroll(&tp);
 		if (error)
 			goto out_unreserve;

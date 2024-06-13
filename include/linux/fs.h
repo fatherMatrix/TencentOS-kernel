@@ -470,6 +470,10 @@ struct address_space {
 	 */
 	struct xarray		i_pages;
 	gfp_t			gfp_mask;
+	/*
+	 * 文件被mmap的次数
+	 * - writable mmap
+	 */
 	atomic_t		i_mmap_writable;
 #ifdef CONFIG_READ_ONLY_THP_FOR_FS
 	/* number of thp, only for non-shmem files */

@@ -1121,6 +1121,9 @@ static inline int page_zone_id(struct page *page)
 #ifdef NODE_NOT_IN_PAGE_FLAGS
 extern int page_to_nid(const struct page *page);
 #else
+/*
+ * tkernel4中没有定义NODE_NOT_IN_PAGE_FLAGS，因此走这里
+ */
 static inline int page_to_nid(const struct page *page)
 {
 	struct page *p = (struct page *)page;
@@ -1288,6 +1291,10 @@ static inline pg_data_t *page_pgdat(const struct page *page)
 	return NODE_DATA(page_to_nid(page));
 }
 
+/*
+ * 如果定义了CONFIG_SPARSEMEM，但未定义CONFIG_SPARSEMEM_VMEMMAP，则有此定义
+ * - tkernel4中定义了CONFIG_SPARSEMEM_VMEMMAP，因此没有这个定义
+ */
 #ifdef SECTION_IN_PAGE_FLAGS
 static inline void set_page_section(struct page *page, unsigned long section)
 {
@@ -2023,8 +2030,14 @@ static inline void pgtable_pte_page_dtor(struct page *page)
 	pte_unmap(pte);					\
 } while (0)
 
+/*
+ * 仅分配一个pte table
+ */
 #define pte_alloc(mm, pmd) (unlikely(pmd_none(*(pmd))) && __pte_alloc(mm, pmd))
 
+/*
+ * 分配一个pte table，并获取address对应的pte entry指针
+ */
 #define pte_alloc_map(mm, pmd, address)			\
 	(pte_alloc(mm, pmd) ? NULL : pte_offset_map(pmd, address))
 

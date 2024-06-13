@@ -5463,6 +5463,9 @@ xfs_bmap_del_extent_real(
 
 	/*
 	 * If we need to, add to list of extents to delete.
+	 * - 通过xfs defer ops
+	 *   > 上面直接处理的是XFS_BTNUM_BMAP，用于将extents从文件的bmap中清除，
+	 *     下面的defer ops用于将这些extents放回到XFS_BTNUM_BNO/XFS_BTNUM_CNT
 	 */
 	if (do_fx && !(bflags & XFS_BMAPI_REMAP)) {
 		if (xfs_is_reflink_inode(ip) && whichfork == XFS_DATA_FORK) {

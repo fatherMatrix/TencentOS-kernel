@@ -131,6 +131,8 @@ struct xfs_item_ops {
 	 *   XFS_ITEM_PINNED从而在AIL链表上保留。
 	 *   > deferred intent item会在deferred done item调用iop_release()方法
 	 *     时被摘下；
+	 * - 非deferred：
+	 *   > xfs_inode_item_push()
 	 */
 	uint (*iop_push)(struct xfs_log_item *, struct list_head *);
 	/*

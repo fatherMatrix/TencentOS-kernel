@@ -1255,7 +1255,9 @@ struct vm_area_struct *vma_merge(struct mm_struct *mm,
  * in things that mprotect may change.
  *
  * NOTE! The fact that we share an anon_vma doesn't _have_ to mean that
+ *       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * we can merge the two vma's. For example, we refuse to merge a vma if
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * there is a vm_ops->close() function, because that indicates that the
  * driver is doing some kind of reference counting. But that doesn't
  * really matter for the anon_vma sharing case.
@@ -1276,16 +1278,22 @@ static int anon_vma_compatible(struct vm_area_struct *a, struct vm_area_struct *
  * to share the anon_vma.
  *
  * NOTE! This runs with mm_sem held for reading, so it is possible that
+ *       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * the anon_vma of 'old' is concurrently in the process of being set up
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * by another page fault trying to merge _that_. But that's ok: if it
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * is being set up, that automatically means that it will be a singleton
  * acceptable for merging, so we can do all of this optimistically. But
  * we do that READ_ONCE() to make sure that we never re-load the pointer.
  *
  * IOW: that the "list_is_singular()" test on the anon_vma_chain only
  * matters for the 'stable anon_vma' case (ie the thing we want to avoid
+ *                                                                 ^^^^^
  * is to return an anon_vma that is "complex" due to having gone through
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * a fork).
+ * ^^^^^^^^
  *
  * We also make sure that the two vma's are compatible (adjacent,
  * and with the same memory policies). That's all stable, even with just
@@ -1296,6 +1304,10 @@ static struct anon_vma *reusable_anon_vma(struct vm_area_struct *old, struct vm_
 	if (anon_vma_compatible(a, b)) {
 		struct anon_vma *anon_vma = READ_ONCE(old->anon_vma);
 
+		/*
+		 * 我们希望reuse一个简单的anon_vma
+		 * - 简单的含义是没有经历fork，anon_vma_chain上只有一个元素
+		 */
 		if (anon_vma && list_is_singular(&old->anon_vma_chain))
 			return anon_vma;
 	}
@@ -1316,13 +1328,13 @@ struct anon_vma *find_mergeable_anon_vma(struct vm_area_struct *vma)
 	struct vm_area_struct *near;
 
 	/*
-	 * 此时子进程的vma刚刚从vm_area_dup()中复制出来，其中绝大部分字段还是和
-	 * 父进程的vma一直的
+	 * 此时子进程的vma可能刚刚从vm_area_dup()中复制出来，其中绝大部分字段还
+	 * 是和父进程的vma一致的
 	 * - 其中就包括了vm_prev/vm_next字段，这意味着此时遍历的其实是父进程的
 	 *   vma链表
 	 * - 和父进程共用anon_vma合理吗？
-	 *   > 是ok的，我们只需要通过anon_vma找到某个vma即可，反正try_to_unmap()
-	 *     中是会判断page->index和vma的关系的
+	 *   > 是ok的，我们只需要确保通过这个anon_vma找到本vma即可
+	 *     o 反正try_to_unmap()中是会判断page->index和vma的关系的
 	 */
 	near = vma->vm_next;
 	if (!near)
@@ -1860,6 +1872,10 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 		 * new file must not have been exposed to user-space, yet.
 		 */
 		vma->vm_file = get_file(file);
+		/*
+		 * 调用file->f_op->mmap()方法
+		 * - xfs: xfs_file_mmap()
+		 */
 		error = call_mmap(file, vma);
 		if (error)
 			goto unmap_and_free_vma;
@@ -1880,6 +1896,9 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 		if (error)
 			goto free_vma;
 	} else {
+		/*
+		 * 匿名页的vma->vm_ops设置为NULL
+		 */
 		vma_set_anonymous(vma);
 	}
 
@@ -3274,6 +3293,7 @@ void exit_mmap(struct mm_struct *mm)
 	unmap_vmas(&tlb, vma, 0, -1);
 	/*
 	 * 释放页表(除pgd，pgd在后面随mm_struct一起释放）
+	 * - 也释放了vma对应的rmap相关结构
 	 */
 	free_pgtables(&tlb, vma, FIRST_USER_ADDRESS, USER_PGTABLES_CEILING);
 	tlb_finish_mmu(&tlb, 0, -1);

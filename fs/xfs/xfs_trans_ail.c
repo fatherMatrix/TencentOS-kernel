@@ -515,6 +515,10 @@ xfsaild_push(
 		if (stuck > 100)
 			break;
 
+		/*
+		 * 越过XFS_ITEM_PINNED去处理下一个AIL链表上的元素是安全的吗？AIL
+		 * 链表上的元素顺序是否有关联关系？
+		 */
 		lip = xfs_trans_ail_cursor_next(ailp, &cur);
 		if (lip == NULL)
 			break;
@@ -890,6 +894,10 @@ xfs_trans_ail_delete(
 
 	mlip_changed = xfs_ail_delete_one(ailp, lip);
 	if (mlip_changed) {
+		/*
+		 * 这里会更改xlog->l_tail_lsn，这意味着disk log space中的某部分
+		 * 被回收了
+		 */
 		if (!XFS_FORCED_SHUTDOWN(mp))
 			xlog_assign_tail_lsn_locked(mp);
 		if (list_empty(&ailp->ail_head))

@@ -44,6 +44,9 @@ static u8 section_to_node_table[NR_MEM_SECTIONS] __cacheline_aligned;
 static u16 section_to_node_table[NR_MEM_SECTIONS] __cacheline_aligned;
 #endif
 
+/*
+ * tkernel4中没有定义上面的NODE_NOT_IN_PAGE_FLAGS，所以不走这里
+ */
 int page_to_nid(const struct page *page)
 {
 	return section_to_node_table[page_to_section(page)];

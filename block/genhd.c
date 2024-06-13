@@ -756,6 +756,7 @@ static void __device_add_disk(struct device *parent, struct gendisk *disk,
 	 *
 	 * 其他的分区呢？
 	 * - add_partition()
+	 *   > add_partition()应该是用户态udev发现整个磁盘后通过ioctl触发的
 	 */
 	retval = blk_alloc_devt(&disk->part0, &devt);
 	if (retval) {

@@ -1627,6 +1627,9 @@ xfs_itruncate_extents_flags(
 	unmap_len = last_block - first_unmap_block + 1;
 	while (!done) {
 		ASSERT(tp->t_firstblock == NULLFSBLOCK);
+		/*
+		 * 向xfs_trans中添加defer ops
+		 */
 		error = xfs_bunmapi(tp, ip, first_unmap_block, unmap_len, flags,
 				    XFS_ITRUNC_MAX_EXTENTS, &done);
 		if (error)
@@ -1984,6 +1987,9 @@ xfs_inactive(
 	if (error)
 		return;
 
+	/*
+	 * 在磁盘上删除xfs_inode对应的数据
+	 */
 	if (S_ISLNK(VFS_I(ip)->i_mode))
 		error = xfs_inactive_symlink(ip);
 	else if (truncate)

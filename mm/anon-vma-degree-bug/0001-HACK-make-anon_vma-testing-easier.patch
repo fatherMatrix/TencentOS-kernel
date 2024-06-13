@@ -1,0 +1,87 @@
+From b354a8517b861fc3c02bd5a53fbdb85b524eeccf Mon Sep 17 00:00:00 2001
+From: Jann Horn <jannh@google.com>
+Date: Sat, 20 Aug 2022 05:49:13 +0200
+Subject: [PATCH] HACK: make anon_vma testing easier
+
+---
+ fs/proc/task_mmu.c | 41 +++++++++++++++++++++++++++++++++++++++++
+ mm/rmap.c          |  2 +-
+ 2 files changed, 42 insertions(+), 1 deletion(-)
+
+diff --git a/fs/proc/task_mmu.c b/fs/proc/task_mmu.c
+index a3398d0f1927f..8dc21b401c7f6 100644
+--- a/fs/proc/task_mmu.c
++++ b/fs/proc/task_mmu.c
+@@ -844,6 +844,39 @@ static void __show_smap(struct seq_file *m, const struct mem_size_stats *mss,
+ 	seq_puts(m, " kB\n");
+ }
+ 
++static void anon_vma_dump_recursive(struct seq_file *m,
++				    struct vm_area_struct *vma,
++				    struct anon_vma *parent,
++				    int level)
++{
++	struct anon_vma_chain *avc;
++	int idx = -1;
++	int i;
++
++	list_for_each_entry_reverse(avc, &vma->anon_vma_chain, same_vma) {
++		struct anon_vma *av = avc->anon_vma;
++		struct anon_vma_chain *avc2;
++		unsigned long anon_vma_count = 0;
++
++		idx++;
++		if ((parent == NULL) ? (av != vma->anon_vma->root) :
++		    (av->parent != parent || av == parent))
++			continue;
++
++		anon_vma_interval_tree_foreach(avc2, &av->rb_root, 0, -(pgoff_t)1) {
++			anon_vma_count++;
++		}
++
++		seq_puts(m, (av == vma->anon_vma) ? " # " : "   ");
++		for (i=0; i<level; i++)
++			seq_puts(m, "  ");
++		seq_printf(m, "[%3d] %px root=%px refcount=%d anon_vmas=%lu degree=%u parent=%px\n",
++			   idx, av, av->root, atomic_read(&av->refcount),
++			   anon_vma_count, av->degree, av->parent);
++		anon_vma_dump_recursive(m, vma, av, level+1);
++	}
++}
++
+ static int show_smap(struct seq_file *m, void *v)
+ {
+ 	struct vm_area_struct *vma = v;
+@@ -869,6 +902,14 @@ static int show_smap(struct seq_file *m, void *v)
+ 		seq_printf(m, "ProtectionKey:  %8u\n", vma_pkey(vma));
+ 	show_smap_vma_flags(m, vma);
+ 
++	/* dump anon_vma information */
++	if (READ_ONCE(vma->anon_vma)) {
++		seq_printf(m, "AnonVMAs:\n");
++		anon_vma_lock_write(vma->anon_vma);
++		anon_vma_dump_recursive(m, vma, NULL, 0);
++		anon_vma_unlock_write(vma->anon_vma);
++	}
++
+ 	return 0;
+ }
+ 
+diff --git a/mm/rmap.c b/mm/rmap.c
+index edc06c52bc82e..0777993b4915a 100644
+--- a/mm/rmap.c
++++ b/mm/rmap.c
+@@ -455,7 +455,7 @@ static void anon_vma_ctor(void *data)
+ 
+ void __init anon_vma_init(void)
+ {
+-	anon_vma_cachep = kmem_cache_create("anon_vma", sizeof(struct anon_vma),
++	anon_vma_cachep = kmem_cache_create("anon_vma", /*sizeof(struct anon_vma)*/0x8000,
+ 			0, SLAB_TYPESAFE_BY_RCU|SLAB_PANIC|SLAB_ACCOUNT,
+ 			anon_vma_ctor);
+ 	anon_vma_chain_cachep = KMEM_CACHE(anon_vma_chain,
+
+base-commit: 274a2eebf80c60246f9edd6ef8e9a095ad121264
+-- 
+2.37.2.609.g9ff673ca1a-goog
+

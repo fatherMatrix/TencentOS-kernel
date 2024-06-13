@@ -686,6 +686,9 @@ void prep_compound_page(struct page *page, unsigned int order)
 	__SetPageHead(page);
 	for (i = 1; i < nr_pages; i++) {
 		struct page *p = page + i;
+		/*
+		 * 对于复合页的tail page，设置其refcount为0
+		 */
 		set_page_count(p, 0);
 		p->mapping = TAIL_MAPPING;
 		set_compound_head(p, page);
@@ -1128,6 +1131,11 @@ static void kernel_init_free_pages(struct page *page, int numpages)
 
 static __always_inline bool free_pages_prepare(struct page *page,
 					unsigned int order, bool check_free)
+/*
+ * check_free表示是否放入free_list
+ * - __free_pages_ok()调用过来时check_free为true
+ * - 释放单页时check_free为false
+ */
 {
 	int bad = 0;
 
@@ -1159,6 +1167,9 @@ static __always_inline bool free_pages_prepare(struct page *page,
 	}
 	if (PageMappingFlags(page))
 		page->mapping = NULL;
+	/*
+	 * memcg反记账
+	 */
 	if (memcg_kmem_enabled() && PageKmemcg(page))
 		__memcg_kmem_uncharge(page, order);
 	if (check_free)
@@ -1219,6 +1230,7 @@ static bool bulkfree_pcp_prepare(struct page *page)
  * moving from pcp lists to free list in order to reduce overhead. With
  * debug_pagealloc enabled, they are checked also immediately when being freed
  * to the pcp lists.
+ * - tkernel4未定义CONFIG_DEBUG_VM，走这里
  */
 static bool free_pcp_prepare(struct page *page)
 {
@@ -1299,6 +1311,9 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 			if (bulkfree_pcp_prepare(page))
 				continue;
 
+			/*
+			 * 将pcp中要释放的页放到head链表中
+			 */
 			list_add_tail(&page->lru, &head);
 
 			/*
@@ -2169,6 +2184,9 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 				gfp_t gfp_flags)
 {
 	set_page_private(page, 0);
+	/*
+	 * 刚从buddy system中分配出来的page，设置其refcount为1
+	 */
 	set_page_refcounted(page);
 
 	arch_alloc_page(page, order);
@@ -3124,17 +3142,32 @@ static void free_unref_page_commit(struct page *page, unsigned long pfn)
 	 * excessively into the page allocator
 	 */
 	if (migratetype >= MIGRATE_PCPTYPES) {
+	/*
+	 * pcplist仅处理MIGRATE_PCPTYPES之下的迁移类型
+	 */
 		if (unlikely(is_migrate_isolate(migratetype))) {
+		/*
+		 * MIGRATE_ISOLATE直接释放回伙伴系统
+		 */
 			free_one_page(zone, page, pfn, 0, migratetype);
 			return;
 		}
+		/*
+		 * 其余的迁移类型当作MIGRATE_MOVABLE
+		 */
 		migratetype = MIGRATE_MOVABLE;
 	}
 
+	/*
+	 * 将该page放入本cpu下的对应迁移类型的pcp链表中
+	 */
 	pcp = &this_cpu_ptr(zone->pageset)->pcp;
 	list_add(&page->lru, &pcp->lists[migratetype]);
 	pcp->count++;
 	if (pcp->count >= pcp->high) {
+	/*
+	 * 如果pcp已经触及高水线，则将pcp中的page批量返还给伙伴系统
+	 */
 		unsigned long batch = READ_ONCE(pcp->batch);
 		free_pcppages_bulk(zone, batch, pcp);
 	}
@@ -3148,6 +3181,10 @@ void free_unref_page(struct page *page)
 	unsigned long flags;
 	unsigned long pfn = page_to_pfn(page);
 
+	/*
+	 * 检查释放的page是否处于正常可释放状态
+	 * memcg uncharge
+	 */
 	if (!free_unref_page_prepare(page, pfn))
 		return;
 
@@ -5078,8 +5115,14 @@ EXPORT_SYMBOL(get_zeroed_page);
 static inline void free_the_page(struct page *page, unsigned int order)
 {
 	if (order == 0)		/* Via pcp? */
+	/*
+	 * 单页
+	 */
 		free_unref_page(page);
 	else
+	/*
+	 * 高阶连续页
+	 */
 		__free_pages_ok(page, order);
 }
 

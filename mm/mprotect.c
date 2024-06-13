@@ -396,6 +396,9 @@ mprotect_fixup(struct vm_area_struct *vma, struct vm_area_struct **pprev,
 	    (newflags & (VM_READ|VM_WRITE|VM_EXEC)) == 0) {
 		pgprot_t new_pgprot = vm_get_page_prot(newflags);
 
+		/*
+		 * 设置页表项
+		 */
 		error = walk_page_range(current->mm, start, end,
 				&prot_none_walk_ops, &new_pgprot);
 		if (error)
@@ -523,6 +526,9 @@ static int do_mprotect_pkey(unsigned long start, size_t len,
 	if ((pkey != -1) && !mm_pkey_is_allocated(current->mm, pkey))
 		goto out;
 
+	/*
+	 * start < vma->vm_end
+	 */
 	vma = find_vma(current->mm, start);
 	error = -ENOMEM;
 	if (!vma)
@@ -585,6 +591,9 @@ static int do_mprotect_pkey(unsigned long start, size_t len,
 		if (tmp > end)
 			tmp = end;
 
+		/*
+		 * 匿名页是没有这个东西的呀
+		 */
 		if (vma->vm_ops && vma->vm_ops->mprotect)
 			error = vma->vm_ops->mprotect(vma, nstart, tmp, newflags);
 		if (error)

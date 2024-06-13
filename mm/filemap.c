@@ -876,6 +876,9 @@ noinline int __add_to_page_cache_locked(struct page *page,
 		mem_cgroup_shrink_pagecache(memcg, gfp_mask);
 	}
 
+	/*
+	 * 增加引用计数
+	 */
 	get_page(page);
 	page->mapping = mapping;
 	page->index = offset;
@@ -969,6 +972,10 @@ int add_to_page_cache_lru(struct page *page, struct address_space *mapping,
 	if (unlikely(vm_pagecache_limit_pages) && pagecache_over_limit() > 0)
 		shrink_page_cache(gfp_mask, page);
 
+	/*
+	 * add_to_page_cache_lru()返回时page是上了PG_locked锁的，由调用者负责将
+	 * 该锁释放；
+	 */
 	__SetPageLocked(page);
 	ret = __add_to_page_cache_locked(page, mapping, offset,
 					 gfp_mask, &shadow);

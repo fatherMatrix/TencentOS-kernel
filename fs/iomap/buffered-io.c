@@ -1083,6 +1083,9 @@ vm_fault_t iomap_page_mkwrite(struct vm_fault *vmf, const struct iomap_ops *ops)
 		length -= ret;
 	}
 
+	/*
+	 * 等待回写结束
+	 */
 	wait_for_stable_page(page);
 	return VM_FAULT_LOCKED;
 out_unlock:

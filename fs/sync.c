@@ -194,12 +194,13 @@ int vfs_fsync_range(struct file *file, loff_t start, loff_t end, int datasync)
 		return -EINVAL;
 	if (!datasync && (inode->i_state & I_DIRTY_TIME))
 	/*
-	 * 如果设置了datasync，就说明此时有数据等待回写，此时atime相关的更新并
-	 * 不是那么急迫
+	 * 如果设置了datasync，就说明来源是fdatasync()，此时不需要更新atime等；
+	 * 如果没有设置，则说明来源是fsync()，此时需要更新atime等；
 	 */
 		mark_inode_dirty_sync(inode);
 	/*
 	 * ext4: ext4_sync_file()
+	 * xfs: xfs_file_fsync()
 	 */
 	return file->f_op->fsync(file, start, end, datasync);
 }

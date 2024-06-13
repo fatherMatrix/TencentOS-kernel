@@ -144,6 +144,14 @@ void __put_anon_vma(struct anon_vma *anon_vma);
 
 static inline void put_anon_vma(struct anon_vma *anon_vma)
 {
+	/*
+	 * 看样子是每次unlink_anon_vmas()时都对vma关联的所有anon_vma->refcount
+	 * 进行了减小，到0后释放；但没看到link时都增加呀？
+	 * - 不，并不是每次unlink_anon_vmas()都会进入到本函数
+	 *   > 只有anon_vma的红黑树元素全部被删除之后才会进入到本函数。
+	 *     o 此时refcount的作用是保护root anon_vma
+	 *       x 这也解释了为什么只能看到对root anon_vma进行get_anon_vma()操作
+	 */
 	if (atomic_dec_and_test(&anon_vma->refcount))
 		__put_anon_vma(anon_vma);
 }

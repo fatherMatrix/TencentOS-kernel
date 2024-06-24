@@ -90,7 +90,10 @@ xlog_cil_iovec_space(
  *
  * If we do this allocation within xlog_cil_insert_format_items(), it is done
  * under the xc_ctx_lock, which means that a CIL push cannot occur during
+ *                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * the memory allocation. This means that we have a potential deadlock situation
+ * ^^^^^^^^^^^^^^^^^^^^^^
+ *  CIL push需要争抢这里已经持有的xc_ctx_lock，因此无法进行
  * under low memory conditions when we have lots of dirty metadata pinned in
  * the CIL and we need a CIL commit to occur to free memory.
  *
@@ -561,7 +564,7 @@ xlog_cil_insert_items(
 		 *
 		 * 其实并没有看到哪里调用了list_add(&lip->li_cil, &cil->xc_cil)，
 		 * 仅有的包含插入操作的代码就是这里。
-		 * - 如果lip->li_cil从来没有查如果cil->xc_cil链表中，下面的if语
+		 * - 如果lip->li_cil从来没有插入过cil->xc_cil链表中，下面的if语
 		 *   句也是会进入的；应该就是通过这种方法完成了插入的吧。
 		 *
 		 * 这个时候，CIL中直接挂xfs_log_item；
@@ -710,6 +713,7 @@ xlog_cil_committed(
 
 	/*
 	 * 此时可以释放掉xfs_log_item关联的xfs_log_vec/xfs_log_iovec了
+	 * - 为什么不是写入iclog就释放呢？
 	 */
 	xlog_cil_free_logvec(ctx->lv_chain);
 
@@ -862,7 +866,7 @@ xlog_cil_push(
 		lv = item->li_lv;
 		/*
 		 * xfs_log_item不再关联向xfs_log_vec；
-		 * - 如此一来，xfs_log_item起始就是空的了；
+		 * - 如此一来，xfs_log_item其实就是空的了；
 		 * - 但问题是后面又把该xfs_log_item挂到AIL上了，这时log item中
 		 *   还有什么呢？挂到AIL上后又是怎么互斥的？
 		 *   > 挂到AIL中的xfs_log_item已经不再关心其xfs_log_vec了，因为
@@ -953,6 +957,10 @@ xlog_cil_push(
 	/*
 	 * checkpoint本身的这个header xfs_log_vec要串在ctx->lv_chain链表上所有的
 	 * xfs_log_vec之前
+	 * - 这里有点巧妙的一点是：iclog写出到disk log space后，会调用回调函数
+	 *   xlog_bio_end_io()，其中会依次对ctx->lv_chain上的对象调用释放函数
+	 *   xlog_cil_free_logvec()。这里我们并没有将栈上变量lvhdr加入
+	 *   ctx->lv_chain链表，因此不存在问题；
 	 */
 	lvhdr.lv_next = ctx->lv_chain;
 
@@ -1242,6 +1250,7 @@ xfs_log_commit_cil(
 		xfs_trans_del_item(lip);
 		/*
 		 * 解锁item（这个item指的是object本身，比如inode）
+		 * - xfs_inode_log_item -> xfs_inode_item_committing()
 		 */
 		if (lip->li_ops->iop_committing)
 			lip->li_ops->iop_committing(lip, xc_commit_lsn);

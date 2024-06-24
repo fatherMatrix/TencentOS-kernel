@@ -2395,7 +2395,9 @@ xfs_alloc_fix_freelist(
 	else
 		targs.oinfo = XFS_RMAP_OINFO_AG;
 	/*
-	 * 这是在做什么？
+	 * 如果free list中的block太多了，则释放一部分
+	 * - 释放操作是通过defer ops
+	 * - 每次都释放，是不是要疯狂抖动？
 	 */
 	while (!(flags & XFS_ALLOC_FLAG_NOSHRINK) && pag->pagf_flcount > need) {
 		error = xfs_alloc_get_freelist(tp, agbp, &bno, 0);
@@ -2804,6 +2806,10 @@ xfs_read_agf(
 	trace_xfs_read_agf(mp, agno);
 
 	ASSERT(agno != NULLAGNUMBER);
+	/*
+	 * 读出来之后该AGF对应的xfs_buf是上了锁的
+	 * - 哪里去放锁呢？
+	 */
 	error = xfs_trans_read_buf(
 			mp, tp, mp->m_ddev_targp,
 			/*
@@ -2848,6 +2854,9 @@ xfs_alloc_read_agf(
 	 * 读取AGno的AGF header
 	 */
 	error = xfs_read_agf(mp, tp, agno,
+			/*
+			 * 没有传入XBF_ASYNC，说明是同步读
+			 */
 			(flags & XFS_ALLOC_FLAG_TRYLOCK) ? XBF_TRYLOCK : 0,
 			bpp);
 	if (error)

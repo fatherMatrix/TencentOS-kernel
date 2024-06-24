@@ -40,7 +40,15 @@ struct xfs_defer_pending {
 	 * - xfs_rmap_intent->ri_list
 	 */
 	struct list_head		dfp_work;	/* work items */
+	/*
+	 * - xfs_efi_log_item
+	 * - ... ...
+	 */
 	void				*dfp_intent;	/* log intent item */
+	/*
+	 * - xfs_efd_log_item
+	 * - ... ...
+	 */
 	void				*dfp_done;	/* log done item */
 	unsigned int			dfp_count;	/* # extent items */
 	enum xfs_defer_ops_type		dfp_type;

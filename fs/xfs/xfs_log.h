@@ -31,6 +31,10 @@ struct xfs_log_vec {
 	 * - 一个xfs_log_iovec对应一个xlog_op_header
 	 */
 	struct xfs_log_iovec	*lv_iovecp;	/* iovec array */
+	/*
+	 * iclog写入disk log space后，在xfs_trans_committed_bulk()中通过本字段
+	 * 找到对应的xfs_log_item并将其挂入ail
+	 */
 	struct xfs_log_item	*lv_item;	/* owner */
 	/*
 	 * 这个就是文档中的memory buffer

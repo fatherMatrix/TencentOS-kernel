@@ -193,6 +193,9 @@ xfs_iomap_write_direct(
 	uint		qblocks, resblks, resrtextents;
 	int		error;
 	int		lockmode;
+	/*
+	 * 啊，对directio，直接就XFS_BMAPI_PREALLOC了
+	 */
 	int		bmapi_flags = XFS_BMAPI_PREALLOC;
 	uint		tflags = 0;
 
@@ -204,6 +207,9 @@ xfs_iomap_write_direct(
 	 * 获取extent size
 	 */
 	extsz = xfs_get_extsz_hint(ip);
+	/*
+	 * 本函数要求进来时xfs_inode处于XFS_ILOCK_SHARED锁定
+	 */
 	lockmode = XFS_ILOCK_SHARED;	/* locked by caller */
 
 	ASSERT(xfs_isilocked(ip, lockmode));
@@ -245,9 +251,9 @@ xfs_iomap_write_direct(
 	} else {
 		resrtextents = 0;
 		/*
-		 * 计算需要保留的磁盘空间
-		 * - 这里面既包含了metadata region修改需要的新空间，也包含了
-		 *   user data需要的空间；
+		 * 计算需要保留的disk data space
+		 * - 下面的xfs_trans_alloc()中的M_RES(mp)->tr_write中记录的是需
+		 *   要保留的disk log space空间
 		 */
 		resblks = qblocks = XFS_DIOSTRAT_SPACE_RES(mp, resaligned);
 		quota_flag = XFS_QMOPT_RES_REGBLKS;
@@ -338,6 +344,9 @@ xfs_iomap_write_direct(
 		error = xfs_alert_fsblock_zero(ip, imap);
 
 out_unlock:
+	/*
+	 * 放锁
+	 */
 	xfs_iunlock(ip, lockmode);
 	return error;
 
@@ -836,10 +845,11 @@ xfs_file_iomap_begin_delay(
 
 retry:
 	/*
-	 * cmap在xfs_iext_lookup_extent()返回false后其实有可能非法，所以往里面追了
-	 * 一下，里面凡是用到cmap时，都通过eof/cow_eof判断了合法；
-	 *
-	 * 返回时，got这个参数内容发生了变化；
+	 * 这里开始对buffer io需要的磁盘数据块进行预留，因为是buffer io，所以这
+	 * 里分配的都是delalloc extents；
+	 * - cmap在xfs_iext_lookup_extent()返回false后其实有可能非法，所以往里面
+	 *   追了一下，里面凡是用到cmap时，都通过eof/cow_eof判断了合法；
+	 * - 返回时，got这个参数内容发生了变化；
 	 */
 	error = xfs_bmapi_reserve_delalloc(ip, whichfork, offset_fsb,
 			end_fsb - offset_fsb, prealloc_blocks,
@@ -1117,6 +1127,7 @@ xfs_file_iomap_begin(
 	 * 写操作，但非directio和dax
 	 * - !xfs_get_extsz_hint()这个条件是做什么的？
 	 *   > extent size hint
+	 *     x 如果extent size hint不为0，为什么就不能delay alloc呢？
 	 */
 	if ((flags & (IOMAP_WRITE | IOMAP_ZERO)) && !(flags & IOMAP_DIRECT) &&
 			!IS_DAX(inode) && !xfs_get_extsz_hint(ip)) {
@@ -1136,6 +1147,8 @@ xfs_file_iomap_begin(
 	 * mapping code below.
 	 *
 	 * 加锁
+	 * - 对应的放锁在哪里？
+	 *   > 下面首先通过xfs_ilock_demote()将写锁降级为读锁
 	 */
 	error = xfs_ilock_for_iomap(ip, flags, &lockmode);
 	if (error)
@@ -1264,11 +1277,14 @@ xfs_file_iomap_begin(
 	/*
 	 * xfs_iomap_write_direct() expects the shared lock. It is unlocked on
 	 * return.
+	 * - 将写锁降级为读锁
 	 */
 	if (lockmode == XFS_ILOCK_EXCL)
 		xfs_ilock_demote(ip, lockmode);
 	/*
 	 * 内部会触发xfs_trans_alloc() -> xfs_trans_commit()
+	 * - xfs_iomap_write_direct()期望ip被读锁保护，所以上面要将写锁降级为读锁
+	 *   > xfs_iomap_write_direct()返回时会释放ip上的锁
 	 */
 	error = xfs_iomap_write_direct(ip, offset, length, &imap,
 			nimaps);
@@ -1325,6 +1341,7 @@ xfs_file_iomap_end_delalloc(
 	 * start_fsb refers to the first unused block after a short write. If
 	 * nothing was written, round offset down to point at the first block in
 	 * the range.
+	 * - start_fsb保存未被写入的部分的起始fsblock number
 	 */
 	if (unlikely(!written))
 		start_fsb = XFS_B_TO_FSBT(mp, offset);
@@ -1344,6 +1361,10 @@ xfs_file_iomap_end_delalloc(
 		truncate_pagecache_range(VFS_I(ip), XFS_FSB_TO_B(mp, start_fsb),
 					 XFS_FSB_TO_B(mp, end_fsb) - 1);
 
+		/*
+		 * 将这段没有被真正写入的delalloc extents从data fork中删除
+		 * - 为啥不能保存一会儿等下次写入呢？
+		 */
 		error = xfs_bmap_punch_delalloc_range(ip, start_fsb,
 					       end_fsb - start_fsb);
 		if (error && !XFS_FORCED_SHUTDOWN(mp)) {

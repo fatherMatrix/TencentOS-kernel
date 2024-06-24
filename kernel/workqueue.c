@@ -237,7 +237,7 @@ struct worker_pool {
  * pool_workqueue是一个中介，负责建立起workqueue_struct和worker_pool之间的
  * 关系：
  * - workqueue_struct和pool_workqueue是1:N的关系；
- * - pool_workqueue和worker_pool是1:1的关系；
+ * - pool_workqueue和worker_pool是1:1的关系；相当于worker_pool的代理
  *
  * pool_workqueue分配内存时按256字节对齐，内存的低8位可以存放其他内容；
  */

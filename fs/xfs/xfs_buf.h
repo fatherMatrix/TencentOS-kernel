@@ -195,6 +195,11 @@ typedef struct xfs_buf {
 	xfs_buftarg_t		*b_target;	/* buffer target (device) */
 	void			*b_addr;	/* virtual address of buffer */
 	struct work_struct	b_ioend_work;
+	/*
+	 * xfs_buf_bio_end_io()回调中包含对这里的回调
+	 * - xfs_buf_iodone_callbacks()，参见xfs_buf_attach_iodone()
+	 * - xlog_recover_iodone()
+	 */
 	xfs_buf_iodone_t	b_iodone;	/* I/O completion function */
 	struct completion	b_iowait;	/* queue for I/O waiters */
 	/*
@@ -207,8 +212,8 @@ typedef struct xfs_buf {
 	 * - 当本xfs_buf的io操作完成后，调用该链表上的回调
 	 * - 参见： xfs_buf_attach_iodone()
 	 *
-	 * 所以结合b_log_item和b_li_list字段，意思是会有多个xfs_log_item对应同一个
-	 * xfs_buf？
+	 * 所以结合b_log_item和b_li_list字段，意思是会有多个xfs_log_item对应同一
+	 * 个xfs_buf？
 	 */
 	struct list_head	b_li_list;	/* Log items list head */
 	struct xfs_trans	*b_transp;
@@ -233,6 +238,11 @@ typedef struct xfs_buf {
 	struct xfs_buf_map	__b_map;	/* inline compound buffer map */
 	int			b_map_count;
 	atomic_t		b_pin_count;	/* pin count */
+	/*
+	 * 一个xfs_buf可能被拆分成多个bio下发
+	 * - 每次下发bio都要增加1，每次完成xfs_buf_bio_end_io()中都要减1；
+	 * - 初始值设置为1，如果dec_and_test() == 1，说明io已经全部完成
+	 */
 	atomic_t		b_io_remaining;	/* #outstanding I/O requests */
 	unsigned int		b_page_count;	/* size of page array */
 	unsigned int		b_offset;	/* page offset in first page */

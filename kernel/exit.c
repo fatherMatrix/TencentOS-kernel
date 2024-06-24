@@ -384,10 +384,14 @@ retry:
 
 	/*
 	 * Search through everything else, we should not get here often.
+	 * - 遍历所有进程
 	 */
 	for_each_process(g) {
 		if (g->flags & PF_KTHREAD)
 			continue;
+		/*
+		 * 遍历该进程中的所有线程
+		 */
 		for_each_thread(g, c) {
 			if (c->mm == mm)
 				goto assign_new_owner;

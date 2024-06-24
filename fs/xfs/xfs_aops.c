@@ -923,6 +923,10 @@ xfs_writepage_map(
 		error = xfs_map_blocks(wpc, inode, file_offset);
 		if (error)
 			break;
+		/*
+		 * 如果发现这是一个hole extent，直接跳过？
+		 * - 难道只有IOMAP_ZERO时才会出现这种情况吗？
+		 */
 		if (wpc->imap.br_startblock == HOLESTARTBLOCK)
 			continue;
 		xfs_add_to_ioend(inode, file_offset, page, iop, wpc, wbc,
@@ -1123,6 +1127,7 @@ xfs_do_writepage(
 
 	/*
 	 * 这里面会对delayed blocks进行convert
+	 * - 参见：xfs_bmapi_reserve_delalloc()
 	 */
 	return xfs_writepage_map(wpc, wbc, inode, page, end_offset);
 

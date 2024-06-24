@@ -207,9 +207,17 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 	frame->flags = X86_EFLAGS_FIXED;
 #endif
 
-	/* Kernel thread ? */
+	/*
+	 * Kernel thread ?
+	 * - 内核线程
+	 */
 	if (unlikely(p->flags & PF_KTHREAD)) {
 		memset(childregs, 0, sizeof(struct pt_regs));
+		/*
+		 * 配置rbx
+		 * - 对应内核线程的创建，退出到ret_from_fork()后会调用rbx指向的
+		 *   工作函数；
+		 */
 		kthread_frame_init(frame, sp, arg);
 		return 0;
 	}

@@ -33,12 +33,20 @@ void queued_read_lock_slowpath(struct qrwlock *lock)
 		atomic_cond_read_acquire(&lock->cnts, !(VAL & _QW_LOCKED));
 		return;
 	}
+	/*
+	 * 减掉外层的快速获取增加的读计数
+	 */
 	atomic_sub(_QR_BIAS, &lock->cnts);
 
 	/*
 	 * Put the reader into the wait queue
 	 */
 	arch_spin_lock(&lock->wait_lock);
+	/*
+	 * 进入到这里，我们获取到了控制这个读写锁的自旋锁，此时不会再有人进入到
+	 * 这里了
+	 * - 这里再次增加计数，等待其他写者退出即可
+	 */
 	atomic_add(_QR_BIAS, &lock->cnts);
 
 	/*
@@ -66,16 +74,27 @@ void queued_write_lock_slowpath(struct qrwlock *lock)
 	/* Put the writer into the wait queue */
 	arch_spin_lock(&lock->wait_lock);
 
-	/* Try to acquire the lock directly if no reader is present */
+	/*
+	 * Try to acquire the lock directly if no reader is present
+	 * - 直接获取写锁的条件是：当前没有读者、没有写者wating、且是我将其设置
+	 *   为_QW_LOCKED状态；
+	 */
 	if (!atomic_read(&lock->cnts) &&
 	    (atomic_cmpxchg_acquire(&lock->cnts, 0, _QW_LOCKED) == 0))
 		goto unlock;
 
-	/* Set the waiting flag to notify readers that a writer is pending */
+	/*
+	 * Set the waiting flag to notify readers that a writer is pending
+	 * - 标记有写者排队
+	 */
 	atomic_add(_QW_WAITING, &lock->cnts);
 
 	/* When no more readers or writers, set the locked flag */
 	do {
+		/*
+		 * VAL == _QW_WAITING为真说明前面的持锁写者已经放锁了
+		 * - cmpxchg保证了此处的慢速路径与写端的in_interrupt()优化不冲突
+		 */
 		cnts = atomic_cond_read_relaxed(&lock->cnts, VAL == _QW_WAITING);
 	} while (!atomic_try_cmpxchg_acquire(&lock->cnts, &cnts, _QW_LOCKED));
 unlock:

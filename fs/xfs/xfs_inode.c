@@ -1029,8 +1029,11 @@ xfs_dir_ialloc(
 
 	/*
 	 * xfs_ialloc will return a pointer to an incore inode if
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * the Space Manager has an available inode on the free
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * list. Otherwise, it will do an allocation and replenish
+	 * ^^^^^
 	 * the freelist.  Since we can only do one allocation per
 	 *                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * transaction without deadlocks, we will need to commit the
@@ -1040,8 +1043,11 @@ xfs_dir_ialloc(
 	 * need to call xfs_ialloc again to get the inode.
 	 *
 	 * If xfs_ialloc did an allocation to replenish the freelist,
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * it returns the bp containing the head of the freelist as
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * ialloc_context. We will hold a lock on it across the
+	 * ^^^^^^^^^^^^^^^
 	 * transaction commit so that no other process can steal
 	 * the inode(s) that we've just allocated.
 	 */
@@ -1077,6 +1083,8 @@ xfs_dir_ialloc(
 		 * the commit.  Holding this buffer prevents any other
 		 * processes from doing any allocations in this
 		 * allocation group.
+		 * - XFS_BLI_HOLD标志的buffer在iop_release/xfs_buf_item_release()
+		 *   阶段不会被xfs_buf_relse()
 		 */
 		xfs_trans_bhold(tp, ialloc_context);
 
@@ -1251,6 +1259,12 @@ xfs_create(
 	if (error)
 		goto out_release_inode;
 
+	/*
+	 * 前面已经锁定了dir inode->i_rwsem，此处锁定dir xfs_inode->i_lock
+	 * - 符合lock order
+	 * - 在哪里释放dir xfs_inode->i_lock？
+	 *   > xfs_trans_commit() -> xfs_inode_item_committing()
+	 */
 	xfs_ilock(dp, XFS_ILOCK_EXCL | XFS_ILOCK_PARENT);
 	unlock_dp_on_error = true;
 

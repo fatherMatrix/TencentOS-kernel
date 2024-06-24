@@ -876,6 +876,7 @@ struct task_struct {
 	/*
 	 * 串联所有进程的主线程的task_struct；
 	 * - for_each_process()宏使用这个字段从init_task起遍历所有的进程；
+	 * - if (thread_group_leader(p))
 	 */
 	struct list_head		tasks;
 #ifdef CONFIG_SMP

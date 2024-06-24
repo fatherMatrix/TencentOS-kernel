@@ -963,6 +963,7 @@ xfs_buf_read_map(
 		 *
 		 * 目前遇到过的该ops：
 		 * - xfs_bmbt_buf_ops
+		 * - xfs_agf_buf_ops
 		 */
 		bp->b_ops = ops;
 		/*
@@ -1333,6 +1334,9 @@ xfs_buf_ioend(
 
 	trace_xfs_buf_iodone(bp, _RET_IP_);
 
+	/*
+	 * 清空传输方向相关的标志
+	 */
 	bp->b_flags &= ~(XBF_READ | XBF_WRITE | XBF_READ_AHEAD);
 
 	/*
@@ -1345,9 +1349,16 @@ xfs_buf_ioend(
 	/* Only validate buffers that were read without errors */
 	if (read && !bp->b_error && bp->b_ops) {
 		ASSERT(!bp->b_iodone);
+		/*
+		 * 举个例子：
+		 * - xfs_agf_buf_ops
+		 */
 		bp->b_ops->verify_read(bp);
 	}
 
+	/*
+	 * 设置传输完成的标志
+	 */
 	if (!bp->b_error) {
 		bp->b_flags &= ~XBF_WRITE_FAIL;
 		bp->b_flags |= XBF_DONE;
@@ -1362,7 +1373,7 @@ xfs_buf_ioend(
 		(*(bp->b_iodone))(bp);
 	else if (bp->b_flags & XBF_ASYNC)
 		/*
-		 * 对于异步xfs_buf，释放自旋锁，并减小引用计数
+		 * 对于异步xfs_buf，释放锁，并减小引用计数
 		 */
 		xfs_buf_relse(bp);
 	else
@@ -1387,6 +1398,10 @@ xfs_buf_ioend_async(
 	struct xfs_buf	*bp)
 {
 	INIT_WORK(&bp->b_ioend_work, xfs_buf_ioend_work);
+	/*
+	 * "xfs-buf/%s", mp->m_fsname
+	 * - 参见xfs_init_mount_workqueues()
+	 */
 	queue_work(bp->b_mount->m_buf_workqueue, &bp->b_ioend_work);
 }
 
@@ -1506,6 +1521,9 @@ next_chunk:
 	 * 起始扇区号
 	 */
 	bio->bi_iter.bi_sector = sector;
+	/*
+	 * 设置xfs_buf的bio的完成回调
+	 */
 	bio->bi_end_io = xfs_buf_bio_end_io;
 	/*
 	 * xfs_buf本身放入了bio->bi_private字段
@@ -1577,6 +1595,7 @@ next_chunk:
 		/*
 		 * This is guaranteed not to be the last io reference count
 		 * because the caller (xfs_buf_submit) holds a count itself.
+		 * - 对应__xfs_buf_submit()中的atomic_set(b_io_remaining, 1)
 		 */
 		atomic_dec(&bp->b_io_remaining);
 		xfs_buf_ioerror(bp, -EIO);
@@ -1722,8 +1741,8 @@ __xfs_buf_submit(
 	xfs_buf_hold(bp);
 
 	/*
-	 * xfs_buf可能此时被pin在内存中，正在写日志；此时不能修改xfs_buf中的内
-	 * 容；
+	 * xfs_buf可能此时被pin在内存中，正在写日志；在写日志到disk log space完
+	 * 成之前，不能将xfs_buf写入disk data space
 	 * - 因为此时已经lock了xfs_buf，wait_unpin()返回后，不会再有新的pin
 	 */
 	if (bp->b_flags & XBF_WRITE)
@@ -1750,8 +1769,10 @@ __xfs_buf_submit(
 	 * 每此submit_bio()之前，都会增加xfs_buf->b_io_remaining的值。bio的完成
 	 * 回调中减小xfs_buf->b_io_remaining的值；如果这里等于1，说明所有bio都
 	 * 是处理完了的；
+	 * - 减完等于0
 	 *
 	 * - xfs_buf_bio_end_io()中对异步的已经做了操作的呀？
+	 *   > 因为并不知道两者谁先发生
 	 */
 	if (atomic_dec_and_test(&bp->b_io_remaining) == 1) {
 		if (bp->b_error || !(bp->b_flags & XBF_ASYNC))

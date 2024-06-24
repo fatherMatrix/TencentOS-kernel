@@ -18,9 +18,18 @@ struct xfs_alloc_arg;
  *
  * Note that we use the transaction ID to record the transaction, not the
  * transaction structure itself. See xfs_extent_busy_insert() for details.
+ *
+ * - busy extents指的是已经被free，但是free它的xfs_trans还没有写到disk log space
+ *   的extents
  */
 struct xfs_extent_busy {
+	/*
+	 * 根节点是xfs_perag->pagb_tree
+	 */
 	struct rb_node	rb_node;	/* ag by-bno indexed search tree */
+	/*
+	 * 链表头是xfs_trans->t_busy / xfs_cil_ctx->busy_extents
+	 */
 	struct list_head list;		/* transaction busy extent list */
 	xfs_agnumber_t	agno;
 	xfs_agblock_t	bno;

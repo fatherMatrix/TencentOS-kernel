@@ -2106,6 +2106,8 @@ done:
 
 /*
  * Convert an unwritten allocation to a real allocation or vice versa.
+ * - 如果当前的extents是unwritten，则将其转换为real
+ * - 如果当前的extents是real，则将其转换为unwritten
  */
 int					/* error */
 xfs_bmap_add_extent_unwritten_real(
@@ -4285,10 +4287,18 @@ xfs_bmapi_allocate(
 	} else {
 	/*
 	 * 在洞中？
+	 * - 是的
+	 *   > 进入本函数只有两种可能：
+	 *     x need_alloc: bno在hole中，包括eof前的hole和eof后的hole两种情况
+	 *     x wasdel: 在上面的if处理了
 	 */
+		/*
+		 * 这里先假设是在eof之后的hole中，那么我们的限制只是不要超过最大
+		 * 长度即可
+		 */
 		bma->length = XFS_FILBLKS_MIN(bma->length, MAXEXTLEN);
 		/*
-		 * 在eof前的hole中
+		 * 如果是在eof前的hole中
 		 * - 此时got中存储的是hole后面紧挨的extent，此处的意思是分配的
 		 *   extent末位应和后面的extent连接起来；
 		 */
@@ -4358,21 +4368,30 @@ xfs_bmapi_allocate(
 	bma->got.br_startoff = bma->offset;
 	bma->got.br_startblock = bma->blkno;
 	bma->got.br_blockcount = bma->length;
+	/*
+	 * 分配出来的extents首先设置为XFS_EXT_NORM状态
+	 */
 	bma->got.br_state = XFS_EXT_NORM;
 
 	/*
 	 * In the data fork, a wasdelay extent has been initialized, so
+	 *                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+	 *                   哪里初始化了？
 	 * shouldn't be flagged as unwritten.
 	 *
 	 * For the cow fork, however, we convert delalloc reservations
 	 * (extents allocated for speculative preallocation) to
 	 * allocated unwritten extents, and only convert the unwritten
 	 * extents to real extents when we're about to write the data.
+	 * - 对于不立即写入数据的extents，将其标记为XFS_EXT_UNWRITTEN状态
 	 */
 	if ((!bma->wasdel || (bma->flags & XFS_BMAPI_COWFORK)) &&
 	    (bma->flags & XFS_BMAPI_PREALLOC))
 		bma->got.br_state = XFS_EXT_UNWRITTEN;
 
+	/*
+	 * 触发分配说明bno原来所处的位置要么是hole，要么是delay extents
+	 */
 	if (bma->wasdel)
 		error = xfs_bmap_add_extent_delay_real(bma, whichfork);
 	else
@@ -4414,7 +4433,11 @@ xfs_bmapi_convert_unwritten(
 	int			tmp_logflags = 0;
 	int			error;
 
-	/* check if we need to do unwritten->real conversion */
+	/*
+	 * check if we need to do unwritten->real conversion
+	 * - dio会设置XFS_BMAPI_PREALLOC标记，因此会在这里直接返回
+	 *   > 参见: xfs_iomap_write_direct()
+	 */
 	if (mval->br_state == XFS_EXT_UNWRITTEN &&
 	    (flags & XFS_BMAPI_PREALLOC))
 		return 0;
@@ -4524,6 +4547,7 @@ xfs_bmapi_finish(
  * extent state if necessary.  Details behaviour is controlled by the flags
  * parameter.  Only allocates blocks from a single allocation group, to avoid
  * locking problems.
+ * - 本函数分配的所有文件系统块都处于同一个AG中
  */
 int
 xfs_bmapi_write(
@@ -4640,10 +4664,15 @@ xfs_bmapi_write(
 			ASSERT(!((flags & XFS_BMAPI_CONVERT) &&
 			         (flags & XFS_BMAPI_COWFORK)));
 
+			/*
+			 * 这里查map的原因是想要写[bno, bno+len)，因此这里肯定得
+			 * 分配磁盘块了。要不没地方写
+			 */
 			need_alloc = true;
 		} else if (isnullstartblock(bma.got.br_startblock)) {
 			/*
-			 * 在btree树中存在对应的extent，但是其对应的磁盘位置为特殊值
+			 * 在btree树中存在对应的extent，但是其对应的磁盘位置为特
+			 * 殊值
 			 * - 比如延迟分配的extent
 			 */
 			wasdelay = true;

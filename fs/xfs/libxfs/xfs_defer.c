@@ -230,7 +230,8 @@ xfs_defer_create_intents(
 		list_sort(tp->t_mountp, &dfp->dfp_work, ops->diff_items);
 		/*
 		 * 将这个xfs_defer_pending元素中的所有intent items依次log进EFI的
-		 * 尾部xfs_extent数组中
+		 * 尾部xfs_extent数组中；并设置对应的xfs_log_item为dirty，下次事
+		 * 务提交时会写入日志
 		 *
 		 * - xfs_extent_free_log_item()
 		 * -
@@ -424,6 +425,9 @@ xfs_defer_finish_noroll(
 		 * - 这里是将(*tp)->t_dfops放到了dop_pending链表的尾部。但在高版
 		 *   本中这里做了修改，将(*tp)->t_dfops放到了dop_pending的头部：
 		 *   > upstream commit 27dada070d59c28a441f1907d2cec891b17dcb26
+		 *     x 主要引起的问题是done item被放到dop_pending尾部，不能被
+		 *       立即处理，但intent item被pin在了AIL上，disk log space无
+		 *       法被释放；
 		 */
 		list_splice_tail_init(&(*tp)->t_dfops, &dop_pending);
 

@@ -1954,6 +1954,9 @@ static inline bool bio_remaining_done(struct bio *bio)
 void bio_endio(struct bio *bio)
 {
 again:
+	/*
+	 * 如果bio chain上还有未完成的bio，则退出
+	 */
 	if (!bio_remaining_done(bio))
 		return;
 	if (!bio_integrity_endio(bio))

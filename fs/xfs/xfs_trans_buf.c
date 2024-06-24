@@ -354,6 +354,10 @@ xfs_trans_read_buf_map(
 		return error;
 	}
 
+	/*
+	 * 这里的xfs_buf_relse()说明xfs_buf_read_map()返回的xfs_buf是处于锁定状
+	 * 态的
+	 */
 	if (XFS_FORCED_SHUTDOWN(mp)) {
 		xfs_buf_relse(bp);
 		trace_xfs_trans_read_buf_shut(bp, _RET_IP_);

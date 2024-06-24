@@ -1277,6 +1277,9 @@ xlog_space_left(
 	 * 高32位是cycle，低32位是byte？
 	 */
 	xlog_crack_grant_head(head, &head_cycle, &head_bytes);
+	/*
+	 * 高32位是cycle，低32位是basic block
+	 */
 	xlog_crack_atomic_lsn(&log->l_tail_lsn, &tail_cycle, &tail_bytes);
 	/*
 	 * xlog->l_tail_lsn是cycle|block的组合，参见xlog_assign_atomic_lsn()参数名
@@ -3048,7 +3051,10 @@ xlog_state_iodone_process_iclog(
 		return false;
 
 	/*
-	 * 更新l_last_sync_lsn
+	 * 走到这里，说明iclog拥有最小的h_lsn
+	 * - 最小h_lsn的iclog，要被标记XLOG_STATE_CALLBACK，使得caller立即调用
+	 *   该iclog的callback
+	 * - 更新l_last_sync_lsn
 	 */
 	xlog_state_set_callback(log, iclog, header_lsn);
 	return false;
@@ -3187,6 +3193,9 @@ xlog_state_do_callback(
 			 *   > 如果此时commit iclog不是那个最早的iclog，则对其的
 			 *     回调留到后面一个iclog flush io完成时再进入到此处
 			 *     试探。
+			 *
+			 * 如果当前iclog未包含XLOG_STATE_CALLBACK，则尝试进行下一
+			 * 个iclog的处理；
 			 */
 
 			if (!(iclog->ic_state &
@@ -3197,6 +3206,9 @@ xlog_state_do_callback(
 
 			/*
 			 * 当前iclog的h_lsn是最小的，需要do callback
+			 * - 只有拥有最小h_lsn的iclog才会被
+			 *   xlog_state_iodone_process_iclog()标记
+			 *   XLOG_STATE_CALLBACK
 			 */
 
 			/*

@@ -809,6 +809,9 @@ xfs_trans_ail_update_bulk(
 		 *   > xlog_state_get_iclog_space
 		 */
 		lip->li_lsn = lsn;
+		/*
+		 * 插到了tmp头部
+		 */
 		list_add(&lip->li_ail, &tmp);
 	}
 

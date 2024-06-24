@@ -4848,6 +4848,9 @@ int vfs_rmdir(struct inode *dir, struct dentry *dentry)
 	if (error)
 		goto out;
 
+	/*
+	 * xfs_vn_unlink()
+	 */
 	error = dir->i_op->rmdir(dir, dentry);
 	if (error)
 		goto out;

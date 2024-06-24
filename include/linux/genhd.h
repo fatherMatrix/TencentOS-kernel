@@ -85,6 +85,10 @@ struct partition {
 	__le32 nr_sects;		/* nr of sectors in partition */
 } __attribute__((packed));
 
+/*
+ * /proc/diskstats的结构体
+ * - 参见：proc_genhd_init()
+ */
 struct disk_stats {
 	u64 nsecs[NR_STAT_GROUPS];
 	unsigned long sectors[NR_STAT_GROUPS];

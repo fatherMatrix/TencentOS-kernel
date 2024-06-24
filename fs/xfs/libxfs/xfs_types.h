@@ -50,6 +50,9 @@ typedef void *		xfs_failaddr_t;
 #define	NULLFSBLOCK	((xfs_fsblock_t)-1)
 #define	NULLRFSBLOCK	((xfs_rfsblock_t)-1)
 #define	NULLRTBLOCK	((xfs_rtblock_t)-1)
+/*
+ * 参见isnullstartblock()
+ */
 #define	NULLFILEOFF	((xfs_fileoff_t)-1)
 
 #define	NULLAGBLOCK	((xfs_agblock_t)-1)
@@ -171,6 +174,9 @@ struct xfs_iext_cursor {
 	int			pos;
 };
 
+/*
+ * xfs的extents只有这两种状态会写到磁盘上
+ */
 typedef enum {
 	XFS_EXT_NORM, XFS_EXT_UNWRITTEN,
 } xfs_exntst_t;

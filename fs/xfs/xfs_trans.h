@@ -72,10 +72,8 @@ struct xfs_log_item {
 	 */
 	struct list_head		li_bio_list;	/* buffer item list */
 	/*
-	 * 当log item写入完成后的回调
-	 * - 写入disk log space？
-	 * - 写入metadata space？
-	 *   > 好像是这个
+	 * 当AIL中的log item写入metadata space完成后的回调
+	 * - 实际上是xfs_buf->b_iodone/xfs_buf_do_callbacks()调过来的
 	 */
 	void				(*li_cb)(struct xfs_buf *,
 						 struct xfs_log_item *);
@@ -91,6 +89,7 @@ struct xfs_log_item {
 	struct list_head		li_cil;		/* CIL pointers */
 	/*
 	 * li_lv和li_lv_shadow的关系见xlog_cil_alloc_shadow_bufs()的注释；
+	 * - 最后一次使用是什么时候？
 	 */
 	struct xfs_log_vec		*li_lv;		/* active log vector */
 	struct xfs_log_vec		*li_lv_shadow;	/* standby vector */

@@ -73,6 +73,10 @@ static inline void queued_read_lock(struct qrwlock *lock)
 {
 	u32 cnts;
 
+	/*
+	 * 先尝试对cnts的读者区域加1，加1后检测当前是否有写者；
+	 * - 如果没有写者，说明读锁获取成功，直接返回
+	 */
 	cnts = atomic_add_return_acquire(_QR_BIAS, &lock->cnts);
 	if (likely(!(cnts & _QW_WMASK)))
 		return;

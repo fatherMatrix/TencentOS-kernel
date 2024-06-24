@@ -280,6 +280,10 @@ xfs_filestream_get_parent(
 	if (!dentry)
 		goto out;
 
+	/*
+	 * 这个东西找到的肯定是自己这个文件系统中的dentry
+	 * - 要跨越挂载点是要额外操作的
+	 */
 	parent = dget_parent(dentry);
 	if (!parent)
 		goto out_dput;
@@ -310,6 +314,9 @@ xfs_filestream_lookup_ag(
 
 	ASSERT(S_ISREG(VFS_I(ip)->i_mode));
 
+	/*
+	 * 获取ip的父目录对应的ip
+	 */
 	pip = xfs_filestream_get_parent(ip);
 	if (!pip)
 		return NULLAGNUMBER;

@@ -442,6 +442,10 @@ typedef struct xfs_perag {
 	spinlock_t	pag_state_lock;
 
 	spinlock_t	pagb_lock;	/* lock for pagb_tree */
+	/*
+	 * busy extents的红黑树
+	 * - 树节点是xfs_extent_busy.rb_node
+	 */
 	struct rb_root	pagb_tree;	/* ordered tree of busy extents */
 	unsigned int	pagb_gen;	/* generation count for pagb_tree */
 	wait_queue_head_t pagb_wait;	/* woken when pagb_gen changes */

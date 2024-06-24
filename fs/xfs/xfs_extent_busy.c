@@ -124,8 +124,11 @@ xfs_extent_busy_search(
  * extent.  If the overlap covers the beginning, the end, or all of the busy
  * extent, the overlapping portion can be made unbusy and used for the
  * allocation.  We can't split a busy extent because we can't modify a
+ *              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * transaction/CIL context busy list, but we can update an entry's block
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * number or length.
+ * ^^^^^^^^^^^^^^^^^
  *
  * Returns true if the extent can safely be reused, or false if the search
  * needs to be restarted.
@@ -148,6 +151,8 @@ xfs_extent_busy_update_extent(
 	 * This extent is currently being discarded.  Give the thread
 	 * performing the discard a chance to mark the extent unbusy
 	 * and retry.
+	 * - 该busy extents正在被清除，这意味着其xfs_trans已经写完了，这会儿正
+	 *   在将其从busy list/tree上删除掉
 	 */
 	if (busyp->flags & XFS_EXTENT_BUSY_DISCARDED) {
 		spin_unlock(&pag->pagb_lock);

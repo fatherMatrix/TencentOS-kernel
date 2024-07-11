@@ -885,12 +885,15 @@ typedef struct xfs_agi {
 	__be32		agi_pad32;
 	__be64		agi_lsn;	/* last write sequence */
 
+	/*
+	 * 对应mkfs.xfs -m finobt=1
+	 * - mkfs时直接写入superblock，对应XFS_SB_FEAT_RO_COMPAT_FINOBT
+	 */
 	__be32		agi_free_root; /* root of the free inode btree */
 	__be32		agi_free_level;/* levels in free inode btree */
 
 	/* structure must be padded to 64 bit alignment */
 } xfs_agi_t;
-
 #define XFS_AGI_CRC_OFF		offsetof(struct xfs_agi, agi_crc)
 
 #define	XFS_AGI_MAGICNUM	(1 << 0)

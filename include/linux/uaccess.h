@@ -200,6 +200,8 @@ static __always_inline void pagefault_disabled_dec(void)
  * not take any locks and go straight to the fixup table.
  *
  * 并不是完全关闭缺页中断的处理过程，而是直接交由fixup和__ex_table处理
+ * - 只有在内核态触发的缺页异常才使用fixup
+ *   > 注意不是内核态地址，而是在内核态触发的，即无X86_PF_USER
  *
  * User access methods will not sleep when called from a pagefault_disabled()
  * environment.

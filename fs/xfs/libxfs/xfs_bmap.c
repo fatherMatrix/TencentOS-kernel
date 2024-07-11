@@ -3354,6 +3354,9 @@ xfs_bmap_btalloc_nullfb(
 	if (startag == NULLAGNUMBER)
 		startag = ag = 0;
 
+	/*
+	 * 找到最大的extents，并将最大的extents的块数量记录到blen中
+	 */
 	while (*blen < args->maxlen) {
 		error = xfs_bmap_longest_free_extent(args->tp, ag, blen,
 						     &notinit);
@@ -3366,6 +3369,9 @@ xfs_bmap_btalloc_nullfb(
 			break;
 	}
 
+	/*
+	 * 找到最合适的minlen
+	 */
 	xfs_bmap_select_minlen(ap, args, blen, notinit);
 	return 0;
 }
@@ -3519,9 +3525,16 @@ xfs_bmap_btalloc(
 			ag = (ag != NULLAGNUMBER) ? ag : 0;
 			ap->blkno = XFS_AGB_TO_FSB(mp, ag, 0);
 		} else {
+			/*
+			 * 将extents的分配blkno放到xfs_inode所在fsblock附近
+			 */
 			ap->blkno = XFS_INO_TO_FSB(mp, ap->ip->i_ino);
 		}
 	} else
+		/*
+		 * 本xfs_trans已经分配过磁盘块了，本次分配要在上次分配的磁盘块
+		 * 附近分配
+		 */
 		ap->blkno = ap->tp->t_firstblock;
 
 	/*
@@ -3550,9 +3563,6 @@ xfs_bmap_btalloc(
 	/* Trim the allocation back to the maximum an AG can fit. */
 	args.maxlen = min(ap->length, mp->m_ag_max_usable);
 	blen = 0;
-	/*
-	 *
-	 */
 	if (nullfb) {
 		/*
 		 * Search for an allocation group with a single extent large
@@ -3570,8 +3580,14 @@ xfs_bmap_btalloc(
 			return error;
 	} else if (ap->tp->t_flags & XFS_TRANS_LOWMODE) {
 		if (xfs_inode_is_filestream(ap->ip))
+			/*
+			 * filestream方式，在0号AG开始
+			 */
 			args.type = XFS_ALLOCTYPE_FIRST_AG;
 		else
+			/*
+			 * 否则从args->blkno开始
+			 */
 			args.type = XFS_ALLOCTYPE_START_BNO;
 		args.total = args.minlen = ap->minlen;
 	} else {
@@ -4391,6 +4407,7 @@ xfs_bmapi_allocate(
 
 	/*
 	 * 触发分配说明bno原来所处的位置要么是hole，要么是delay extents
+	 * - 对于direct io，应该是走了这里，直接将extent转换为了real状态
 	 */
 	if (bma->wasdel)
 		error = xfs_bmap_add_extent_delay_real(bma, whichfork);

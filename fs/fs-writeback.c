@@ -301,7 +301,7 @@ void __inode_attach_wb(struct inode *inode, struct page *page)
 	}
 
 	/*
-	 * 诶，如果inode不受cgroup的控制，那么久使用bdi内嵌的wb；
+	 * 诶，如果inode不受cgroup的控制，那么就使用bdi内嵌的wb；
 	 * - bdi内还有一个wb链表，给cgroup的情况使用
 	 */
 	if (!wb)
@@ -1530,7 +1530,7 @@ __writeback_single_inode(struct inode *inode, struct writeback_control *wbc)
 	/*
 	 * 这里写的是inode对应文件包含的数据内容，不是inode本身
 	 * - inode本身什么时候回写？
-	 * - 下面
+	 *   > 下面
 	 */
 	ret = do_writepages(mapping, wbc);
 
@@ -1607,6 +1607,9 @@ __writeback_single_inode(struct inode *inode, struct writeback_control *wbc)
 		 * ext4: ext4_write_inode()
 		 * - 按道理说，ext4有事务机制，为什么还需要这个东西呢？
 		 *   > 该函数内，对于有事务支持时，仅等待事务完成；
+		 *     x 为啥xfs等都不等呢？
+		 *       o 哦，或许是因为xfs的日志级别仅保证元数据，而ext4有
+		 *         journal mode和order mode
 		 */
 		int err = write_inode(inode, wbc);
 		if (ret == 0)

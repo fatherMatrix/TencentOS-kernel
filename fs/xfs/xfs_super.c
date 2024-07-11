@@ -62,6 +62,10 @@ enum {
 	Opt_discard, Opt_nodiscard, Opt_dax, Opt_err,
 };
 
+/*
+ * 这里都是mount options
+ * - mkfs.xfs的options都是在mkfs时直接写入超级块的
+ */
 static const match_table_t tokens = {
 	{Opt_logbufs,	"logbufs=%u"},	/* number of XFS log buffers */
 	{Opt_logbsize,	"logbsize=%s"},	/* size of XFS log buffers */

@@ -205,6 +205,7 @@ typedef struct xfs_buf {
 	/*
 	 * xfs_buf所属的xfs_buf_log_item
 	 * - xfs_buf_log_item->bli_buf即指向本结构体；
+	 * - 如果不需要log的xfs_buf，这个就没有xfs_buf_log_item
 	 */
 	struct xfs_buf_log_item	*b_log_item;
 	/*
@@ -214,6 +215,7 @@ typedef struct xfs_buf {
 	 *
 	 * 所以结合b_log_item和b_li_list字段，意思是会有多个xfs_log_item对应同一
 	 * 个xfs_buf？
+	 * - 每个xfs_log_item都要通过一个xfs_buf写入disk？这里链接的是这类？
 	 */
 	struct list_head	b_li_list;	/* Log items list head */
 	struct xfs_trans	*b_transp;

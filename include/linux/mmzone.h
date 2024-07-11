@@ -880,7 +880,11 @@ typedef struct pglist_data {
 	struct deferred_split deferred_split_queue;
 #endif
 
-	/* Fields commonly accessed by the page reclaim scanner */
+	/*
+	 * Fields commonly accessed by the page reclaim scanner
+	 * - 高版本中说如果开启了memcg，那么本字段不会被使用？
+	 *   > upstream commit 867e5e1de14b2b2bde324cdfeec3f3f83eb21424
+	 */
 	struct lruvec		lruvec;
 
 	unsigned long		flags;

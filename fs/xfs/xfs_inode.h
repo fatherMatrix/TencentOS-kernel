@@ -79,7 +79,15 @@ typedef struct xfs_inode {
 
 	/* pending io completions */
 	spinlock_t		i_ioend_lock;
+	/*
+	 * xfs_end_io
+	 * - 参见：xfs_inode_alloc()
+	 */
 	struct work_struct	i_ioend_work;
+	/*
+	 * 链表头
+	 * - 链表元素是xfs_ioend->io_list
+	 */
 	struct list_head	i_ioend_list;
 } xfs_inode_t;
 

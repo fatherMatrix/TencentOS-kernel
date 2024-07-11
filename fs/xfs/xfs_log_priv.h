@@ -357,6 +357,8 @@ struct xfs_cil {
 	struct list_head	xc_cil;
 	/*
 	 * 保护xc_cil链表
+	 * - 这把锁是一个负载很重的锁，v6.x将其删除，对应的cil修改为了percpu锁
+	 *   > 参见: upstream commit c0fb4765c5086cfd00f1158f5f44e7e1906530ad
 	 */
 	spinlock_t		xc_cil_lock;
 

@@ -3234,6 +3234,7 @@ void free_unref_page_list(struct list_head *list)
 		if (++batch_count == SWAP_CLUSTER_MAX) {
 			local_irq_restore(flags);
 			batch_count = 0;
+			/* <- 0009.37 release pages在这里挂了 */
 			local_irq_save(flags);
 		}
 	}
@@ -3241,6 +3242,7 @@ void free_unref_page_list(struct list_head *list)
 	 * 开中断
 	 */
 	local_irq_restore(flags);
+	/* <- 0009.44 release pages在这里挂了 */
 }
 
 /*

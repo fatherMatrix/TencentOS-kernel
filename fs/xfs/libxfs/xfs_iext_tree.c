@@ -1083,6 +1083,7 @@ xfs_iext_lookup_extent_before(
 	 *   > xfs_iext_lookup_extent()返回false，gtop中的值非法
 	 *
 	 * 对于这里的两种情况，我们都需要去搜索前一个extent以满足本函数的语义；
+	 * - 返回false表示前面没有valid的extents了
 	 */
 	if (!xfs_iext_prev_extent(ifp, cur, gotp))
 		return false;

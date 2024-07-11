@@ -2583,6 +2583,8 @@ xlog_write(
 	 * Region headers and bytes are already accounted for.
 	 * We only need to take into account start records and
 	 * split regions in this function.
+	 *
+	 * 有XLOG_TIC_INITED标记表示要写start record
 	 */
 	if (ticket->t_flags & XLOG_TIC_INITED)
 		ticket->t_curr_res -= sizeof(xlog_op_header_t);

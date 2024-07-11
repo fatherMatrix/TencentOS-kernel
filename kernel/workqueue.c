@@ -2344,7 +2344,7 @@ __acquires(&pool->lock)
 	strscpy(worker->desc, pwq->wq->name, WORKER_DESC_LEN);
 
 	/*
-	 * 将work_struct从worker_pool->worklist上取下来；
+	 * 将work_struct从worker_pool->worklist或worker->scheduled上取下来；
 	 */
 	list_del_init(&work->entry);
 

@@ -303,6 +303,9 @@ EXPORT_SYMBOL(bio_reset);
 
 static struct bio *__bio_chain_endio(struct bio *bio)
 {
+	/*
+	 * 当前的bio是一个BIO_CHAIN，bi_private中保存的是后面发起的bio
+	 */
 	struct bio *parent = bio->bi_private;
 
 	if (bio->bi_status && !parent->bi_status)
@@ -331,8 +334,14 @@ void bio_chain(struct bio *bio, struct bio *parent)
 {
 	BUG_ON(bio->bi_private || bio->bi_end_io);
 
+	/*
+	 * 将后提交的新的bio设置为老bio的bi_private
+	 */
 	bio->bi_private = parent;
 	bio->bi_end_io	= bio_chain_endio;
+	/*
+	 * 增加新的bio的__bi_remaining
+	 */
 	bio_inc_remaining(parent);
 }
 EXPORT_SYMBOL(bio_chain);
@@ -838,6 +847,9 @@ bool __bio_try_merge_page(struct bio *bio, struct page *page,
 	if (WARN_ON_ONCE(bio_flagged(bio, BIO_CLONED)))
 		return false;
 
+	/*
+	 * 如果当前bio中没有bio_vec，那肯定是不能合并的
+	 */
 	if (bio->bi_vcnt > 0) {
 		/*
 		 * 这里仅对bio中的最后一个bio_vec做合并尝试
@@ -1956,6 +1968,7 @@ void bio_endio(struct bio *bio)
 again:
 	/*
 	 * 如果bio chain上还有未完成的bio，则退出
+	 * - 参见xfs_chain_bio() -> bio_chain_endio()
 	 */
 	if (!bio_remaining_done(bio))
 		return;

@@ -1881,6 +1881,9 @@ xfs_inactive_ifree(
 	 *
 	 * We check that xfs_ifree() hasn't grown an internal transaction roll
 	 * by asserting that the inode is still locked when it returns.
+	 *
+	 * 这把锁是在哪里释放的呢？
+	 * - .iop_committing = xfs_inode_item_committing
 	 */
 	xfs_ilock(ip, XFS_ILOCK_EXCL);
 	xfs_trans_ijoin(tp, ip, XFS_ILOCK_EXCL);

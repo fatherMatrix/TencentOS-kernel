@@ -986,7 +986,13 @@ static bool page_mkclean_one(struct page *page, struct vm_area_struct *vma,
 
 			flush_cache_page(vma, address, pte_pfn(*pte));
 			entry = ptep_clear_flush(vma, address, pte);
+			/*
+			 * 清除pte中的writable位
+			 */
 			entry = pte_wrprotect(entry);
+			/*
+			 * 清除pte中的硬件dirty位
+			 */
 			entry = pte_mkclean(entry);
 			set_pte_at(vma->vm_mm, address, pte, entry);
 			ret = 1;

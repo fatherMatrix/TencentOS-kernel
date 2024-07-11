@@ -706,6 +706,9 @@ xfs_bmap_punch_delalloc_range(
 		goto out_unlock;
 
 	while (got.br_startoff + got.br_blockcount > start_fsb) {
+	/*
+	 * got和[start_fsb, end_fsb)有交集
+	 */
 		del = got;
 		xfs_trim_extent(&del, start_fsb, length);
 
@@ -713,9 +716,14 @@ xfs_bmap_punch_delalloc_range(
 		 * A delete can push the cursor forward. Step back to the
 		 * previous extent on non-delalloc or extents outside the
 		 * target range.
+		 * - 如果待删除的extent不是delayed extent，则跳过并向前搜索
+		 *   > 因为本函数的目的是删除data fork中delayed extents
 		 */
 		if (!del.br_blockcount ||
 		    !isnullstartblock(del.br_startblock)) {
+			/*
+			 * 返回false说明got前面没有valid的extents了
+			 */
 			if (!xfs_iext_prev_extent(ifp, &icur, &got))
 				break;
 			continue;

@@ -268,7 +268,9 @@ struct backing_dev_info {
 	/*
 	 * 该backing_dev_info对应的bdi_writeback链表，链表元素是bdi_writeback->bdi_node
 	 * - 上面内嵌的wb是bdi的默认wb，这个链表上的wb是blkcg关联的wb；
-	 *   + 参见：wb_get_create() -> cgwb_create()
+	 *   > 参见：wb_get_create() -> cgwb_create()
+	 * - 本链表中包含了上面内嵌的bdi_writeback
+	 *   > 参见：cgwb_bdi_register()
 	 */
 	struct list_head wb_list; /* list of all wbs */
 #ifdef CONFIG_CGROUP_WRITEBACK

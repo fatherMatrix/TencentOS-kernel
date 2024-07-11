@@ -195,6 +195,8 @@ typedef struct xfs_bmbt_irec
 	/*
 	 * 文件系统内块偏移
 	 * - xfs_fsblock_t是AGno | block offset in AG；
+	 * - 对于delayed extents，此处为nullstartblock(indlen)；
+	 *   > 参见：xfs_bmapi_reserve_delalloc()
 	 */
 	xfs_fsblock_t	br_startblock;	/* starting block number */
 	/*

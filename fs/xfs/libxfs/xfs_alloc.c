@@ -3025,6 +3025,7 @@ xfs_alloc_vextent(
 			}
 			/*
 			 * If we get a buffer back then the allocation will fly.
+			 * - 返回agbp说明本AG可以用于本次分配
 			 */
 			if (args->agbp) {
 				if ((error = xfs_alloc_ag_vextent(args)))

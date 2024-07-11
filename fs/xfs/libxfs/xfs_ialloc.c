@@ -1606,6 +1606,9 @@ xfs_dialloc_ag(
 	int				offset;
 	int				i;
 
+	/*
+	 * 如果没有mkfs.xfs -m finobt=1,crc=1参数，则走inobt路径
+	 */
 	if (!xfs_sb_version_hasfinobt(&mp->m_sb))
 		return xfs_dialloc_ag_inobt(tp, agbp, parent, inop);
 

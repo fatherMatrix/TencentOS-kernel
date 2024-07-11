@@ -137,6 +137,7 @@ struct xfs_item_ops {
 	/*
 	 * 将xfs_log_item提交到CIL后调用本回调
 	 * - 可以用来做6. Transaction commit中的unlock item这一步
+	 *   > xfs_iunlock()就是从这里面调用的
 	 */
 	void (*iop_committing)(struct xfs_log_item *, xfs_lsn_t commit_lsn);
 	/*

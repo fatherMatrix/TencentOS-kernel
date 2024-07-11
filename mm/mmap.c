@@ -3287,7 +3287,7 @@ void exit_mmap(struct mm_struct *mm)
 	/* Use -1 here to ensure all VMAs in the mm are unmapped */
 	/*
 	 * 处理mm_struct中包含的所有vma
-	 * - 这里是通过address正向查找本mm_struct中的pte
+	 * - 这里是通过address正向查找本mm_struct中的pte，与RMAP无关
 	 *   > RMAP重点是通过page找到多个mm_struct中的所有pte
 	 */
 	unmap_vmas(&tlb, vma, 0, -1);

@@ -334,8 +334,7 @@ xfs_trans_alloc(
 	INIT_LIST_HEAD(&tp->t_busy);
 	INIT_LIST_HEAD(&tp->t_dfops);
 	/*
-	 * 这是啥意思？
-	 * - 延迟分配相关吗？
+	 * t_firstblock表示本事务分配的第一个extent对应的fsblock
 	 */
 	tp->t_firstblock = NULLFSBLOCK;
 
@@ -519,6 +518,9 @@ xfs_trans_apply_sb_deltas(
 	xfs_buf_t	*bp;
 	int		whole = 0;
 
+	/*
+	 * 获取到对应xfs_sb的xfs_buf，并对其调用_xfs_trans_bjoin()
+	 */
 	bp = xfs_trans_getsb(tp, tp->t_mountp);
 	sbp = XFS_BUF_TO_SBP(bp);
 
@@ -1062,6 +1064,9 @@ __xfs_trans_commit(
 
 	/*
 	 * If we need to update the superblock, then do it now.
+	 * - 本次事务通过xfs_trans_mod_sb()修改了超级块
+	 *   > fuck，要注意的是xfs只会更新primary superblock，从mkfs.xfs之后，
+	 *     secondary superblock就不再更新了
 	 */
 	if (tp->t_flags & XFS_TRANS_SB_DIRTY)
 		xfs_trans_apply_sb_deltas(tp);

@@ -703,6 +703,7 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 
 	/*
 	 * 调用dio->end_io()；
+	 * - 更新vfs inode和xfs_inode中的文件size
 	 * 唤醒在inode->i_state的__I_DIO_WAKEUP位上睡眠的进程
 	 * ... ...
 	 */

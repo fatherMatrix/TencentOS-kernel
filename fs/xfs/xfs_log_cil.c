@@ -500,6 +500,11 @@ xlog_cil_insert_items(
 	 * reservation has to grow as well as the current reservation as we
 	 * steal from tickets so we can correctly determine the space used
 	 * during the transaction commit.
+	 *
+	 * - 将本xfs_trans的xlog_ticket中的配额转移到xlog->xfs_cil_ctx的ticket
+	 *   中
+	 * - t_curr_res什么时候时0呢？
+	 *   > 参见xlog_cil_ticket_alloc()
 	 */
 	if (ctx->ticket->t_curr_res == 0) {
 		ctx_res = ctx->ticket->t_unit_res;
@@ -779,6 +784,8 @@ xlog_cil_push(
 	/*
 	 * 给新分配的xfs_cil_ctx分配xlog_ticket
 	 * - 这个ticket的作用是？
+	 *   > xfs_cil_ctx中的xlog_ticket接受来自xfs_trans中的xlog_ticket中的配
+	 *     额的转移。此处分配给xfs_cil_ctx的xlog_ticket中是0配额
 	 */
 	new_ctx->ticket = xlog_cil_ticket_alloc(log);
 
@@ -1026,14 +1033,20 @@ restart:
 		      commit_iclog->ic_state == XLOG_STATE_WANT_SYNC);
 	/*
 	 * 将xfs_cil_ctx加入iclog，待iclog写入disk后，依次调用回调函数；
+	 * - 这个iclog是本xfs_cil_ctx上所有数据写入的最后一个iclog，这个操作保
+	 *   证了只有整个xfs_cil_ctx全部写入disk log space后，才会调用回调函数
+	 * - 上面xfs_log_done()中由于传入了commit_iclog参数，导致最后一个iclog
+	 *   不会被提交，所以这里将xfs_cil_ctx挂入iclog->ic_callbacks链表的操作
+	 *   是没有问题的（如果在xfs_log_done()中提交了，走到这里的时候可能触发
+	 *   回调了，就有问题了）
+	 *   > 最后一个iclog的提交在下面的return xfs_log_release_iclog()
 	 */
 	list_add_tail(&ctx->iclog_entry, &commit_iclog->ic_callbacks);
 	spin_unlock(&commit_iclog->ic_callback_lock);
 
 	/*
 	 * now the checkpoint commit is complete and we've attached the
-	 * callbacks to the iclog we can assign the commit LSN to the context
-	 * and wake up anyone who is waiting for the commit to complete.
+	 * callbacks to the iclog we can assign the commit LSN to the context * and wake up anyone who is waiting for the commit to complete.
 	 */
 	spin_lock(&cil->xc_push_lock);
 	/*
@@ -1097,7 +1110,11 @@ xlog_cil_push_background(
 	 * space available yet.
 	 *
 	 * 如果CIL上已有的log size小于log buffer的一半，则返回，不继续做从CIL
-	 * 到log buffer的push操作；
+	 * 到iclog的push操作；
+	 * - 不能每次都进行xlog_cil_push()，原因是我们需要在CIL中进行relog并以此
+	 *   来减小写盘次数；
+	 * - 不能让CIL中累计的数据太大，因为CIL中累计的log item会阻止相关数据结
+	 *   构的内存释放；
 	 */
 	if (cil->xc_ctx->space_used < XLOG_CIL_SPACE_LIMIT(log))
 		return;
@@ -1225,8 +1242,16 @@ xfs_log_commit_cil(
 	if (commit_lsn)
 		*commit_lsn = xc_commit_lsn;
 
+	/*
+	 * log完成后，释放当前xfs_trans未用完的disk log space
+	 * - 其实是xlog_ticket持有的
+	 * - 这里的还未用完指的是还未转移到xlog->xfs_cil_ctx->xlog_ticket中
+	 */
 	xfs_log_done(mp, tp->t_ticket, NULL, regrant);
 	tp->t_ticket = NULL;
+	/*
+	 * 这里是释放当前xfs_trans未用完的disk data space
+	 */
 	xfs_trans_unreserve_and_mod_sb(tp);
 
 	/*

@@ -304,6 +304,9 @@ struct page {
 	 * dynamically, so we need a place to store that address.
 	 * Note that this field could be 16 bits on x86 ... ;)
 	 *
+	 * - x86/arm均为定义该字段
+	 *   > 未定义WANT_PAGE_VIRTUAL宏
+	 *
 	 * Architectures with slow multiplication can define
 	 * WANT_PAGE_VIRTUAL in asm/page.h
 	 */

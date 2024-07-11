@@ -333,6 +333,9 @@ xfs_mru_cache_create(
 	if (!(grp_time = msecs_to_jiffies(lifetime_ms) / grp_count))
 		return -EINVAL;
 
+	/*
+	 * 分配内存，初始化为全0
+	 */
 	if (!(mru = kmem_zalloc(sizeof(*mru), 0)))
 		return -ENOMEM;
 

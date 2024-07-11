@@ -27,6 +27,9 @@ iomap_page_create(struct inode *inode, struct page *page)
 {
 	struct iomap_page *iop = to_iomap_page(page);
 
+	/*
+	 * 如果iop == NULL，x86上PAGE_SIZE == 4kb，那么这里是会返回NULL咯？
+	 */
 	if (iop || i_blocksize(inode) == PAGE_SIZE)
 		return iop;
 
@@ -1043,6 +1046,9 @@ iomap_page_mkwrite_actor(struct inode *inode, loff_t pos, loff_t length,
 		block_commit_write(page, 0, length);
 	} else {
 		WARN_ON_ONCE(!PageUptodate(page));
+		/*
+		 * 果然，这里没有判断返回值
+		 */
 		iomap_page_create(inode, page);
 		set_page_dirty(page);
 	}

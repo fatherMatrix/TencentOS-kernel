@@ -68,6 +68,9 @@ xfs_finish_page_writeback(
 		mapping_set_error(inode->i_mapping, -EIO);
 	}
 
+	/*
+	 * iop == NULL，说明fsblock size == PAGE_SIZE
+	 */
 	ASSERT(iop || i_blocksize(inode) == PAGE_SIZE);
 	ASSERT(!iop || atomic_read(&iop->write_count) > 0);
 
@@ -264,6 +267,7 @@ xfs_end_ioend(
 
 	/*
 	 * Success: commit the COW or unwritten blocks if needed.
+	 * - 这里其实等同于xfs_dio_write_end_io()中对reflink和unwritten的做法
 	 */
 	if (ioend->io_fork == XFS_COW_FORK)
 		error = xfs_reflink_end_cow(ip, offset, size);
@@ -303,6 +307,9 @@ xfs_ioend_can_merge(
 	if ((ioend->io_state == XFS_EXT_UNWRITTEN) ^
 	    (next->io_state == XFS_EXT_UNWRITTEN))
 		return false;
+	/*
+	 * 这里是按照文件内偏移来合并
+	 */
 	if (ioend->io_offset + ioend->io_size != next->io_offset)
 		return false;
 	return true;
@@ -338,6 +345,10 @@ xfs_ioend_try_merge(
 	while (!list_empty(more_ioends)) {
 		next_ioend = list_first_entry(more_ioends, struct xfs_ioend,
 				io_list);
+		/*
+		 * 本函数前面是排了序的，所以first entry不能合并的话，后面就更
+		 * 没有机会了
+		 */
 		if (!xfs_ioend_can_merge(ioend, next_ioend))
 			break;
 		list_move_tail(&next_ioend->io_list, &ioend->io_list);
@@ -382,6 +393,9 @@ xfs_end_io(
 	list_replace_init(&ip->i_ioend_list, &completion_list);
 	spin_unlock_irqrestore(&ip->i_ioend_lock, flags);
 
+	/*
+	 * 根据extents所在位置前后进行排序
+	 */
 	list_sort(NULL, &completion_list, xfs_ioend_compare);
 
 	while (!list_empty(&completion_list)) {
@@ -407,6 +421,9 @@ xfs_end_bio(
 	    ioend->io_append_trans != NULL) {
 		spin_lock_irqsave(&ip->i_ioend_lock, flags);
 		if (list_empty(&ip->i_ioend_list))
+			/*
+			 * i_ioend_work == xfs_end_io()
+			 */
 			WARN_ON_ONCE(!queue_work(mp->m_unwritten_workqueue,
 						 &ip->i_ioend_work));
 		list_add_tail(&ioend->io_list, &ip->i_ioend_list);
@@ -673,7 +690,13 @@ xfs_submit_ioend(
 
 	memalloc_nofs_restore(nofs_flag);
 
+	/*
+	 * 设置bio->bi_end_io
+	 */
 	ioend->io_bio->bi_private = ioend;
+	/*
+	 * 高版本内核是：iomap_writepage_end_bio()
+	 */
 	ioend->io_bio->bi_end_io = xfs_end_bio;
 
 	/*
@@ -705,6 +728,11 @@ xfs_alloc_ioend(
 	struct xfs_ioend	*ioend;
 	struct bio		*bio;
 
+	/*
+	 * xfs_ioend_bioset分配出来的bio前面都是有一个xfs_ioend结构体的
+	 * - 此处是没有设置bio的bi_end_io函数指针的，设置的地方在外面提交该bio
+	 *   的地方
+	 */
 	bio = bio_alloc_bioset(GFP_NOFS, BIO_MAX_PAGES, &xfs_ioend_bioset);
 	bio_set_dev(bio, bdev);
 	bio->bi_iter.bi_sector = sector;
@@ -712,9 +740,16 @@ xfs_alloc_ioend(
 	bio->bi_write_hint = inode->i_write_hint;
 	wbc_init_bio(wbc, bio);
 
+	/*
+	 * bio前面有一个xfs_ioend结构体
+	 * - 参见：xfs_init_zones()
+	 */
 	ioend = container_of(bio, struct xfs_ioend, io_inline_bio);
 	INIT_LIST_HEAD(&ioend->io_list);
 	ioend->io_fork = fork;
+	/*
+	 * 设置被写的extent的状态
+	 */
 	ioend->io_state = state;
 	ioend->io_inode = inode;
 	ioend->io_size = 0;
@@ -744,6 +779,9 @@ xfs_chain_bio(
 	new->bi_write_hint = prev->bi_write_hint;
 
 	bio_chain(prev, new);
+	/*
+	 * 增加prev->__bi_cnt
+	 */
 	bio_get(prev);		/* for xfs_destroy_ioend */
 	submit_bio(prev);
 	return new;
@@ -779,8 +817,21 @@ xfs_add_to_ioend(
 	    wpc->imap.br_state != wpc->ioend->io_state ||
 	    sector != bio_end_sector(wpc->ioend->io_bio) ||
 	    offset != wpc->ioend->io_offset + wpc->ioend->io_size) {
+	/*
+	 * 这个page的回写目的地和当前xfs_ioend在磁盘上并不相邻
+	 */
+		/*
+		 * 将老的xfs_ioend挂入iolist链表
+		 * - 该iolist会在上一层函数中被submit_bio()
+		 *   > 这也就是说，只有老的xfs_ioend会被提交，最新的xfs_ioend不
+		 *     会被上一层函数提交。所以，才需要在上上上层函数中特别处理
+		 *     最后一个xfs_ioend
+		 */
 		if (wpc->ioend)
 			list_add(&wpc->ioend->io_list, iolist);
+		/*
+		 * 分配新的xfs_ioend
+		 */
 		wpc->ioend = xfs_alloc_ioend(inode, wpc->fork,
 				wpc->imap.br_state, offset, bdev, sector, wbc);
 	}
@@ -793,13 +844,18 @@ xfs_add_to_ioend(
 
 	/*
 	 * 不能合并
+	 * - 包括bio当前为空的情况
 	 */
 	if (!merged) {
 		/*
 		 * 将多个bio通过bio_chain机制链接起来，只有最后一个bio完成后才会
 		 * 调用最后的end_io回调
+		 * - 这里的多个bio指的是同一个xfs_ioend对应的多个bio
 		 */
 		if (bio_full(wpc->ioend->io_bio, len))
+			/*
+			 * 分配新的bio
+			 */
 			wpc->ioend->io_bio = xfs_chain_bio(wpc->ioend->io_bio);
 		bio_add_page(wpc->ioend->io_bio, page, len, poff);
 	}
@@ -919,6 +975,7 @@ xfs_writepage_map(
 		/*
 		 * 将要写入磁盘的文件file_offset偏移处的内容映射到磁盘上的位置，
 		 * 磁盘上的位置保存在xfs_writepage_ctx->xfs_bmbt_irec中；
+		 * - 可能对extents的类型进行convert
 		 */
 		error = xfs_map_blocks(wpc, inode, file_offset);
 		if (error)
@@ -929,6 +986,10 @@ xfs_writepage_map(
 		 */
 		if (wpc->imap.br_startblock == HOLESTARTBLOCK)
 			continue;
+		/*
+		 * 其实本处的循环只是为了处理大尺寸page中的多个fsblock。对于x86
+		 * 上4K的block，只会循环一次。
+		 */
 		xfs_add_to_ioend(inode, file_offset, page, iop, wpc, wbc,
 				 &submit_list);
 		count++;
@@ -1010,6 +1071,8 @@ done:
  * For delalloc space on the page we need to allocate space and flush it.
  * For unwritten space on the page we need to start the conversion to
  * regular allocated space.
+ *
+ * 本函数每次仅处理一个page
  */
 STATIC int
 xfs_do_writepage(
@@ -1165,6 +1228,7 @@ xfs_vm_writepages(
 	xfs_iflags_clear(XFS_I(mapping->host), XFS_ITRUNCATED);
 	/*
 	 * 这里面会调用submit_bio()
+	 * - 本函数和xfs_vm_writepage()中一致，关键函数都是xfs_do_writepage()
 	 */
 	ret = write_cache_pages(mapping, wbc, xfs_do_writepage, &wpc);
 	if (wpc.ioend)

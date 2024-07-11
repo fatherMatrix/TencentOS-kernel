@@ -2345,6 +2345,9 @@ static vm_fault_t do_page_mkwrite(struct vm_fault *vmf)
 	    IS_SWAPFILE(vmf->vma->vm_file->f_mapping->host))
 		return VM_FAULT_SIGBUS;
 
+	/*
+	 * xfs: xfs_filemap_page_mkwrite()
+	 */
 	ret = vmf->vma->vm_ops->page_mkwrite(vmf);
 	/* Restore original flags so that caller is not surprised */
 	vmf->flags = old_flags;
@@ -3776,7 +3779,13 @@ static vm_fault_t do_shared_fault(struct vm_fault *vmf)
 	}
 
 	/*
-	 * 设置pte中的dirty标记
+	 * 设置pte中的dirty标记、可写标记
+	 * - 进入到这里，说明本page是被mmap(fd)到用户空间，并被写导致的。此时我
+	 *   们将对应的pte设置为dirty标记、可写标记。后面继续对此页进行写操作就
+	 *   可以正常进行。
+	 *   > 当本page被回写时，会清除通过rmap清除所有pte的dirty标记、可写标记，
+	 *     此后，再次对这个page进行写操作又会触发page fault并回到这里。
+	 *     x 参见：write_cache_pages() -> clear_page_dirty_for_io() -> page_mkclean()
 	 */
 	ret |= finish_fault(vmf);
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE |

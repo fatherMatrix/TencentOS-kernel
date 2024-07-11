@@ -2109,6 +2109,9 @@ void tag_pages_for_writeback(struct address_space *mapping,
 	unsigned int tagged = 0;
 	void *page;
 
+	/*
+	 * 这里也是处于关中断状态
+	 */
 	xas_lock_irq(&xas);
 	xas_for_each_marked(&xas, page, end, PAGECACHE_TAG_DIRTY) {
 		xas_set_mark(&xas, PAGECACHE_TAG_TOWRITE);
@@ -2213,6 +2216,7 @@ int write_cache_pages(struct address_space *mapping,
 
 			/*
 			 * 设置PG_locked
+			 * - 放锁在哪里？
 			 */
 			lock_page(page);
 
@@ -2237,6 +2241,7 @@ continue_unlock:
 
 			/*
 			 * 如果已经在回写了
+			 * - 为什么不能放到最后去等待呢？
 			 */
 			if (PageWriteback(page)) {
 				if (wbc->sync_mode != WB_SYNC_NONE)
@@ -2254,14 +2259,19 @@ continue_unlock:
 			 */
 			BUG_ON(PageWriteback(page));
 			/*
-			 * 清除page和pte的dirty标记
+			 * 清除page和pte的dirty标记、可写标记
+			 * - 参见do_shared_fault()
+			 *   > 这里主要针对mmap的文件页，此时如果用户态再试图写
+			 *     本page，会触发页保护异常，在页保护异常中会完成与
+			 *     此处回写操作的互斥。
 			 */
 			if (!clear_page_dirty_for_io(page))
 				goto continue_unlock;
 
 			trace_wbc_writepage(wbc, inode_to_bdi(mapping->host));
 			/*
-			 * xfs: xfs_do_writepage
+			 * xfs: xfs_do_writepage()
+			 * - 将这个page进行提交
 			 */
 			error = (*writepage)(page, wbc, data);
 			if (unlikely(error)) {

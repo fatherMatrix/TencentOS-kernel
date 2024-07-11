@@ -44,7 +44,13 @@
 /* How many pages do we try to swap or page in/out together? */
 int page_cluster;
 
+/*
+ * 用于缓存原来不属于lru链表，新加入进来的页
+ */
 static DEFINE_PER_CPU(struct pagevec, lru_add_pvec);
+/*
+ * 都是非活动页且在非活动lru链表中，将这些页移动到非活动lru链表的末尾
+ */
 static DEFINE_PER_CPU(struct pagevec, lru_rotate_pvecs);
 static DEFINE_PER_CPU(struct pagevec, lru_deactivate_file_pvecs);
 static DEFINE_PER_CPU(struct pagevec, lru_deactivate_pvecs);
@@ -674,6 +680,9 @@ void mark_page_lazyfree(struct page *page)
 
 void lru_add_drain(void)
 {
+	/*
+	 * get_cpu()/put_cpu()的作用是在处理percpu的部分时，不要切换到其他cpu上
+	 */
 	lru_add_drain_cpu(get_cpu());
 	put_cpu();
 }
@@ -877,6 +886,9 @@ void lru_add_page_tail(struct page *page, struct page *page_tail,
 static void __pagevec_lru_add_fn(struct page *page, struct lruvec *lruvec)
 {
 	enum lru_list lru;
+	/*
+	 * 清除PageUnevictable()并返回原值
+	 */
 	int was_unevictable = TestClearPageUnevictable(page);
 
 	VM_BUG_ON_PAGE(PageLRU(page), page);
@@ -974,6 +986,9 @@ void __pagevec_lru_add(struct pagevec *pvec)
 	}
 	if (lruvec)
 		unlock_page_lruvec_irqrestore(lruvec, flags);
+	/*
+	 * __lru_cache_add()中将page
+	 */
 	release_pages(pvec->pages, pvec->nr);
 	pagevec_reinit(pvec);
 }

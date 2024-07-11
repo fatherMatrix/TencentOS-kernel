@@ -109,6 +109,9 @@ xfs_hole_to_iomap(
 	iomap->dax_dev = xfs_find_daxdev_for_inode(VFS_I(ip));
 }
 
+/*
+ * 决定本ip写的对齐尺寸
+ */
 xfs_extlen_t
 xfs_eof_alignment(
 	struct xfs_inode	*ip,
@@ -165,10 +168,18 @@ xfs_iomap_eof_align_last_fsb(
 		if (error)
 			return error;
 		/*
-		 * 如果new_last_fsb处于last extent之外
+		 * 如果new_last_fsb处于last extent之后
 		 */
 		if (eof)
 			*last_fsb = new_last_fsb;
+
+		/*
+		 * 如果new_last_fsb处于last extent结束之前，则还是使用原来的
+		 * last_fsb？
+		 * - 调用本函数时，我们似乎只对比了vfs inode size和last_fsb的大
+		 *   小，这里通过读取磁盘上的大小去做对比。
+		 *   > 看样子extsize似乎只在增大eof时起作用？
+		 */
 	}
 	return 0;
 }
@@ -195,6 +206,7 @@ xfs_iomap_write_direct(
 	int		lockmode;
 	/*
 	 * 啊，对directio，直接就XFS_BMAPI_PREALLOC了
+	 * - prealloc有什么好处和必要性呢？
 	 */
 	int		bmapi_flags = XFS_BMAPI_PREALLOC;
 	uint		tflags = 0;
@@ -241,6 +253,13 @@ xfs_iomap_write_direct(
 	}
 	count_fsb = last_fsb - offset_fsb;
 	ASSERT(count_fsb > 0);
+	/*
+	 * 此时offset_fsb，即写操作的起始位置可能与extsize不对齐，计算offset_fsb
+	 * 前面偏移了多少，并增加到count_fsb中；
+	 * count_fsb可能和extsize不对齐，计算尾部还需多少fsb才能和extsize对齐，
+	 * 将其增加到count_fsb中；
+	 * 将最终的count_fsb作为返回值返回；
+	 */
 	resaligned = xfs_aligned_fsb_count(offset_fsb, count_fsb, extsz);
 
 	if (unlikely(rt)) {
@@ -252,6 +271,12 @@ xfs_iomap_write_direct(
 		resrtextents = 0;
 		/*
 		 * 计算需要保留的disk data space
+		 * - 如果是本地更新的话，为什么我们还需要保留disk data space的空
+		 *   间呢？
+		 *   > 首先，XFS_DIOSTRAT_SPACE_RES()中需要计算修改元数据最少需
+		 *     要保留多少空间（元数据对应的btree level）；
+		 *   > 其次，这里可能真的不需要resaligned，可以判断一下是否需要
+		 *     进行保留。如果当前磁盘块已经存在且不为cow，则无需增加；
 		 * - 下面的xfs_trans_alloc()中的M_RES(mp)->tr_write中记录的是需
 		 *   要保留的disk log space空间
 		 */

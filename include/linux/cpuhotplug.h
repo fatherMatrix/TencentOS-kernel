@@ -22,6 +22,9 @@
  *              AP_ACTIVE			AP_ACTIVE
  */
 
+/*
+ * struct cpuhp_step cpuhp_hp_states[]全局数组中的索引
+ */
 enum cpuhp_state {
 	CPUHP_INVALID = -1,
 	CPUHP_OFFLINE = 0,

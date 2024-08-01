@@ -119,6 +119,9 @@ autosel:
 	if (!boot_cpu_has_bug(X86_BUG_CPU_MELTDOWN))
 		return;
 enable:
+	/*
+	 * 打开了pti=on或autosel决定打开时，设置X86_FEATURE_PTI
+	 */
 	setup_force_cpu_cap(X86_FEATURE_PTI);
 }
 

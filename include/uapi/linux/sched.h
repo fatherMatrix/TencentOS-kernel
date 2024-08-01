@@ -108,8 +108,9 @@ struct clone_args {
 /*
  * SCHED_NORMAL（以前称为SCHED_OTHER）分时调度策略是非实时进程的默认调度策略。
  * 所有普通进程的静态优先级都为0，因此，任何一个基于SCHED_FIFO或SCHED_RR调度策
- * 略的就绪进程都会抢占他们。Linux内核没有实现这类调度策略。？
+ * 略的就绪进程都会抢占他们。
  * - 参见fair_policy()
+ * - 绝大部分用户进程
  */
 #define SCHED_NORMAL		0
 /*
@@ -134,6 +135,9 @@ struct clone_args {
  * SCHED_BATCH（批处理调度）策略是普通进程调度策略。这个调度策略表示让调度起认为
  * 该进程是CPU消耗型的。因此，调度器对这类进程的唤醒惩罚比较小。在Linux内核里，
  * 该类调度策略表示使用CFS
+ * - 适用于没有用户交互行为的后台进程，用户对该类进程的响应时间要求不高，但对吞
+ *   吐量要求较高，因此调度器会在完成所有 SCHED_NORMAL 的任务之后让该类任务不受
+ *   打扰地跑上一段时间，这样能够最大限度地利用缓存。
  */
 #define SCHED_BATCH		3
 /* SCHED_ISO: reserved but not implemented yet */

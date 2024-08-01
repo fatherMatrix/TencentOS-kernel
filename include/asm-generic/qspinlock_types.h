@@ -135,6 +135,15 @@ typedef struct qspinlock {
 #define _Q_TAIL_MASK		(_Q_TAIL_IDX_MASK | _Q_TAIL_CPU_MASK)
 
 #define _Q_LOCKED_VAL		(1U << _Q_LOCKED_OFFSET)
+/*
+ * 第1个等待自旋锁的CPU直接在锁自身上面自旋等待，而不是在自己的mcs_spinlock结构
+ * 体上自旋等待。这个优化带来的好处是，当锁被释放的时候，不需要访问mcs_spinlock
+ * 结构体的缓存行，相当于减少了一次缓存不命中的情况。这是通过qspinlock结构体内的
+ * pending位来实现的，第1个等待自旋锁的CPU简单地设置pending位，然后自旋等待
+ * locked域变为0。如果这时候又有一个处理器想要获得这个自旋锁，它会看到pending位
+ * 已经被设置了，才会开始创建等待队列，在自己的mcs_spinlock结构体的locked字段上
+ * 自旋等待。
+ */
 #define _Q_PENDING_VAL		(1U << _Q_PENDING_OFFSET)
 
 #endif /* __ASM_GENERIC_QSPINLOCK_TYPES_H */

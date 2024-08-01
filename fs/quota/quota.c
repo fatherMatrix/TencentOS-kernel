@@ -97,8 +97,14 @@ static int quota_quotaoff(struct super_block *sb, int type)
 {
 	if (!sb->s_qcop->quota_off && !sb->s_qcop->quota_disable)
 		return -ENOSYS;
+	/*
+	 * xfs: xfs_quota_disable()
+	 */
 	if (sb->s_qcop->quota_disable)
 		return sb->s_qcop->quota_disable(sb, qtype_enforce_flag(type));
+	/*
+	 * ext4: ext4_quota_off()
+	 */
 	return sb->s_qcop->quota_off(sb, type);
 }
 

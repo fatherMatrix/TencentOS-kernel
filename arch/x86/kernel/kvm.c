@@ -790,6 +790,18 @@ static void kvm_wait(u8 *ptr, u8 val)
 	 * in irq spinlock slowpath and no spurious interrupt occur to save us.
 	 */
 	if (arch_irqs_disabled_flags(flags))
+	/*
+	 * 触发vmexit，处理流程：
+	 * - handle_halt() -> kvm_emulate_halt() -> kvm_vcpu_halt()
+	 *   > 标记vcpu->arch.mp_state = KVM_MP_STATE_HALTED
+	 * 下次vmentry时，block住vcpu，不让其运行：
+	 * - vcpu_run() -> vcpu_block() -> kvm_vcpu_block()
+	 *
+	 * guest唤醒点：
+	 * - __pv_queued_spin_unlock_slowpath() -> pv_kick() -> kvm_kick_cpu()
+	 * 触发vmexit，处理流程：
+	 * - ~> kvm_vcpu_kick()
+	 */
 		halt();
 	else
 		safe_halt();
@@ -848,6 +860,10 @@ void __init kvm_spinlock_init(void)
 		return;
 
 	__pv_init_lock_hash();
+	/*
+	 * 如果没有KVM_HINTS_REALTIME，即当前guestos没有绑核等操作，则使用
+	 * pv spinlock；反之，使用native_queued_spin_unlock()
+	 */
 	pv_ops.lock.queued_spin_lock_slowpath = __pv_queued_spin_lock_slowpath;
 	pv_ops.lock.queued_spin_unlock =
 		PV_CALLEE_SAVE(__pv_queued_spin_unlock);

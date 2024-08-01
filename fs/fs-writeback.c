@@ -339,6 +339,7 @@ locked_inode_to_wb_and_lock_list(struct inode *inode)
 		 * @inode->i_lock and @wb->list_lock but list_lock nests
 		 * outside i_lock.  Drop i_lock and verify that the
 		 * association hasn't changed after acquiring list_lock.
+		 * - 这里可以确保wb != NULL吗？
 		 */
 		wb_get(wb);
 		spin_unlock(&inode->i_lock);
@@ -2432,6 +2433,9 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 	 */
 	if (flags & I_DIRTY_INODE)
 		flags &= ~I_DIRTY_TIME;
+	/*
+	 * dirtytime为true表示不是I_DIRTY_INODE
+	 */
 	dirtytime = flags & I_DIRTY_TIME;
 
 	/*
@@ -2447,6 +2451,7 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 	/*
 	 * dirtytime为真表示调用者只想更新时间，不想干其他的；那么如果inode已经
 	 * 被标记上了作为超集的I_DIRTY_INODE，那我们就更不用管了，直接返回即可；
+	 * - 后面提交的时候会顺带把时间也更新
 	 */
 	    (dirtytime && (inode->i_state & I_DIRTY_INODE)))
 		return;
@@ -2457,6 +2462,7 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 	spin_lock(&inode->i_lock);
 	/*
 	 * 加锁后重新验证一次
+	 * - dirtytime为true以为者上面
 	 */
 	if (dirtytime && (inode->i_state & I_DIRTY_INODE))
 		goto out_unlock_inode;

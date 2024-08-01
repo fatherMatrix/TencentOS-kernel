@@ -7434,6 +7434,9 @@ int kvm_vcpu_halt(struct kvm_vcpu *vcpu)
 {
 	++vcpu->stat.halt_exits;
 	if (lapic_in_kernel(vcpu)) {
+		/*
+		 * 这将导致vcpu_run() ~> kvm_vcpu_running()判断失败
+		 */
 		vcpu->arch.mp_state = KVM_MP_STATE_HALTED;
 		return 1;
 	} else {
@@ -8499,6 +8502,10 @@ static inline int vcpu_block(struct kvm *kvm, struct kvm_vcpu *vcpu)
 {
 	if (!kvm_arch_vcpu_runnable(vcpu) &&
 	    (!kvm_x86_ops->pre_block || kvm_x86_ops->pre_block(vcpu) == 0)) {
+	/*
+	 * 典型情况：
+	 * - handle_halt() -> kvm_emulate_halt() -> kvm_vcpu_halt()导致进入本处
+	 */
 		srcu_read_unlock(&kvm->srcu, vcpu->srcu_idx);
 		kvm_vcpu_block(vcpu);
 		vcpu->srcu_idx = srcu_read_lock(&kvm->srcu);
@@ -8554,7 +8561,10 @@ static int vcpu_run(struct kvm_vcpu *vcpu)
 			/* 进入虚拟机 */
 			r = vcpu_enter_guest(vcpu);
 		} else {
-			/* 阻塞vcpu */
+			/*
+			 * 阻塞vcpu
+			 * - pvspinlock: kvm_wait()
+			 */
 			r = vcpu_block(kvm, vcpu);
 		}
 

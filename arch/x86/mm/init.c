@@ -671,6 +671,10 @@ void __init init_mem_mapping(void)
 {
 	unsigned long end;
 
+	/*
+	 * 决定kpti是不是要打开
+	 * - 这个一定要处于ALTERNATIVE发挥作用之前
+	 */
 	pti_check_boottime_disable();
 	/*
 	 * 设置page_size_mask全局变量，该变量决定了系统中支持的页框大小种类；

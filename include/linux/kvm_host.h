@@ -1272,6 +1272,9 @@ static inline int kvm_ioeventfd(struct kvm *kvm, struct kvm_ioeventfd *args)
 
 void kvm_arch_irq_routing_update(struct kvm *kvm);
 
+/*
+ * 进入guest之前会通过kvm_request_pending()进行检查
+ */
 static inline void kvm_make_request(int req, struct kvm_vcpu *vcpu)
 {
 	/*

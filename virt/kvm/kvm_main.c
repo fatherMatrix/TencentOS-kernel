@@ -2593,12 +2593,18 @@ void kvm_vcpu_block(struct kvm_vcpu *vcpu)
 			 * arrives.
 			 */
 			if (kvm_vcpu_check_block(vcpu) < 0) {
+			/*
+			 * 进入到这里说明要停止kvm poll
+			 */
 				++vcpu->stat.halt_successful_poll;
 				if (!vcpu_valid_wakeup(vcpu))
 					++vcpu->stat.halt_poll_invalid;
 				goto out;
 			}
 			cur = ktime_get();
+		/*
+		 * 只有当我们是该pcpu上的唯一一个task时，才进行poll
+		 */
 		} while (single_task_running() && ktime_before(cur, stop));
 	}
 

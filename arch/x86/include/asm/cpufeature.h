@@ -33,6 +33,10 @@ enum cpuid_leafs
 };
 
 #ifdef CONFIG_X86_FEATURE_NAMES
+/*
+ * 定义在arch/x86/kernel/cpu/capflags.c
+ * - 该文件是编译时自动生成的
+ */
 extern const char * const x86_cap_flags[NCAPINTS*32];
 extern const char * const x86_power_flags[32];
 #define X86_CAP_FMT "%s"
@@ -141,6 +145,12 @@ extern const char * const x86_bug_flags[NBUGINTS*32];
 extern void setup_clear_cpu_cap(unsigned int bit);
 extern void clear_cpu_cap(struct cpuinfo_x86 *c, unsigned int bit);
 
+/*
+ * 下面的两个位置的区别是什么？
+ * - set_cpu_cap()操作的是cpuinfo_x86->x86_capability
+ *   > 这里也是lscpu中flags的来源
+ * - cpu_caps_set的作用参见apply_forced_caps()
+ */
 #define setup_force_cpu_cap(bit) do { \
 	set_cpu_cap(&boot_cpu_data, bit);	\
 	set_bit(bit, (unsigned long *)cpu_caps_set);	\

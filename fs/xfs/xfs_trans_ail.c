@@ -372,6 +372,7 @@ xfsaild_push_item(
 	 * intent items都未定义此接口
 	 * - xfs_efi_item_ops
 	 * - xfs_bui_item_ops
+	 * - xfs_dquot_item_ops
 	 */
 	if (!lip->li_ops->iop_push)
 		return XFS_ITEM_PINNED;

@@ -488,6 +488,8 @@ xfs_iomap_prealloc_size(
 	/*
 	 * If an explicit allocsize is set, the file is small, or we
 	 * are writing behind a hole, then use the minimum prealloc:
+	 *
+	 * 如果配置了allocsize=挂载参数，则会屏蔽掉speculature prealloc
 	 */
 	if ((mp->m_flags & XFS_MOUNT_DFLT_IOSIZE) ||
 	    XFS_ISIZE(ip) < XFS_FSB_TO_B(mp, mp->m_dalign) ||
@@ -504,8 +506,11 @@ xfs_iomap_prealloc_size(
 	 * preallocation size.
 	 *
 	 * If the extent is a hole, then preallocation is essentially disabled.
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * Otherwise we take the size of the preceding data extent as the basis
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * for the preallocation size. If the size of the extent is greater than
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * half the maximum extent length, then use the current offset as the
 	 * basis. This ensures that for large files the preallocation size
 	 * always extends to MAXEXTLEN rather than falling short due to things
@@ -525,6 +530,8 @@ xfs_iomap_prealloc_size(
 	 * round down from unconditionally reducing the maximum supported prealloc
 	 * size, we round up first, apply appropriate throttling, round down and
 	 * cap the value to MAXEXTLEN.
+	 *
+	 * roundup_pow_of_two(MAXEXTLEN) == 2097152
 	 */
 	alloc_blocks = XFS_FILEOFF_MIN(roundup_pow_of_two(MAXEXTLEN),
 				       alloc_blocks);
@@ -854,6 +861,12 @@ xfs_file_iomap_begin_delay(
 			xfs_off_t	end_offset;
 			xfs_fileoff_t	p_end_fsb;
 
+			/*
+			 * 如果配置了-o allocsize=，则上面的xfs_iomap_prealloc_size()
+			 * 会直接返回xfs_mount->m_writeio_blocks，所以会导致这里。。
+			 * - 不对，即便是这样，也是会有prealloc，这不过这次prealloc
+			 *   的是m_writeio_blocks而已，不会那么大
+			 */
 			end_offset = XFS_WRITEIO_ALIGN(mp, offset + count - 1);
 			p_end_fsb = XFS_B_TO_FSBT(mp, end_offset) +
 					prealloc_blocks;
@@ -864,6 +877,9 @@ xfs_file_iomap_begin_delay(
 
 			p_end_fsb = min(p_end_fsb, maxbytes_fsb);
 			ASSERT(p_end_fsb > offset_fsb);
+			/*
+			 * 预分配的block数量
+			 */
 			prealloc_blocks = p_end_fsb - end_fsb;
 		}
 	}

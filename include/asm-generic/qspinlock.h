@@ -109,6 +109,7 @@ static __always_inline void queued_spin_unlock(struct qspinlock *lock)
 {
 	/*
 	 * unlock() needs release semantics:
+	 * - 击鼓传花在queued_spin_lock_slowpath()中已经做过了
 	 */
 	smp_store_release(&lock->locked, 0);
 }

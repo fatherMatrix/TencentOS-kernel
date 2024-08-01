@@ -15,6 +15,9 @@
 
 #include <asm/mcs_spinlock.h>
 
+/*
+ * pvspinlock下，该结构体内嵌到pv_node中
+ */
 struct mcs_spinlock {
 	struct mcs_spinlock *next;
 	int locked; /* 1 if lock acquired */

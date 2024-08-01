@@ -338,7 +338,12 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	 * 成了(0, 1, 0)。
 	 * 这是一个临时状态，因此当前cpu需要自旋，直到该临时状态消失或者自旋次
 	 * 数耗尽（自旋次数等于1 << 9）。
+	 *
 	 * 会不会出现自旋次数耗尽但临时状态仍未消失的情况？
+	 * - 如果硬件出问题了，可能会存在。
+	 *   > 因为从(0,1,1) -> (0,1,0)这个操作到(0,1,0) -> (0,0,1)这个操作之间
+	 *     没啥指令，这两个操作是紧挨着的；
+	 *     x 参见本函数下面
 	 */
 	if (val == _Q_PENDING_VAL) {
 		int cnt = _Q_PENDING_LOOPS;
@@ -367,6 +372,7 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	 * trylock || pending
 	 *
 	 * 0,0,* -> 0,1,* -> 0,0,1 pending, trylock
+	 * - 返回的val是原来的值
 	 */
 	val = queued_fetch_set_pending_acquire(lock);
 
@@ -378,6 +384,11 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	 * on @next to become !NULL.
 	 */
 	if (unlikely(val & ~_Q_LOCKED_MASK)) {
+	/*
+	 * 由于上面的val返回的是lock中原来的值，如果原来没有pending位，则说明我
+	 * 们是第一个给上面设置pending位的，但这个时候（lock中有tail）我们不能
+	 * 设置pending位，所以要清除这个多余的pending位
+	 */
 
 		/* Undo PENDING if we set it. */
 		if (!(val & _Q_PENDING_MASK))
@@ -396,6 +407,8 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	 * sequentiality; this is because not all
 	 * clear_pending_set_locked() implementations imply full
 	 * barriers.
+	 *
+	 * 我们是设置pending位的人，自旋等待locked位清除
 	 */
 	if (val & _Q_LOCKED_MASK)
 		atomic_cond_read_acquire(&lock->val, !(VAL & _Q_LOCKED_MASK));
@@ -404,6 +417,9 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 	 * take ownership and clear the pending bit.
 	 *
 	 * 0,1,0 -> 0,0,1
+	 *
+	 * 清除pending位并设置locked位，标记我们获取了锁
+	 * - 上面执行完、这里还未执行时，是上面提到的临时情况
 	 */
 	clear_pending_set_locked(lock);
 	lockevent_inc(lock_pending);
@@ -490,9 +506,24 @@ pv_queue:
 	if (old & _Q_TAIL_MASK) {
 		prev = decode_tail(old);
 
-		/* Link @node into the waitqueue. */
+		/*
+		 * Link @node into the waitqueue.
+		 *
+		 * 如何保证做这个操作的同时，prev这个cpu本身没有获取到锁且快速
+		 * 释放了锁呢？
+		 */
 		WRITE_ONCE(prev->next, node);
 
+		/*
+		 * 下面两个函数都是等mcs node中的locked变为true
+		 * - 对于pvspinlock，在pv_wait_node()中等待；
+		 *   > pvspinlock如果在pv_wait_node()中等待结束，则下面的又一个
+		 *     等待必定会绕过；
+		 * - 对于spinlock，在arch_mcs_spin_lock_contended()中等待；
+		 *
+		 * 值得注意的是，mcs node中的locked变为true，并不代表对应cpu获取
+		 * 到了本自旋锁，只说明其到了队列头
+		 */
 		pv_wait_node(node, prev);
 		arch_mcs_spin_lock_contended(&node->locked);
 
@@ -531,6 +562,9 @@ pv_queue:
 	if ((val = pv_wait_head_or_lock(lock, node)))
 		goto locked;
 
+	/*
+	 * 等待pending和locked位被清除
+	 */
 	val = atomic_cond_read_acquire(&lock->val, !(VAL & _Q_LOCKED_PENDING_MASK));
 
 locked:
@@ -554,11 +588,17 @@ locked:
 	 * Note: at this point: (val & _Q_PENDING_MASK) == 0, because of the
 	 *       above wait condition, therefore any concurrent setting of
 	 *       PENDING will make the uncontended transition fail.
+	 *
+	 * 我们是当前唯一想要获取这把锁的人了，可以直接获取锁；
 	 */
 	if ((val & _Q_TAIL_MASK) == tail) {
 		if (atomic_try_cmpxchg_relaxed(&lock->val, &val, _Q_LOCKED_VAL))
 			goto release; /* No contention */
 	}
+
+	/*
+	 * 走到这里说明tail不指向我们，我们肯定有一个next
+	 */
 
 	/*
 	 * Either somebody is queued behind us or _Q_PENDING_VAL got set
@@ -569,11 +609,17 @@ locked:
 
 	/*
 	 * contended path; wait for next if not observed yet, release.
+	 * - 虽然我们知道我们肯定有一个next，但是这个next有可能还未被设置，此处
+	 *   等待其被publish
+	 *   > 没有几条指令，可以等一下
 	 */
 	if (!next)
 		next = smp_cond_load_relaxed(&node->next, (VAL));
 
 	arch_mcs_spin_unlock_contended(&next->locked);
+	/*
+	 * 如何唤醒vcpu呢？
+	 */
 	pv_kick_node(lock, next);
 
 release:

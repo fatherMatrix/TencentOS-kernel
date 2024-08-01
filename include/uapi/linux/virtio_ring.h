@@ -115,6 +115,7 @@ struct vring_desc {
 /*
  * Guest通过Avail Ring向Host提供buffer，指示Guest增加的buffer位置和当前工作的位
  * 置
+ * - 只能被driver写，被device读
  */
 struct vring_avail {
 	__virtio16 flags;
@@ -146,6 +147,7 @@ struct vring_used_elem {
 
 /*
  * Host向guest通知已处理的
+ * - 只能被device写、被driver读
  */
 struct vring_used {
 	__virtio16 flags;

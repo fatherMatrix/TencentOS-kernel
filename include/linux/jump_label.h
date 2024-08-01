@@ -301,6 +301,9 @@ static inline int jump_label_apply_nops(struct module *mod)
 	return 0;
 }
 
+/*
+ * 此处未定义CONFIG_JUMP_LABEL
+ */
 static inline void static_key_enable(struct static_key *key)
 {
 	STATIC_KEY_CHECK_USE(key);

@@ -112,6 +112,10 @@ typedef struct xfs_mount {
 	spinlock_t		m_agirotor_lock;/* .. and lock protecting it */
 
 	xfs_agnumber_t		m_maxagi;	/* highest inode alloc group */
+	/*
+	 * m_readio_log/m_writeio_log来源是mount -o allocsize
+	 * m_readio_blocks/m_writeio_blocks根据对应_log计算
+	 */
 	uint			m_readio_log;	/* min read size log bytes */
 	uint			m_readio_blocks; /* min read size blocks */
 	uint			m_writeio_log;	/* min write size log bytes */
@@ -293,6 +297,9 @@ typedef struct xfs_mount {
 #define XFS_MOUNT_ATTR2		(1ULL << 8)	/* allow use of attr2 format */
 #define XFS_MOUNT_GRPID		(1ULL << 9)	/* group-ID assigned from directory */
 #define XFS_MOUNT_NORECOVERY	(1ULL << 10)	/* no recovery - dirty fs */
+/*
+ * 设置了mount -o allocsize=
+ */
 #define XFS_MOUNT_DFLT_IOSIZE	(1ULL << 12)	/* set default i/o size */
 #define XFS_MOUNT_SMALL_INUMS	(1ULL << 14)	/* user wants 32bit inodes */
 #define XFS_MOUNT_32BITINODES	(1ULL << 15)	/* inode32 allocator active */

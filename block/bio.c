@@ -1887,6 +1887,10 @@ again:
 	stamp = READ_ONCE(part->stamp);
 	if (unlikely(stamp != now)) {
 		if (likely(cmpxchg(&part->stamp, stamp, now) == stamp)) {
+			/*
+			 * 每个io下发时，先给io_ticks加1，保证当前jiffies被统计；
+			 * 每个io结束时，增加这个io跨越的jiffies；
+			 */
 			__part_stat_add(part, io_ticks, end ? now - stamp : 1);
 		}
 	}

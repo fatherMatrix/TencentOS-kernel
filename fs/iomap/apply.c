@@ -73,6 +73,7 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	 * as it might not be able to give us the whole size that we requested.
 	 *
 	 * 难道还会出现iomap.offset和pos不相同的情况吗？
+	 * - 这倒不会，但是会出现iomap.length和length不同的情况
 	 */
 	if (iomap.offset + iomap.length < pos + length)
 		length = iomap.offset + iomap.length - pos;
@@ -102,7 +103,9 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	 * should not fail unless the filesystem has had a fatal error.
 	 *
 	 * 对xfs，对应函数 xfs_file_iomap_end()
-	 * - 猜测：对于写操作，且有磁盘上空间的释放需求时，在这里做；
+	 * - delayed alloc中分配的往往是过量的blocks，这里将多的那部分删除掉
+	 *   > 但应该注意的是，这里删除的只是length之前的，length中并不包含begin
+	 *     中prealloc的部分；
 	 */
 	if (ops->iomap_end) {
 		ret = ops->iomap_end(inode, pos, length,

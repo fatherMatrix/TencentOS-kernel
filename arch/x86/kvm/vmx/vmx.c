@@ -5680,6 +5680,9 @@ static int (*kvm_vmx_exit_handlers[])(struct kvm_vcpu *vcpu) = {
 	[EXIT_REASON_DR_ACCESS]               = handle_dr,
 	[EXIT_REASON_CPUID]                   = handle_cpuid,
 	[EXIT_REASON_MSR_READ]                = handle_rdmsr,
+	/*
+	 * wrmsr导致的vmexit
+	 */
 	[EXIT_REASON_MSR_WRITE]               = handle_wrmsr,
 	[EXIT_REASON_PENDING_INTERRUPT]       = handle_interrupt_window,
 	[EXIT_REASON_HLT]                     = handle_halt,

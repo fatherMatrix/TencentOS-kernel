@@ -113,6 +113,7 @@ static inline void cpuhp_lock_release(bool bringup) { }
  * @cant_stop:	Bringup/teardown can't be stopped at this step
  *
  * 每个cpuhp_state中的状态对应的操作函数
+ * - 全局静态变量cpuhp_hp_states
  */
 struct cpuhp_step {
 	const char		*name;

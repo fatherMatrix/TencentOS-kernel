@@ -3337,6 +3337,7 @@ ssize_t generic_perform_write(struct file *file,
 	struct address_space *mapping = file->f_mapping;
 	/*
 	 * ext4的普通情况下是： ext4_aops
+	 * delayed allocate情况下是：ext4_da_aops
 	 */
 	const struct address_space_operations *a_ops = mapping->a_ops;
 	long status = 0;
@@ -3417,6 +3418,7 @@ again:
 
 		/*
 		 * ext4_write_end()
+		 * ext4_da_write_end()
 		 */
 		status = a_ops->write_end(file, mapping, pos, bytes, copied,
 						page, fsdata);

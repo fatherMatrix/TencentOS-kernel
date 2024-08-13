@@ -19,6 +19,10 @@
 
 static inline unsigned long long paravirt_sched_clock(void)
 {
+	/*
+	 * 物理机：native_sched_clock()
+	 * 虚拟机：kvm_sched_clock_read()
+	 */
 	return PVOP_CALL0(unsigned long long, time.sched_clock);
 }
 

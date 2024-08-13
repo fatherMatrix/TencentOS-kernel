@@ -440,6 +440,11 @@ int pci_find_capability(struct pci_dev *dev, int cap)
 {
 	int pos;
 
+	/*
+	 * 找到pci配置空间中capability起始指针
+	 * - 之所以要找，是因为capability不处于前64字节标准配置空间中，所以要根
+	 *   据实际情况来确定在哪里
+	 */
 	pos = __pci_bus_find_cap_start(dev->bus, dev->devfn, dev->hdr_type);
 	if (pos)
 		pos = __pci_find_next_cap(dev->bus, dev->devfn, pos, cap);
@@ -1606,6 +1611,10 @@ static int do_pci_enable_device(struct pci_dev *dev, int bars)
 	if (bridge)
 		pcie_aspm_powersave_config_link(bridge);
 
+	/*
+	 * 开启中断
+	 * - 对于设备来说，开启中断，其实就意味着这个设备可以正常工作了
+	 */
 	err = pcibios_enable_device(dev, bars);
 	if (err < 0)
 		return err;

@@ -744,6 +744,7 @@ struct task_struct {
 	/*
 	 * Current CPU:
 	 * - 表示当前进程正运行在哪个cpu上
+	 *   > 如果本进程不在线呢？
 	 */
 	unsigned int			cpu;
 #endif

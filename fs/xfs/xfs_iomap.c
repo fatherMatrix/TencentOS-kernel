@@ -715,9 +715,13 @@ xfs_file_iomap_begin_delay(
 	/*
 	 * Search the COW fork extent list even if we did not find a data fork
 	 * extent.  This serves two purposes: first this implements the
+	 *                                    ^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * speculative preallocation using cowextsize, so that we also unshare
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * block adjacent to shared blocks instead of just the shared blocks
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * themselves.  Second the lookup in the extent list is generally faster
+	 * ^^^^^^^^^^^
 	 * than going out to the shared extent tree.
 	 */
 	if (xfs_is_cow_inode(ip)) {

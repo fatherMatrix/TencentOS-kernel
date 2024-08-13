@@ -283,7 +283,10 @@ void __init pci_direct_init(int type)
 int __init pci_direct_probe(void)
 {
 	/*
-	 * 听说现在已经放弃使用type2了
+	 * pci_probe全局变量的缺省配置：BIOS | CONF1 | CONF2 | MMCONF；
+	 * - PCI_PROBE_xxx
+	 * 手动配置：linux cmdline: pci=xxx
+	 * - 参见early_param("pci", pci_setup)
 	 */
 	if ((pci_probe & PCI_PROBE_CONF1) == 0)
 		goto type2;

@@ -5987,10 +5987,18 @@ static int select_idle_core(struct task_struct *p, struct sched_domain *sd, int 
 
 		for_each_cpu(cpu, cpu_smt_mask(core)) {
 			__cpumask_clear_cpu(cpu, cpus);
+			/*
+			 * 这个smt sched_domain中有一个cpu不是idle，则idle变量
+			 * 设置为false
+			 */
 			if (!available_idle_cpu(cpu))
 				idle = false;
 		}
 
+		/*
+		 * 只有core对应的smt sched_domain中所有的cpu都是idle，才会通过
+		 * 检查并返回这个core
+		 */
 		if (idle)
 			return core;
 	}
@@ -6567,6 +6575,9 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int sd_flag, int wake_f
 	if (sd_flag & SD_BALANCE_WAKE) {
 		record_wakee(p);
 
+		/*
+		 * tkernel4未开启本分支
+		 */
 		if (sched_energy_enabled()) {
 			new_cpu = find_energy_efficient_cpu(p, prev_cpu);
 			if (new_cpu >= 0)

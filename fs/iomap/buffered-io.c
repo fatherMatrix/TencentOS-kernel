@@ -728,6 +728,16 @@ iomap_write_end(struct inode *inode, loff_t pos, unsigned len,
 	 * Update the in-memory inode size after copying the data into the page
 	 * cache.  It's up to the file system to write the updated size to disk,
 	 * preferably after I/O completion so that no stale data is exposed.
+	 *
+	 * xfs在这里仅更新了vfs inode size，未更新disk inode isize
+	 * - xfs在哪里更新的disk inode isize？
+	 *   > page cache writeback
+	 *       xfs_vm_writepages
+	 *         xfs_end_bio
+	 *           xfs_end_io
+	 *             xfs_end_ioend
+	 *               xfs_iomap_write_unwritten ?
+	 *               xfs_setfilesize_ioend ?
 	 */
 	if (pos + ret > old_size) {
 		i_size_write(inode, pos + ret);
@@ -791,6 +801,10 @@ again:
 		if (mapping_writably_mapped(inode->i_mapping))
 			flush_dcache_page(page);
 
+		/*
+		 * 这里仅是从userspace拷贝到pagecache，真正的回写操作：
+		 * - xfs_vm_writepages()
+		 */
 		copied = iov_iter_copy_from_user_atomic(page, i, offset, bytes);
 
 		flush_dcache_page(page);

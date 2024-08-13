@@ -62,6 +62,9 @@
 /* pci_slot represents a physical slot */
 struct pci_slot {
 	struct pci_bus		*bus;		/* Bus this slot is on */
+	/*
+	 * 作为链表元素链入pci_bus->slots
+	 */
 	struct list_head	list;		/* Node in list of slots */
 	struct hotplug_slot	*hotplug;	/* Hotplug info (move here) */
 	unsigned char		number;		/* PCI_SLOT(pci_dev->devfn) */
@@ -290,8 +293,14 @@ struct pci_p2pdma;
 
 /* The pci_dev structure describes PCI devices */
 struct pci_dev {
+	/*
+	 * 作为链表元素链入pci_bus->device
+	 */
 	struct list_head bus_list;	/* Node in per-bus list */
 	struct pci_bus	*bus;		/* Bus this device is on */
+	/*
+	 * 如果本设备是一个pci-pci桥，会引出一根新的总线
+	 */
 	struct pci_bus	*subordinate;	/* Bus this device bridges to */
 
 	void		*sysdata;	/* Hook for sys-specific extension */
@@ -594,11 +603,21 @@ struct pci_bus {
 	struct list_head children;	/* List of child buses */
 	/*
 	 * 这个链表和bus_type->subsys_private->klist_devices功能上的区别？
+	 * - 这个链表的链表元素是pci_dev->bus_list
+	 * - subsys_private->klist_devices应该是满足kobject机制的，逻辑上确实是
+	 *   有重复的
 	 */
 	struct list_head devices;	/* List of devices on this bus */
+	/*
+	 * 指向引出此pci_bus的pci-pci桥
+	 * - pci-pci桥本身也是一个pci_dev
+	 */
 	struct pci_dev	*self;		/* Bridge device as seen by parent */
 	/*
 	 * 总线插槽的链表头，链表节点是pci_slot->list字段
+	 * - 对于pci bus来说，一个bus上应该最多有256个device？
+	 *   > pcie还有256这个限制吗？
+	 *   > 在哪里设置的呢？
 	 */
 	struct list_head slots;		/* List of slots on this bus;
 					   protected by pci_slot_mutex */

@@ -163,6 +163,9 @@ EXPORT_SYMBOL_GPL(virtio_config_enable);
 void virtio_add_status(struct virtio_device *dev, unsigned int status)
 {
 	might_sleep();
+	/*
+	 * virtio_pci_config_ops.vp_set_status()
+	 */
 	dev->config->set_status(dev, dev->config->get_status(dev) | status);
 }
 EXPORT_SYMBOL_GPL(virtio_add_status);
@@ -193,6 +196,9 @@ EXPORT_SYMBOL_GPL(virtio_finalize_features);
 static int virtio_dev_probe(struct device *_d)
 {
 	int err, i;
+	/*
+	 * 传入的参数_d是virtio_pci_device->virtio_device->device
+	 */
 	struct virtio_device *dev = dev_to_virtio(_d);
 	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
 	u64 device_features;
@@ -202,7 +208,10 @@ static int virtio_dev_probe(struct device *_d)
 	/* We have a driver! */
 	virtio_add_status(dev, VIRTIO_CONFIG_S_DRIVER);
 
-	/* Figure out what features the device supports. */
+	/*
+	 * Figure out what features the device supports.
+	 * - 参见：virtio_pci_config_ops.vp_get_features()
+	 */
 	device_features = dev->config->get_features(dev);
 
 	/* Figure out what features the driver supports. */
@@ -245,6 +254,9 @@ static int virtio_dev_probe(struct device *_d)
 	if (err)
 		goto err;
 
+	/*
+	 * virtio_blk: virtblk_probe()
+	 */
 	err = drv->probe(dev);
 	if (err)
 		goto err;
@@ -346,6 +358,7 @@ int register_virtio_device(struct virtio_device *dev)
 	/*
 	 * device_add() causes the bus infrastructure to look for a matching
 	 * driver.
+	 * - 触发virtio_dev_probe()
 	 */
 	err = device_add(&dev->dev);
 	if (err)

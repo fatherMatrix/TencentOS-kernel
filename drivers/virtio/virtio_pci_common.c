@@ -515,12 +515,22 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 	struct virtio_pci_device *vp_dev, *reg_dev = NULL;
 	int rc;
 
-	/* allocate our structure and fill it out */
+	/*
+	 * allocate our structure and fill it out
+	 * - 分配virtio_pci_device内存
+	 */
 	vp_dev = kzalloc(sizeof(struct virtio_pci_device), GFP_KERNEL);
 	if (!vp_dev)
 		return -ENOMEM;
 
+	/*
+	 * 将virtio_pci_device设置给pci_dev->device->driver_data
+	 */
 	pci_set_drvdata(pci_dev, vp_dev);
+	/*
+	 * virtio_pci_device->virtio_device->device->parent = pci_dev->device
+	 * - pci_dev作为virtio_pci_device的父设备
+	 */
 	vp_dev->vdev.dev.parent = &pci_dev->dev;
 	vp_dev->vdev.dev.release = virtio_pci_release_dev;
 	vp_dev->pci_dev = pci_dev;

@@ -114,7 +114,11 @@
 /* PCI configuration access */
 #define VIRTIO_PCI_CAP_PCI_CFG		5
 
-/* This is the PCI capability header: */
+/*
+ * This is the PCI capability header:
+ * - 这是pci配置空间中pci capability链表元素的数据结构
+ *   > cap_next即链表指针
+ */
 struct virtio_pci_cap {
 	__u8 cap_vndr;		/* Generic PCI field: PCI_CAP_ID_VNDR */
 	__u8 cap_next;		/* Generic PCI field: next ptr. */

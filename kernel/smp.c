@@ -671,6 +671,9 @@ void __init smp_init(void)
 	 * 非主CPU上idle进程的创建
 	 */
 	idle_threads_init();
+	/*
+	 * 向内核注册cpuhp线程
+	 */
 	cpuhp_threads_init();
 
 	pr_info("Bringing up secondary CPUs ...\n");

@@ -137,10 +137,9 @@ struct vring_used_elem {
 	/*
 	 * Total length of the descriptor chain which was used (written to)
 	 * - 之所以vring_used_elem中有长度，而vring_avail中没有，是因为：
-	 *   > 驱动向设备写的都是命令字，往往比较简单。即便是向设备存数据，也只
-	 *     是写一个地址进去。
-	 *   > 设备向驱动反馈时，有可能有数据。
-	 *     o DMA时数据应该也不多吧？
+	 *   > driver清楚自己向device写了多少数据，但并不清楚device要向driver返
+	 *     回多少数据，因此需要device自己通过本字段向driver报告返回了多少数
+	 *     据
 	 */
 	__virtio32 len;
 };

@@ -1241,6 +1241,9 @@ __visit_domain_allocation_hell(struct s_data *d, const struct cpumask *cpu_map)
 {
 	memset(d, 0, sizeof(*d));
 
+	/*
+	 * 分配调度域结构体
+	 */
 	if (__sdt_alloc(cpu_map))
 		return sa_sd_storage;
 	d->sd = alloc_percpu(struct sched_domain *);
@@ -1348,10 +1351,10 @@ sd_init(struct sched_domain_topology_level *tl,
 
 		.flags			= 1*SD_LOAD_BALANCE
 					| 1*SD_BALANCE_NEWIDLE
-					| 1*SD_BALANCE_EXEC
+					| 1*SD_BALANCE_EXEC	// 有
 					| 1*SD_BALANCE_FORK
 					| 0*SD_BALANCE_WAKE
-					| 1*SD_WAKE_AFFINE
+					| 1*SD_WAKE_AFFINE	// 有
 					| 0*SD_SHARE_CPUCAPACITY
 					| 0*SD_SHARE_PKG_RESOURCES
 					| 0*SD_SERIALIZE
@@ -1403,6 +1406,9 @@ sd_init(struct sched_domain_topology_level *tl,
 
 		sd->flags &= ~SD_PREFER_SIBLING;
 		sd->flags |= SD_SERIALIZE;
+		/*
+		 * 当numa distance大于node_reclaim_distance时，会删除如下3个标记
+		 */
 		if (sched_domains_numa_distance[tl->numa_level] > node_reclaim_distance) {
 			sd->flags &= ~(SD_BALANCE_EXEC |
 				       SD_BALANCE_FORK |
@@ -1431,6 +1437,13 @@ sd_init(struct sched_domain_topology_level *tl,
 
 /*
  * Topology list, bottom-up.
+ *
+ * Linux默认的物理拓扑结构
+ * - 这里只有三级物理拓扑，SMP、MC、DIE，最高级NUMA是在sched_init_numa()自动检
+ *   测并添加的；
+ * - 对于不存在DIE域的架构（Intel平台），那么就会出现LLC与DIE域重叠的情况。所以
+ *   内核会在调度域建立好之后，在cpu_attach_domain()中扫描所有调度域，如果存在
+ *   重叠的情况，则会通过destroy_sched_domain()删除对应的重叠调度域；
  */
 static struct sched_domain_topology_level default_topology[] = {
 #ifdef CONFIG_SCHED_SMT
@@ -1443,6 +1456,9 @@ static struct sched_domain_topology_level default_topology[] = {
 	{ NULL, },
 };
 
+/*
+ * 可通过set_sched_topology()替换该默认值
+ */
 static struct sched_domain_topology_level *sched_domain_topology =
 	default_topology;
 
@@ -1753,8 +1769,15 @@ static int __sdt_alloc(const struct cpumask *cpu_map)
 	int j;
 
 	for_each_sd_topology(tl) {
+	/*
+	 * 遍历sched_domain_topology_level数组，针对每个层级进行如下操作：
+	 * - 从SMT -> NUMA
+	 */
 		struct sd_data *sdd = &tl->data;
 
+		/*
+		 * 针对某一个层级，分配percpu结构体指针
+		 */
 		sdd->sd = alloc_percpu(struct sched_domain *);
 		if (!sdd->sd)
 			return -ENOMEM;
@@ -1772,6 +1795,10 @@ static int __sdt_alloc(const struct cpumask *cpu_map)
 			return -ENOMEM;
 
 		for_each_cpu(j, cpu_map) {
+		/*
+		 * 每个cpu在每个调度域层级上都有一个sched_domain、一个
+		 * sched_domain_shared、一个sched_group、一个sched_group_capacity
+		 */
 			struct sched_domain *sd;
 			struct sched_domain_shared *sds;
 			struct sched_group *sg;
@@ -1995,13 +2022,20 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 	if (WARN_ON(cpumask_empty(cpu_map)))
 		goto error;
 
+	/*
+	 * 分配sched_domain
+	 */
 	alloc_state = __visit_domain_allocation_hell(&d, cpu_map);
 	if (alloc_state != sa_rootdomain)
 		goto error;
 
 	tl_asym = asym_cpu_capacity_level(cpu_map);
 
-	/* Set up domains for CPUs specified by the cpu_map: */
+	/*
+	 * Set up domains for CPUs specified by the cpu_map:
+	 * - 上面__visit_domain_allocation_hell()中仅分配了众多结构体的内存，并
+	 *   没有建立关系；
+	 */
 	for_each_cpu(i, cpu_map) {
 		struct sched_domain_topology_level *tl;
 
@@ -2150,7 +2184,13 @@ int sched_init_domains(const struct cpumask *cpu_map)
 	doms_cur = alloc_sched_domains(ndoms_cur);
 	if (!doms_cur)
 		doms_cur = &fallback_doms;
+	/*
+	 * isolcpus=对某些cpu进行了隔离，这些cpu不会加入到调度域里面
+	 */
 	cpumask_and(doms_cur[0], cpu_map, housekeeping_cpumask(HK_FLAG_DOMAIN));
+	/*
+	 * 建立调度域
+	 */
 	err = build_sched_domains(doms_cur[0], NULL);
 	register_sched_domain_sysctl();
 

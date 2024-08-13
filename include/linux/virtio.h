@@ -116,6 +116,10 @@ struct virtio_device {
 	spinlock_t config_lock;
 	struct device dev;
 	struct virtio_device_id id;
+	/*
+	 * virtio_pci_config_ops
+	 * virtio_pci_config_nodev_ops
+	 */
 	const struct virtio_config_ops *config;
 	const struct vringh_config_ops *vringh_config;
 	/*

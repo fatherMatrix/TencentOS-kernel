@@ -1332,6 +1332,11 @@ static noinline void __init kernel_init_freeable(void)
 	 * 非主CPU的启动
 	 */
 	smp_init();
+	/*
+	 * 在真正开始sched_init_smp()初始化调度域之前，需要先bring up所有AP，并
+	 * 保证这些AP处于ready状态
+	 * - 为什么？
+	 */
 	sched_init_smp();
 
 	page_alloc_init_late();

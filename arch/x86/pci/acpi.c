@@ -397,6 +397,10 @@ int pcibios_root_bridge_prepare(struct pci_host_bridge *bridge)
 	return 0;
 }
 
+/*
+ * 调用处：pci_subsys_init()
+ * 配置处：acpi_boot_init()
+ */
 int __init pci_acpi_init(void)
 {
 	struct pci_dev *dev = NULL;

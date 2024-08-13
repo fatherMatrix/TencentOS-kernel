@@ -20,8 +20,20 @@ do {						\
 #endif
 
 #define PCI_PROBE_BIOS		0x0001
+/*
+ * 0xcf8, 0xcfc端口方式
+ * - 只能访问设备配置空间的前256字节
+ * - 参见：pci_conf1_read() / pci_conf1_write()
+ */
 #define PCI_PROBE_CONF1		0x0002
+/*
+ * 不清楚，没见过
+ */
 #define PCI_PROBE_CONF2		0x0004
+/*
+ * ECAM方式
+ * - 参见：pci_memcfg_read() / pci_memcfg_write()
+ */
 #define PCI_PROBE_MMCONF	0x0008
 #define PCI_PROBE_MASK		0x000f
 #define PCI_PROBE_NOEARLY	0x0010
@@ -209,6 +221,9 @@ static inline void mmio_config_writel(void __iomem *pos, u32 val)
 }
 
 #ifdef CONFIG_PCI
+/*
+ * devcloud: CONFIG_ACPI=y
+ */
 # ifdef CONFIG_ACPI
 #  define x86_default_pci_init		pci_acpi_init
 # else

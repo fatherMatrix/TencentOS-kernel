@@ -85,6 +85,11 @@ struct rq;
 struct cpuidle_state;
 
 /* task_struct::on_rq states: */
+/*
+ * 当任务被唤醒并需要加入就绪队列时，此标志会被设置。
+ * 当任务开始执行时，即从就绪队列中移除并分配到 CPU 上时，此标志会被清除。
+ * 在处理任务迁移或优先级变更等事件时，此标志的状态也会被考虑。
+ */
 #define TASK_ON_RQ_QUEUED	1
 #define TASK_ON_RQ_MIGRATING	2
 
@@ -1017,7 +1022,14 @@ struct rq {
 	struct root_domain		*rd;
 	struct sched_domain __rcu	*sd;
 
+	/*
+	 * 可用于调度器的算力
+	 * - 该值会不断变化，参见update_cpu_capacity()
+	 */
 	unsigned long		cpu_capacity;
+	/*
+	 * cpu原始算力的表述，和微架构及最大频率相关
+	 */
 	unsigned long		cpu_capacity_orig;
 
 	struct callback_head	*balance_callback;
@@ -1512,6 +1524,13 @@ struct sched_group_capacity {
 	unsigned long		cpumask[0];		/* Balance mask */
 };
 
+/*
+ * sched_domain可以由一个或多个sched_group组成，每个sched_group也代表一组可以共
+ * 享属性和调度参数的一组cpu。属于同一个sched_domain的sched_group集合组成了
+ * sched_domain代表的cpu。
+ *
+ * sched_domain进行负载均衡的目的就是保证其内部各个sched_group之间的负载均衡
+ */
 struct sched_group {
 	struct sched_group	*next;			/* Must be a circular list */
 	atomic_t		ref;

@@ -200,6 +200,11 @@ void pci_dev_assign_slot(struct pci_dev *dev)
 	struct pci_slot *slot;
 
 	mutex_lock(&pci_slot_mutex);
+	/*
+	 * 看样子是pci_bus->slots已经分配好了这么多pci_slot，这里只需要找到对应
+	 * pci_slot并将其赋值给pci_dev->slot即可；
+	 * - 那么是在哪里分配的？
+	 */
 	list_for_each_entry(slot, &dev->bus->slots, list)
 		if (PCI_SLOT(dev->devfn) == slot->number)
 			dev->slot = slot;

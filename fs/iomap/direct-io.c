@@ -101,6 +101,8 @@ static ssize_t iomap_dio_complete(struct iomap_dio *dio)
 
 	/*
 	 * 对于xfs dio，end_io = xfs_dio_write_ops.xfs_dio_write_end_io()
+	 * - 更新vfs inode size
+	 * - 更新xfs inode size
 	 */
 	if (dops && dops->end_io)
 		ret = dops->end_io(iocb, dio->size, ret, dio->flags);

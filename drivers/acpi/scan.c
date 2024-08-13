@@ -2214,6 +2214,10 @@ int __init acpi_scan_init(void)
 	acpi_status status;
 	struct acpi_table_stao *stao_ptr;
 
+	/*
+	 * 注册对pci/pcie host bridge的handler
+	 * - ACPI枚举过程中，发现device后会调用对应的attach()方法
+	 */
 	acpi_pci_root_init();
 	acpi_pci_link_init();
 	acpi_processor_init();
@@ -2257,6 +2261,8 @@ int __init acpi_scan_init(void)
 	mutex_lock(&acpi_scan_lock);
 	/*
 	 * Enumerate devices in the ACPI namespace.
+	 *
+	 * 正式的ACPI设备枚举流程
 	 */
 	result = acpi_bus_scan(ACPI_ROOT_OBJECT);
 	if (result)

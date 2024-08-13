@@ -3226,6 +3226,10 @@ static int ext4_da_write_end(struct file *file,
 		ret2 = ext4_da_write_inline_data_end(inode, pos, len, copied,
 						     page);
 	else
+		/*
+		 * 这里有bug吧，这个函数里面似乎会一直更新disk inode iszie
+		 * - 03de20bed203b0819225d4de98353c1f8755a1dd upstream已修复
+		 */
 		ret2 = generic_write_end(file, mapping, pos, len, copied,
 							page, fsdata);
 
@@ -4004,6 +4008,9 @@ static const struct address_space_operations ext4_journalled_aops = {
 	.error_remove_page	= generic_error_remove_page,
 };
 
+/*
+ * da的含义是delayed allocate
+ */
 static const struct address_space_operations ext4_da_aops = {
 	.readpage		= ext4_readpage,
 	.readpages		= ext4_readpages,

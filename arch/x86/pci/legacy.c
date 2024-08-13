@@ -60,6 +60,7 @@ static int __init pci_subsys_init(void)
 	/*
 	 * The init function returns an non zero value when
 	 * pci_legacy_init should be invoked.
+	 * - 参见：pci_acpi_init()、acpi_boot_init()
 	 */
 	if (x86_init.pci.init()) {
 		if (pci_legacy_init()) {

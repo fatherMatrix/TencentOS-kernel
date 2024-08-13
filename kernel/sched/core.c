@@ -90,7 +90,15 @@ struct rq *__task_rq_lock(struct task_struct *p, struct rq_flags *rf)
 		rq = task_rq(p);
 		raw_spin_lock(&rq->lock);
 		if (likely(rq == task_rq(p) && !task_on_rq_migrating(p))) {
+			/*
+			 * 如果没有定义CONFIG_LOCKDEP，则下面这个是空语句
+			 */
 			rq_pin_lock(rq, rf);
+			/*
+			 * 这里返回时，rq->lock是被我们锁定的。所以上面确定了目
+			 * 标进程p没有在迁移之后，其他修改本条件的路径都被锁互斥
+			 * 了，不在发生变更；
+			 */
 			return rq;
 		}
 		raw_spin_unlock(&rq->lock);
@@ -1837,6 +1845,9 @@ void set_task_cpu(struct task_struct *p, unsigned int new_cpu)
 	trace_sched_migrate_task(p, new_cpu);
 
 	if (task_cpu(p) != new_cpu) {
+		/*
+		 * CFS: migrate_task_rq_fair()
+		 */
 		if (p->sched_class->migrate_task_rq)
 			p->sched_class->migrate_task_rq(p, new_cpu);
 		p->se.nr_migrations++;
@@ -2197,6 +2208,9 @@ int select_task_rq(struct task_struct *p, int cpu, int sd_flags, int wake_flags)
 	lockdep_assert_held(&p->pi_lock);
 
 	if (p->nr_cpus_allowed > 1)
+		/*
+		 * CFS: select_task_rq_fair()
+		 */
 		cpu = p->sched_class->select_task_rq(p, cpu, sd_flags, wake_flags);
 	else
 		cpu = cpumask_any(p->cpus_ptr);
@@ -2309,6 +2323,9 @@ static void ttwu_do_wakeup(struct rq *rq, struct task_struct *p, int wake_flags,
 			   struct rq_flags *rf)
 {
 	check_preempt_curr(rq, p, wake_flags);
+	/*
+	 * ttwu_remote()最核心的动作就是将p->state设置为TASK_RUNNING
+	 */
 	p->state = TASK_RUNNING;
 	trace_sched_wakeup(p);
 
@@ -2447,6 +2464,9 @@ static void ttwu_queue_remote(struct task_struct *p, int cpu, int wake_flags)
 
 	if (llist_add(&p->wake_entry, &cpu_rq(cpu)->wake_list)) {
 		if (!set_nr_if_polling(rq->idle))
+			/*
+			 * 发送reschedule中断
+			 */
 			smp_send_reschedule(cpu);
 		else
 			trace_sched_wake_idle_without_ipi(cpu);
@@ -6692,6 +6712,10 @@ int sched_cpu_dying(unsigned int cpu)
 
 void __init sched_init_smp(void)
 {
+	/*
+	 * 检测系统是否为NUMA，如果是则需要动态添加NUMA域
+	 * - 参见：default_topology
+	 */
 	sched_init_numa();
 
 	/*
@@ -6700,6 +6724,9 @@ void __init sched_init_smp(void)
 	 * happen.
 	 */
 	mutex_lock(&sched_domains_mutex);
+	/*
+	 * 建立调度域
+	 */
 	sched_init_domains(cpu_active_mask);
 	mutex_unlock(&sched_domains_mutex);
 
@@ -6799,6 +6826,11 @@ void __init sched_init(void)
 	}
 #endif /* CONFIG_CPUMASK_OFFSTACK */
 
+	/*
+	 * 初始化全局默认的rt、dl调度器的带宽控制数据结构
+	 * - 目的是控制全局的DL和RT的使用带宽，防止实时进程cpu使用过多，从而导致
+	 *   普通的CFS进程饥饿
+	 */
 	init_rt_bandwidth(&def_rt_bandwidth, global_rt_period(), global_rt_runtime());
 	init_dl_bandwidth(&def_dl_bandwidth, global_rt_period(), global_rt_runtime());
 
@@ -6806,6 +6838,8 @@ void __init sched_init(void)
 	/*
 	 * 初始化默认调度域，调度域包含一个或多个cpu，负载均衡是在调度域内执行的，相互
 	 * 之间隔离；
+	 * - 对于smp，后面smp_init_smp的时候，会创建新的root_domain，然后替换这里的
+	 *   def_root_domain();
 	 */
 	init_defrootdomain();
 #endif

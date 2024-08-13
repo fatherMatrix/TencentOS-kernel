@@ -44,6 +44,9 @@ static int acpi_pci_root_scan_dependent(struct acpi_device *adev)
 				| OSC_PCI_MSI_SUPPORT)
 
 static const struct acpi_device_id root_device_ids[] = {
+	/*
+	 * PNP0A03表示pci/pcie host bridge
+	 */
 	{"PNP0A03", 0},
 	{"", 0},
 };
@@ -947,5 +950,12 @@ void __init acpi_pci_root_init(void)
 		return;
 
 	pci_acpi_crs_quirks();
+	/*
+	 * 注册struct acpi_scan_handler pci_root_handler
+	 * - ACPI枚举过程中，每发现一个device，会调用acpi_scan_handler->attach()
+	 *   方法
+	 * - pci_root_handler用于处理pci host bridge
+	 * - 调用处在../acpi_bus_scan()中
+	 */
 	acpi_scan_add_handler_with_hotplug(&pci_root_handler, "pci_root");
 }

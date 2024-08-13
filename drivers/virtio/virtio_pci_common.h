@@ -39,7 +39,14 @@ struct virtio_pci_vq_info {
 	unsigned msix_vector;
 };
 
-/* Our device structure */
+/*
+ * Our device structure
+ *
+ * virtio设备作为pci设备挂载时，会首先出现在pci总线上，表现为一个pci_dev，即
+ * virtio_pci_device->pci_dev；
+ * 当virtio_pci_device初始化完成后，会向virtio_bus注册virtio_device，并匹配
+ * virtio_driver（比如virtblk_driver），由virtio_driver完成virtio层面的初始化；
+ */
 struct virtio_pci_device {
 	struct virtio_device vdev;
 	struct pci_dev *pci_dev;
@@ -94,6 +101,9 @@ struct virtio_pci_device {
 	/* Whether we have vector per vq */
 	bool per_vq_vectors;
 
+	/*
+	 * setup_vq()
+	 */
 	struct virtqueue *(*setup_vq)(struct virtio_pci_device *vp_dev,
 				      struct virtio_pci_vq_info *info,
 				      unsigned idx,
@@ -101,8 +111,14 @@ struct virtio_pci_device {
 				      const char *name,
 				      bool ctx,
 				      u16 msix_vec);
+	/*
+	 * del_vq()
+	 */
 	void (*del_vq)(struct virtio_pci_vq_info *info);
 
+	/*
+	 * vp_setup_vector()
+	 */
 	u16 (*config_vector)(struct virtio_pci_device *vp_dev, u16 vector);
 };
 

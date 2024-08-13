@@ -127,6 +127,9 @@ retry:
 			continue;
 		}
 		mutex_unlock(domain->lock);
+		/*
+		 * 调用probe()
+		 */
 		kobj = probe(dev, index, data);
 		/* Currently ->owner protects _only_ ->probe() itself. */
 		module_put(owner);

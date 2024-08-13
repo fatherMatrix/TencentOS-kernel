@@ -1410,7 +1410,10 @@ static void pci_read_irq(struct pci_dev *dev)
 {
 	unsigned char irq;
 
-	/* VFs are not allowed to use INTx, so skip the config reads */
+	/*
+	 * VFs are not allowed to use INTx, so skip the config reads
+	 * - VFs仅允许使用MSI(-x)中断
+	 */
 	if (dev->is_virtfn) {
 		dev->pin = 0;
 		dev->irq = 0;
@@ -1745,6 +1748,9 @@ int pci_setup_device(struct pci_dev *dev)
 	dev->error_state = pci_channel_io_normal;
 	set_pcie_port_type(dev);
 
+	/*
+	 * 将pci_dev设置进pci总线对应的slot中
+	 */
 	pci_dev_assign_slot(dev);
 
 	/*
@@ -1795,6 +1801,9 @@ int pci_setup_device(struct pci_dev *dev)
 		}
 	}
 
+	/*
+	 * 探测pci设备的PCI_COMMAND_INTX_DISABLE位是否可写
+	 */
 	dev->broken_intx_masking = pci_intx_mask_broken(dev);
 
 	switch (dev->hdr_type) {		    /* header type */

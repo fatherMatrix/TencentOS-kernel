@@ -1247,8 +1247,16 @@ static int __init acpi_init(void)
 		return result;
 	}
 
+	/*
+	 * acpi先扫描MCFG表，MCFG表定义了ecam的相关资源
+	 */
 	pci_mmcfg_late_init();
 	acpi_iort_init();
+	/*
+	 * 通过ACPI进行设备枚举，包括：
+	 * - pci/pcie host bridge
+	 *   > 枚举到host bridge后会继续递归枚举
+	 */
 	acpi_scan_init();
 	acpi_ec_init();
 	acpi_debugfs_init();

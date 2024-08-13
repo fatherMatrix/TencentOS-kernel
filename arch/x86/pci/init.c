@@ -8,6 +8,10 @@
    in the right sequence from here. */
 static __init int pci_arch_init(void)
 {
+/*
+ * devcloud: CONFIG_PCI_DIRECT=y
+ * - 表示由linux系统重新枚举pci总线
+ */
 #ifdef CONFIG_PCI_DIRECT
 	int type = 0;
 
@@ -17,6 +21,9 @@ static __init int pci_arch_init(void)
 	if (!(pci_probe & PCI_PROBE_NOEARLY))
 		pci_mmcfg_early_init();
 
+	/*
+	 * x86_default_pci_init() -> pci_acpi_init()
+	 */ 
 	if (x86_init.pci.arch_init && !x86_init.pci.arch_init())
 		return 0;
 

@@ -13,9 +13,18 @@
 
 #define SD_LOAD_BALANCE		0x0001	/* Do load balancing on this domain. */
 #define SD_BALANCE_NEWIDLE	0x0002	/* Balance when about to become idle */
+/*
+ * BMSA4默认没有，影响context1性能
+ */
 #define SD_BALANCE_EXEC		0x0004	/* Balance on exec */
+/*
+ * BMSA4默认没有，影响context1性能
+ */
 #define SD_BALANCE_FORK		0x0008	/* Balance on fork, clone */
 #define SD_BALANCE_WAKE		0x0010  /* Balance on wakeup */
+/*
+ * BMSA4默认没有，影响context1性能
+ */
 #define SD_WAKE_AFFINE		0x0020	/* Wake task to waking CPU */
 #define SD_ASYM_CPUCAPACITY	0x0040  /* Domain members have different CPU capacities */
 #define SD_SHARE_CPUCAPACITY	0x0080	/* Domain members share CPU capacity */
@@ -68,6 +77,11 @@ struct sched_domain_shared {
 	int		has_idle_cores;
 };
 
+/*
+ * 调度域代表可以共享属性和调度参数的一组cpu，每个cpu在每个调度域拓扑层级中都有
+ * 一个sched_domain对象。各个调度域拓扑层级间的sched_domain又通过parent/child指
+ * 针形成树状结构。
+ */
 struct sched_domain {
 	/* These fields must be setup */
 	struct sched_domain __rcu *parent;	/* top domain must be null terminated */
@@ -129,6 +143,9 @@ struct sched_domain {
 	char *name;
 #endif
 	union {
+		/*
+		 * 博客说指向了所属的sched_domain_topology_level.sd_data？
+		 */
 		void *private;		/* used during construction */
 		struct rcu_head rcu;	/* used during destruction */
 	};
@@ -168,6 +185,11 @@ typedef int (*sched_domain_flags_f)(void);
 
 #define SDTL_OVERLAP	0x01
 
+/*
+ * 每个层级都要区分每个cpu在自己这个层级上属于哪个调度组
+ * - 内存分配参见：__sdt_alloc()
+ * - 关系初始化参见：build_sched_domain()
+ */
 struct sd_data {
 	struct sched_domain *__percpu *sd;
 	struct sched_domain_shared *__percpu *sds;
@@ -175,7 +197,18 @@ struct sd_data {
 	struct sched_group_capacity *__percpu *sgc;
 };
 
+/*
+ * 描述调度域拓扑层级
+ * - 最终表现为一个数组，数组中的每个元素表示调度域拓扑的一个层级
+ *   > 一个cpu在所有层级上都有表示：
+ *     o 你是山东人，你是聊城人，你是高唐人。DIE/MC/SMT三个层级都要索引到你才行
+ *   > 参见sched_domain_topology
+ *   > 默认为default_topology，可通过set_sched_topology()替换
+ */
 struct sched_domain_topology_level {
+	/*
+	 * 返回当前调度域拓扑层级中所有的cpu的mask的回调
+	 */
 	sched_domain_mask_f mask;
 	sched_domain_flags_f sd_flags;
 	int		    flags;

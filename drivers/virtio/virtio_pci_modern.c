@@ -72,6 +72,16 @@ static void __iomem *map_capability(struct pci_dev *dev, int off,
 	u32 offset, length;
 	void __iomem *p;
 
+	/*
+	 * 获取virtio_pci_XXX_cfg的：
+	 * - 所在的bar编号
+	 * - 在对应bar中的偏移
+	 * - 长度
+	 *
+	 * virtio_pci_XXX_cfg包括：
+	 * - virtio_pci_common_cfg
+	 * - virtio_pci_
+	 */
 	pci_read_config_byte(dev, off + offsetof(struct virtio_pci_cap,
 						 bar),
 			     &bar);
@@ -142,6 +152,10 @@ static u64 vp_get_features(struct virtio_device *vdev)
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 	u64 features;
 
+	/*
+	 * 这些io会导致vmexit吗？
+	 * - 既然已经map_capability()了，这里为什么不可以直接读呢？
+	 */
 	vp_iowrite32(0, &vp_dev->common->device_feature_select);
 	features = vp_ioread32(&vp_dev->common->device_feature);
 	vp_iowrite32(1, &vp_dev->common->device_feature_select);
@@ -698,6 +712,9 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 		if (!vp_dev->device)
 			goto err_map_device;
 
+		/*
+		 * 配置virtio_pci_device->virtio_device->config
+		 */
 		vp_dev->vdev.config = &virtio_pci_config_ops;
 	} else {
 		vp_dev->vdev.config = &virtio_pci_config_nodev_ops;

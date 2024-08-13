@@ -119,6 +119,11 @@
 #define PCI_CAPABILITY_LIST	0x34	/* Offset of first capability list entry */
 
 /* 0x35-0x3b are reserved */
+/*
+ * From ChatGPT4:
+ * - 简单来说，PCI_INTERRUPT_PIN告诉你设备在PCI总线上使用哪个引脚发送中断信号，
+ *   而PCI_INTERRUPT_LINE告诉你这个中断信号在系统中断控制器上连接到哪个中断线路。
+ */
 #define PCI_INTERRUPT_LINE	0x3c	/* 8 bits */
 #define PCI_INTERRUPT_PIN	0x3d	/* 8 bits */
 #define PCI_MIN_GNT		0x3e	/* 8 bits */

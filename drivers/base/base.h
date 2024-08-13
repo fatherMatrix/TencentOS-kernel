@@ -37,11 +37,11 @@ struct subsys_private {
 
 	struct kset *drivers_kset;
 	/*
-	 * 总线上的设备链表
+	 * 链表头，链表元素是device_private->knode_bus
 	 */
 	struct klist klist_devices;
 	/*
-	 * 总线上的驱动链表
+	 * 链表头，链表元素是driver_private->knode_bus
 	 */
 	struct klist klist_drivers;
 	struct blocking_notifier_head bus_notifier;
@@ -61,7 +61,13 @@ struct subsys_private {
 
 struct driver_private {
 	struct kobject kobj;
+	/*
+	 * 链表头，链表元素是device_private->klist_drivers
+	 */
 	struct klist klist_devices;
+	/*
+	 * 链表元素，链表头是subsys_private->klist_drivers
+	 */
 	struct klist_node knode_bus;
 	struct module_kobject *mkobj;
 	struct device_driver *driver;
@@ -90,9 +96,22 @@ struct driver_private {
  * Nothing outside of the driver core should ever touch these fields.
  */
 struct device_private {
+	/*
+	 * 作为链表头，链表元素是knode_parent
+	 * - 参见 device_add()
+	 */
 	struct klist klist_children;
+	/*
+	 * 作为链表元素加入klist_children
+	 */
 	struct klist_node knode_parent;
+	/*
+	 * 作为链表元素加入driver_private->klist_devices
+	 */
 	struct klist_node knode_driver;
+	/*
+	 * 作为链表元素加入subsys_private->klist_devices
+	 */
 	struct klist_node knode_bus;
 	struct klist_node knode_class;
 	struct list_head deferred_probe;

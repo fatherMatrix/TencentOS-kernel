@@ -212,6 +212,7 @@ __ioremap_caller(resource_size_t phys_addr, unsigned long size,
 
 	/*
 	 * Mappings have to be page-aligned
+	 * - 如果是memory iomap，则必定是以page为单位的
 	 */
 	offset = phys_addr & ~PAGE_MASK;
 	phys_addr &= PHYSICAL_PAGE_MASK;

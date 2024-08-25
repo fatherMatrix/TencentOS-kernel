@@ -709,6 +709,8 @@ int jbd2_log_wait_commit(journal_t *journal, tid_t tid)
 	 * Some callers make sure transaction is already committing and in that
 	 * case we cannot block on open handles anymore. So don't warn in that
 	 * case.
+	 *
+	 * j_commit_sequence表示最近一次提交的tid
 	 */
 	if (tid_gt(tid, journal->j_commit_sequence) &&
 	    (!journal->j_committing_transaction ||
@@ -729,7 +731,13 @@ int jbd2_log_wait_commit(journal_t *journal, tid_t tid)
 		jbd_debug(1, "JBD2: want %u, j_commit_sequence=%u\n",
 				  tid, journal->j_commit_sequence);
 		read_unlock(&journal->j_state_lock);
+		/*
+		 * 唤醒kjournald2()
+		 */
 		wake_up(&journal->j_wait_commit);
+		/*
+		 * 等待kjournald2()操作完成
+		 */
 		wait_event(journal->j_wait_done_commit,
 				!tid_gt(tid, journal->j_commit_sequence));
 		read_lock(&journal->j_state_lock);

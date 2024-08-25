@@ -609,6 +609,9 @@ static int init_vq(struct virtio_blk *vblk)
 
 	names = kmalloc_array(num_vqs, sizeof(*names), GFP_KERNEL);
 	callbacks = kmalloc_array(num_vqs, sizeof(*callbacks), GFP_KERNEL);
+	/*
+	 * 分配virtqueue的指针数组
+	 */
 	vqs = kmalloc_array(num_vqs, sizeof(*vqs), GFP_KERNEL);
 	if (!names || !callbacks || !vqs) {
 		err = -ENOMEM;
@@ -884,6 +887,10 @@ static int virtblk_probe(struct virtio_device *vdev)
 		sizeof(struct virtblk_req) +
 		sizeof(struct scatterlist) * sg_elems;
 	vblk->tag_set.driver_data = vblk;
+	/*
+	 * fuck，这里的代码是有严重问题的，以后还是不要看TencentOS Server了，去
+	 * 搞个社区版看吧；
+	 */
 	vblk->tag_set.nr_hw_queues = vblk->num_vqs;
 
 	err = blk_mq_alloc_tag_set(&vblk->tag_set);

@@ -1887,6 +1887,7 @@ static blk_status_t __blk_mq_issue_directly(struct blk_mq_hw_ctx *hctx,
 	 * previously would have done.
 	 *
 	 * 调用设备驱动填充的queue_rq()接口，将request放到设备驱动管理范畴里；
+	 * - nvme: nvme_queue_rq()
 	 */
 	ret = q->mq_ops->queue_rq(hctx, &bd);
 	switch (ret) {

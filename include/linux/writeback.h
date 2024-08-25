@@ -48,6 +48,8 @@ enum writeback_sync_modes {
  * A control structure which tells the writeback code what to do.  These are
  * always on the stack, and hence need no locking.  They are always initialised
  * in a manner such that unspecified fields are set to zero.
+ *
+ * 控制回写哪个offset区间的page
  */
 struct writeback_control {
 	long nr_to_write;		/* Write this many pages, and decrement

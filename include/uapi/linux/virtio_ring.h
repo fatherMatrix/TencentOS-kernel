@@ -222,6 +222,17 @@ static inline void vring_init(struct vring *vr, unsigned int num, void *p,
 
 static inline unsigned vring_size(unsigned int num, unsigned long align)
 {
+	/*
+	 * 包含：
+	 * - vring_desc
+	 * - vring_avail
+	 * - vring_used
+	 *
+	 * 为什么sizeof(__virtio16) * (3 + num)呢？为什么不是* (2 + num)呢？
+	 * - 当VIRTIO_F_EVENT_IDX协商后：
+	 *   > 在vring_avail结尾额外添加了__virtio16 used_event
+	 *   > 在vring_used结尾额外添加了__virtio16 avail_event
+	 */
 	return ((sizeof(struct vring_desc) * num + sizeof(__virtio16) * (3 + num)
 		 + align - 1) & ~(align - 1))
 		+ sizeof(__virtio16) * 3 + sizeof(struct vring_used_elem) * num;
@@ -248,6 +259,9 @@ struct vring_packed_desc_event {
 	__le16 flags;
 };
 
+/*
+ * 新的packed virtqueue描述符
+ */
 struct vring_packed_desc {
 	/* Buffer Address. */
 	__le64 addr;

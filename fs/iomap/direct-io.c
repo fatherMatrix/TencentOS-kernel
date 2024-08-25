@@ -32,7 +32,7 @@ struct iomap_dio {
 	 */
 	const struct iomap_dio_ops *dops;
 	/*
-	 *
+	 * 来源就是i_size_read()
 	 */
 	loff_t			i_size;
 	/*
@@ -40,10 +40,10 @@ struct iomap_dio {
 	 */
 	loff_t			size;
 	/*
-	 * 引用计数，干嘛用的？
-	 * - iomap_dio_rw()中先将ref设置为1
-	 * - iomap_dio_rw()中最后通过atomic_dec_and_test()判断ref是否为0
-	 * - 其他地方哪里操作ref了呢？
+	 * 一个iomap_dio可能会拆分为多个bio进行提交，因此需要使用一个计数来统计
+	 * 是否所有的bio都回来了；
+	 * - dio->ref的初始化在iomap_dio_rw()，初始值为1；
+	 * - 增加在iomap_dio_submit_bio()；
 	 */
 	atomic_t		ref;
 	unsigned		flags;
@@ -103,6 +103,9 @@ static ssize_t iomap_dio_complete(struct iomap_dio *dio)
 	 * 对于xfs dio，end_io = xfs_dio_write_ops.xfs_dio_write_end_io()
 	 * - 更新vfs inode size
 	 * - 更新xfs inode size
+	 *
+	 * 对于ext4 dio，end_io = ext4_dio_write_end_io()
+	 * - 高版本，当前版本ext4未引入iomap
 	 */
 	if (dops && dops->end_io)
 		ret = dops->end_io(iocb, dio->size, ret, dio->flags);
@@ -172,11 +175,19 @@ static inline void iomap_dio_set_error(struct iomap_dio *dio, int ret)
 static void iomap_dio_bio_end_io(struct bio *bio)
 {
 	struct iomap_dio *dio = bio->bi_private;
+	/*
+	 * 如果是read操作，用户态的read操作，就会设置IOMAP_DIO_DIRTY标记
+	 * - 为什么？
+	 */
 	bool should_dirty = (dio->flags & IOMAP_DIO_DIRTY);
 
 	if (bio->bi_status)
 		iomap_dio_set_error(dio, blk_status_to_errno(bio->bi_status));
 
+	/*
+	 * dio->ref的初始化在iomap_dio_rw()，初始值为1；
+	 * 增加在：iomap_dio_submit_bio()；
+	 */
 	if (atomic_dec_and_test(&dio->ref)) {
 	/*
 	 * 此时ref在dec后为0，即这是最后一个ref
@@ -187,6 +198,9 @@ static void iomap_dio_bio_end_io(struct bio *bio)
 		 */
 			struct task_struct *waiter = dio->submit.waiter;
 			WRITE_ONCE(dio->submit.waiter, NULL);
+			/*
+			 * 唤醒同步等待的io
+			 */
 			blk_wake_io_task(waiter);
 		/*
 		 * 后面的都是异步io
@@ -324,10 +338,14 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 		bio->bi_write_hint = dio->iocb->ki_hint;
 		bio->bi_ioprio = dio->iocb->ki_ioprio;
 		bio->bi_private = dio;
+		/*
+		 * iomap提交bio
+		 */
 		bio->bi_end_io = iomap_dio_bio_end_io;
 
 		/*
 		 * 将iov_iter中的page通过GUP保持到bio中
+		 * - GUP的反向操作在哪里？
 		 */
 		ret = bio_iov_iter_get_pages(bio, &iter);
 		if (unlikely(ret)) {
@@ -351,6 +369,10 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 			task_io_account_write(n);
 		} else {
 			bio->bi_opf = REQ_OP_READ;
+			/*
+			 * 为什么这里要set_page_dirty？
+			 * - 这里要dirty_page
+			 */
 			if (dio->flags & IOMAP_DIO_DIRTY)
 				bio_set_pages_dirty(bio);
 		}
@@ -361,11 +383,20 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 		 */
 		iov_iter_advance(dio->submit.iter, n);
 
+		/*
+		 * 增加dio->size
+		 * - 这里还没有写到盘上，怎么就增加了呢？
+		 */
 		dio->size += n;
 		pos += n;
 		copied += n;
 
 		nr_pages = iov_iter_npages(&iter, BIO_MAX_PAGES);
+		/*
+		 * 我理解对于dio，至少data要落盘结束后（元数据是否落盘由O_SYNC控
+		 * 制），系统调用才能返回？这是在哪里等待的呢？
+		 * - iomap_dio_rw()
+		 */
 		iomap_dio_submit_bio(dio, iomap, bio);
 	} while (nr_pages);
 
@@ -528,6 +559,11 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	dio->flags = 0;
 
 	dio->submit.iter = iter;
+	/*
+	 * 参见：
+	 * - iomap_apply() -> iomap_dio_actor() ~> set iomap_dio_bio_end_io
+	 * - iomap_dio_bio_end_io() -> blk_wake_io_task()
+	 */
 	dio->submit.waiter = current;
 	dio->submit.cookie = BLK_QC_T_NONE;
 	dio->submit.last_queue = NULL;
@@ -543,6 +579,9 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 			dio->flags |= IOMAP_DIO_DIRTY;
 	} else {
 		flags |= IOMAP_WRITE;
+		/*
+		 * 这使得iomap_dio_bio_end_io()中走queue_work()路径
+		 */
 		dio->flags |= IOMAP_DIO_WRITE;
 
 		/* for data sync or sync, we need sync completion processing */
@@ -672,13 +711,19 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 	 *	after we got woken by the I/O completion handler.
 	 */
 	dio->wait_for_completion = wait_for_completion;
+	/*
+	 * dio->ref在上面被初始化为了1
+	 */
 	if (!atomic_dec_and_test(&dio->ref)) {
 	/*
 	 * atomic_dec_and_test()在dec后为0时返回true
 	 * - 进入到这里表示返回的是false，即dio->ref在dec后不为0
+	 * - 即还有io没有回来
 	 */
 		/*
 		 * 异步IO会在这里直接退出
+		 * - NOTE：这里的异步IO指的是libaio和iouring，而不是O_[D]SYNC
+		 *   > 即，direct io在这里也是同步io
 		 * - 异步IO中会设置kiocb->ki_complete()函数指针，内部会调用到下
 		 *   面的iomap_dio_complete()；
 		 * - 对应情况(b)
@@ -694,6 +739,11 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 			if (!READ_ONCE(dio->submit.waiter))
 				break;
 
+			/*
+			 * 如果是IOCB_HIPRI，则循环死等；
+			 * 如果不是，则睡眠等待完成
+			 * - 睡眠唤醒侧在iomap_dio_bio_end_io()
+			 */
 			if (!(iocb->ki_flags & IOCB_HIPRI) ||
 			    !dio->submit.last_queue ||
 			    !blk_poll(dio->submit.last_queue,
@@ -702,6 +752,10 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 		}
 		__set_current_state(TASK_RUNNING);
 	}
+
+	/*
+	 * 走到这里，一定是dio写完成了
+	 */
 
 	/*
 	 * 调用dio->end_io()；

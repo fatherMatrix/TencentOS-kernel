@@ -277,6 +277,9 @@ static void *vring_alloc_queue(struct virtio_device *vdev, size_t size,
 			      dma_addr_t *dma_handle, gfp_t flag)
 {
 	if (vring_use_dma_api(vdev)) {
+		/*
+		 * 如果前后端协商了VIRTIO_F_IOMMU_PLATFORM，则走这里
+		 */
 		return dma_alloc_coherent(vdev->dev.parent, size,
 					  dma_handle, flag);
 	} else {
@@ -892,6 +895,10 @@ static struct virtqueue *vring_create_virtqueue_split(
 	if (!queue)
 		return NULL;
 
+	/*
+	 * 上面通过vring_alloc_queue()已经分配出了vring_desc、vring_avail和
+	 * vring_used的内存，但三者的内存是打包分配的。这里计算出各自的偏移；
+	 */
 	queue_size_in_bytes = vring_size(num, vring_align);
 	vring_init(&vring, num, queue, vring_align);
 
@@ -2067,6 +2074,9 @@ struct virtqueue *__vring_new_virtqueue(unsigned int index,
 					const char *name)
 {
 	unsigned int i;
+	/*
+	 * 返回的是virtqueue类型，申请的时候是vring_virtqueue类型
+	 */
 	struct vring_virtqueue *vq;
 
 	if (virtio_has_feature(vdev, VIRTIO_F_RING_PACKED))

@@ -307,8 +307,21 @@ struct pci_dev {
 	struct proc_dir_entry *procent;	/* Device entry in /proc/bus/pci */
 	struct pci_slot	*slot;		/* Physical slot this device is in */
 
+	/*
+	 * devfn是BDF中D和F的结合体
+	 * - BDF共占16bit
+	 *   > Bus占8bit，因此pci最多支持256条总线
+	 *   > Device占5bit，因此1条总线下总多支持32个设备
+	 *   > Fuction占3bit，因此1个设备最多支持8个功能
+	 */
 	unsigned int	devfn;		/* Encoded device & function index */
+	/*
+	 * PCI_VENDOR_ID
+	 */
 	unsigned short	vendor;
+	/*
+	 * PCI_DEVICE_ID
+	 */
 	unsigned short	device;
 	unsigned short	subsystem_vendor;
 	unsigned short	subsystem_device;

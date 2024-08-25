@@ -1653,6 +1653,9 @@ static void balance_dirty_pages(struct bdi_writeback *wb,
 		if (dirty <= dirty_freerun_ceiling(thresh, bg_thresh) &&
 		    (!mdtc ||
 		     m_dirty <= dirty_freerun_ceiling(m_thresh, m_bg_thresh))) {
+		/*
+		 * 如果脏页数量小于dirty_freerun_ceiling()，则退出
+		 */
 			unsigned long intv = dirty_poll_interval(dirty, thresh);
 			unsigned long m_intv = ULONG_MAX;
 
@@ -1830,6 +1833,9 @@ pause:
 		wb_start_background_writeback(wb);
 }
 
+/*
+ * 当前cpu的脏页计数
+ */
 static DEFINE_PER_CPU(int, bdp_ratelimits);
 
 /*
@@ -1845,6 +1851,9 @@ static DEFINE_PER_CPU(int, bdp_ratelimits);
  * randomly into the running tasks. This works well for the above worst case,
  * as the new task will pick up and accumulate the old task's leaked dirty
  * count and eventually get throttled.
+ *
+ * 进程退出时将残留的脏页数累加到此变量中
+ * - 进程推出前，脏页不应该全部写回吗？
  */
 DEFINE_PER_CPU(int, dirty_throttle_leaks) = 0;
 
@@ -1877,7 +1886,13 @@ void balance_dirty_pages_ratelimited(struct address_space *mapping)
 	if (!wb)
 		wb = &bdi->wb;
 
+	/*
+	 * 初始值为32，单位为page，即初始值为128KB
+	 */
 	ratelimit = current->nr_dirtied_pause;
+	/*
+	 * 如果设置了该值，则将回收门限缩小为32KB
+	 */
 	if (wb->dirty_exceeded)
 		ratelimit = min(ratelimit, 32 >> (PAGE_SHIFT - 10));
 
@@ -1887,6 +1902,10 @@ void balance_dirty_pages_ratelimited(struct address_space *mapping)
 	 * calling into balance_dirty_pages(), which can happen when there are
 	 * 1000+ tasks, all of them start dirtying pages at exactly the same
 	 * time, hence all honoured too large initial task->nr_dirtied_pause.
+	 *
+	 * 如果当前进程的脏页计数超过阈值，或者cpu的脏页计数（bdp_ratelimits)超
+	 * 过阈值，则启动回写；
+	 * - *p = 0的作用是本次回写操作后重新计数
 	 */
 	p =  this_cpu_ptr(&bdp_ratelimits);
 	if (unlikely(current->nr_dirtied >= ratelimit))
@@ -1899,6 +1918,8 @@ void balance_dirty_pages_ratelimited(struct address_space *mapping)
 	 * Pick up the dirtied pages by the exited tasks. This avoids lots of
 	 * short-lived tasks (eg. gcc invocations in a kernel build) escaping
 	 * the dirty throttling and livelock other long-run dirtiers.
+	 *
+	 * 已退出线程遗留的page
 	 */
 	p = this_cpu_ptr(&dirty_throttle_leaks);
 	if (*p > 0 && current->nr_dirtied < ratelimit) {
@@ -2113,6 +2134,14 @@ void tag_pages_for_writeback(struct address_space *mapping,
 	 * 这里也是处于关中断状态
 	 */
 	xas_lock_irq(&xas);
+	/*
+	 * PAGECACHE_TAG_DIRTY标记是什么时候、谁来设置的？
+	 * - do_page_mkwrite
+	 *     vma->vm_ops->page_mkwrite
+	 *       ~> set_page_dirty
+	 *         ~> TestSetPageDirty
+	 *         ~> __xa_set_mark(PAGECACHE_TAG_DIRTY)
+	 */
 	xas_for_each_marked(&xas, page, end, PAGECACHE_TAG_DIRTY) {
 		xas_set_mark(&xas, PAGECACHE_TAG_TOWRITE);
 		if (++tagged % XA_CHECK_SCHED)
@@ -2263,7 +2292,19 @@ continue_unlock:
 			 * - 参见do_shared_fault()
 			 *   > 这里主要针对mmap的文件页，此时如果用户态再试图写
 			 *     本page，会触发页保护异常，在页保护异常中会完成与
-			 *     此处回写操作的互斥。
+			 *     此处回写操作的互斥，等待回写侧结束。参见：
+			 *     o handle_pte_fault()
+			 *         pte_write()
+			 *           do_wp_page()
+			 *             wp_page_shared()
+			 *               do_page_mkwrite()
+			 *                 vmf->vma->vm_ops->page_mkwrite()
+			 *                   ... xfs: xfs_filemap_page_mkwrite()
+			 *                     ... wait_for_stable_page()
+			 *
+			 * 返回值是该page结构体原来是否有PageDirty
+			 * - 如果原来没有PageDirty，则无需writeback，continue
+			 * - 如果原来有PageDirty，则继续后面的writeback操作
 			 */
 			if (!clear_page_dirty_for_io(page))
 				goto continue_unlock;
@@ -2597,6 +2638,15 @@ int set_page_dirty(struct page *page)
 
 	page = compound_head(page);
 	if (likely(mapping)) {
+		/*
+		 * xfs:
+		 * - normal: iomap_set_page_dirty()
+		 * - dax: noop_set_page_dirty()
+		 * ext4:
+		 * - nornal/delayed: ext4_set_page_dirty()
+		 * - journalled: ext4_journalled_set_page_dirty()
+		 * - dax: noop_set_page_dirty()
+		 */
 		int (*spd)(struct page *) = mapping->a_ops->set_page_dirty;
 		/*
 		 * readahead/lru_deactivate_page could remain
@@ -2743,6 +2793,9 @@ int clear_page_dirty_for_io(struct page *page)
 		 * exclusion.
 		 */
 		wb = unlocked_inode_to_wb_begin(inode, &cookie);
+		/*
+		 * 返回的是原来的值
+		 */
 		if (TestClearPageDirty(page)) {
 			dec_lruvec_page_state(page, NR_FILE_DIRTY);
 			dec_zone_page_state(page, NR_ZONE_WRITE_PENDING);
@@ -2753,6 +2806,9 @@ int clear_page_dirty_for_io(struct page *page)
 		return ret;
 	}
 	return TestClearPageDirty(page);
+	/*
+	 * 这个函数最终是clear了page结构体中的PageDirty标记，但返回原来的值
+	 */
 }
 EXPORT_SYMBOL(clear_page_dirty_for_io);
 

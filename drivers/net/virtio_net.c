@@ -2781,7 +2781,10 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 	total_vqs = vi->max_queue_pairs * 2 +
 		    virtio_has_feature(vi->vdev, VIRTIO_NET_F_CTRL_VQ);
 
-	/* Allocate space for find_vqs parameters */
+	/*
+	 * Allocate space for find_vqs parameters
+	 * - 这里分配的是指向virtqueue的指针数组
+	 */
 	vqs = kcalloc(total_vqs, sizeof(*vqs), GFP_KERNEL);
 	if (!vqs)
 		goto err_vq;
@@ -2817,6 +2820,9 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 			ctx[rxq2vq(i)] = true;
 	}
 
+	/*
+	 * vp_modern_find_vqs()
+	 */
 	ret = vi->vdev->config->find_vqs(vi->vdev, total_vqs, vqs, callbacks,
 					 names, ctx, NULL);
 	if (ret)

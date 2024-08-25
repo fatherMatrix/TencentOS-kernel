@@ -2663,6 +2663,10 @@ static inline vm_fault_t vmf_error(int err)
 struct page *follow_page(struct vm_area_struct *vma, unsigned long address,
 			 unsigned int foll_flags);
 
+/*
+ * GUP中针对FOLL_WRITE标志会调用set_page_dirty()标记page结构体中的PageDirty和对
+ * 应pagecache xarray中的PAGECACHE_TAG_DIRTY
+ */
 #define FOLL_WRITE	0x01	/* check pte is writable */
 #define FOLL_TOUCH	0x02	/* mark page accessed */
 #define FOLL_GET	0x04	/* do get_page on page */

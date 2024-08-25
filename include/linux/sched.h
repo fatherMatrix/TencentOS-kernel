@@ -1401,8 +1401,15 @@ struct task_struct {
 	 * balance_dirty_pages() for a dirty throttling pause:
 	 */
 	int				nr_dirtied;
+	/*
+	 * 当前task的脏页阈值
+	 */
 	int				nr_dirtied_pause;
-	/* Start of a write-and-pause period: */
+	/*
+	 * Start of a write-and-pause period:
+	 *
+	 * 进程上一次执行balance_dirty_pages()的jiffies
+	 */
 	unsigned long			dirty_paused_when;
 
 #ifdef CONFIG_LATENCYTOP

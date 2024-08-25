@@ -2797,6 +2797,9 @@ static vm_fault_t do_wp_page(struct vm_fault *vmf)
 		unlock_page(vmf->page);
 	} else if (unlikely((vma->vm_flags & (VM_WRITE|VM_SHARED)) ==
 					(VM_WRITE|VM_SHARED))) {
+	/*
+	 * 共享映射、写权限不足
+	 */
 		return wp_page_shared(vmf);
 	}
 copy:
@@ -3843,10 +3846,19 @@ static vm_fault_t do_fault(struct vm_fault *vmf)
 			pte_unmap_unlock(vmf->pte, vmf->ptl);
 		}
 	} else if (!(vmf->flags & FAULT_FLAG_WRITE))
+	/*
+	 * 读导致的pagefault
+	 */
 		ret = do_read_fault(vmf);
 	else if (!(vma->vm_flags & VM_SHARED))
+	/*
+	 * 写导致的、私有映射
+	 */
 		ret = do_cow_fault(vmf);
 	else
+	/*
+	 * 写导致的、共享映射
+	 */
 		ret = do_shared_fault(vmf);
 
 	/* preallocated pagetable is unused: free it */
@@ -4092,6 +4104,9 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
 		}
 	}
 
+	/*
+	 * mmap的page，第一次读/写时会走这里
+	 */
 	if (!vmf->pte) {
 		if (vma_is_anonymous(vmf->vma))
 			return do_anonymous_page(vmf);
@@ -4120,6 +4135,10 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
 	entry = vmf->orig_pte;
 	if (unlikely(!pte_same(*vmf->pte, entry)))
 		goto unlock;
+	/*
+	 * mmap的page，已经第一次写过了之后，如果被回写且pte_mkclean了。那么再
+	 * 写这个page，会走这里；
+	 */
 	if (vmf->flags & FAULT_FLAG_WRITE) {
 		if (!pte_write(entry))
 			return do_wp_page(vmf);

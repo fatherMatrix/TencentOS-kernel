@@ -1824,7 +1824,10 @@ void bio_set_pages_dirty(struct bio *bio)
 /*
  * bio_check_pages_dirty() will check that all the BIO's pages are still dirty.
  * If they are, then fine.  If, however, some pages are clean then they must
+ *                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * have been written out during the direct-IO read.  So we take another ref on
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ * - 此时，page中的内容可能和已经写出去的disk中的内容不同，等价于当前page是脏的
  * the BIO and re-dirty the pages in process context.
  *
  * It is expected that bio_check_pages_dirty() will wholly own the BIO from
@@ -1877,6 +1880,11 @@ defer:
 	bio->bi_private = bio_dirty_list;
 	bio_dirty_list = bio;
 	spin_unlock_irqrestore(&bio_dirty_lock, flags);
+	/*
+	 * bio_dirty_fn()
+	 * - 以true为参数调用bio_release_pages()，即对bio的pages调用
+	 *   set_page_dirty_lock()将其重新标脏
+	 */
 	schedule_work(&bio_dirty_work);
 }
 

@@ -2301,6 +2301,11 @@ static struct pci_dev *pci_scan_device(struct pci_bus *bus, int devfn)
 	struct pci_dev *dev;
 	u32 l;
 
+	/*
+	 * 这里返回的l中包含了vendor id和device id
+	 * - 低16bit是vendor id
+	 * - 高16bit是device id
+	 */
 	if (!pci_bus_read_dev_vendor_id(bus, devfn, &l, 60*1000))
 		return NULL;
 
@@ -2323,7 +2328,13 @@ static struct pci_dev *pci_scan_device(struct pci_bus *bus, int devfn)
 	if (!dev)
 		return NULL;
 
+	/*
+	 * 配置设备号
+	 */
 	dev->devfn = devfn;
+	/*
+	 * 提取vendor id和device id
+	 */
 	dev->vendor = l & 0xffff;
 	dev->device = (l >> 16) & 0xffff;
 

@@ -73,6 +73,10 @@ struct virtio_pci_device {
 	/* Multiply queue_notify_off by this value. (non-legacy mode). */
 	u32 notify_offset_multiplier;
 
+	/*
+	 * bitmap，表示哪个bar中有cfg
+	 * - 参见virtio_pci_find_capability()
+	 */
 	int modern_bars;
 
 	/* Legacy only field */
@@ -117,7 +121,7 @@ struct virtio_pci_device {
 	void (*del_vq)(struct virtio_pci_vq_info *info);
 
 	/*
-	 * vp_setup_vector()
+	 * vp_config_vector()
 	 */
 	u16 (*config_vector)(struct virtio_pci_device *vp_dev, u16 vector);
 };

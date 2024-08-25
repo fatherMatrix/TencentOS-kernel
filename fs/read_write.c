@@ -499,6 +499,9 @@ static ssize_t new_sync_write(struct file *filp, const char __user *buf, size_t 
 
 	ret = call_write_iter(filp, &kiocb, &iter);
 	BUG_ON(ret == -EIOCBQUEUED);
+	/*
+	 * file中的pos最终来源是下去的kiocb返回时带出来的
+	 */
 	if (ret > 0 && ppos)
 		*ppos = kiocb.ki_pos;
 	return ret;

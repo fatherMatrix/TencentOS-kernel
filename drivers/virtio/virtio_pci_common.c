@@ -130,6 +130,10 @@ static int vp_request_msix_vectors(struct virtio_device *vdev, int nvectors,
 		desc->pre_vectors++; /* virtio config vector */
 	}
 
+	/*
+	 * 申请中断向量
+	 * - 申请了中断向量起始就是申请了irq
+	 */
 	err = pci_alloc_irq_vectors_affinity(vp_dev->pci_dev, nvectors,
 					     nvectors, flags, desc);
 	if (err < 0)
@@ -140,6 +144,9 @@ static int vp_request_msix_vectors(struct virtio_device *vdev, int nvectors,
 	v = vp_dev->msix_used_vectors;
 	snprintf(vp_dev->msix_names[v], sizeof *vp_dev->msix_names,
 		 "%s-config", name);
+	/*
+	 * 这里给config队列的irq设置处理函数
+	 */
 	err = request_irq(pci_irq_vector(vp_dev->pci_dev, v),
 			  vp_config_changed, 0, vp_dev->msix_names[v],
 			  vp_dev);
@@ -147,6 +154,9 @@ static int vp_request_msix_vectors(struct virtio_device *vdev, int nvectors,
 		goto error;
 	++vp_dev->msix_used_vectors;
 
+	/*
+	 * vp_config_vector()
+	 */
 	v = vp_dev->config_vector(vp_dev, v);
 	/* Verify we had enough resources to assign the vector */
 	if (v == VIRTIO_MSI_NO_VECTOR) {
@@ -159,6 +169,9 @@ static int vp_request_msix_vectors(struct virtio_device *vdev, int nvectors,
 		v = vp_dev->msix_used_vectors;
 		snprintf(vp_dev->msix_names[v], sizeof *vp_dev->msix_names,
 			 "%s-virtqueues", name);
+		/*
+		 * 给读写队列设置处理函数
+		 */
 		err = request_irq(pci_irq_vector(vp_dev->pci_dev, v),
 				  vp_vring_interrupt, 0, vp_dev->msix_names[v],
 				  vp_dev);
@@ -186,6 +199,9 @@ static struct virtqueue *vp_setup_vq(struct virtio_device *vdev, unsigned index,
 	if (!info)
 		return ERR_PTR(-ENOMEM);
 
+	/*
+	 * setup_vq()
+	 */
 	vq = vp_dev->setup_vq(vp_dev, info, index, callback, name, ctx,
 			      msix_vec);
 	if (IS_ERR(vq))
@@ -286,6 +302,9 @@ static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned nvqs,
 	u16 msix_vec;
 	int i, err, nvectors, allocated_vectors, queue_idx = 0;
 
+	/*
+	 * 分配virtio_pci_vq_info数组
+	 */
 	vp_dev->vqs = kcalloc(nvqs, sizeof(*vp_dev->vqs), GFP_KERNEL);
 	if (!vp_dev->vqs)
 		return -ENOMEM;
@@ -396,7 +415,10 @@ int vp_find_vqs(struct virtio_device *vdev, unsigned nvqs,
 {
 	int err;
 
-	/* Try MSI-X with one vector per queue. */
+	/*
+	 * Try MSI-X with one vector per queue.
+	 * - 每个queue一个中断向量
+	 */
 	err = vp_find_vqs_msix(vdev, nvqs, vqs, callbacks, names, true, ctx, desc);
 	if (!err)
 		return 0;
@@ -550,6 +572,9 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 		if (rc)
 			goto err_probe;
 	} else {
+		/*
+		 * 探测virtio_pci_device的features
+		 */
 		rc = virtio_pci_modern_probe(vp_dev);
 		if (rc == -ENODEV)
 			rc = virtio_pci_legacy_probe(vp_dev);

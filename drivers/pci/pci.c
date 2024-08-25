@@ -364,6 +364,9 @@ static int __pci_find_next_cap_ttl(struct pci_bus *bus, unsigned int devfn,
 	u8 id;
 	u16 ent;
 
+	/*
+	 * capability链表中的元素本身是存储在pci配置空间中的
+	 */
 	pci_bus_read_config_byte(bus, devfn, pos, &pos);
 
 	while ((*ttl)--) {
@@ -442,10 +445,12 @@ int pci_find_capability(struct pci_dev *dev, int cap)
 
 	/*
 	 * 找到pci配置空间中capability起始指针
-	 * - 之所以要找，是因为capability不处于前64字节标准配置空间中，所以要根
-	 *   据实际情况来确定在哪里
+	 * - 之所以要找，是因为capability在PCI_HEADER_TYPE_CARDBUS中位置有些特殊
 	 */
 	pos = __pci_bus_find_cap_start(dev->bus, dev->devfn, dev->hdr_type);
+	/*
+	 * 通过起始指针找到第一个capability链表元素
+	 */
 	if (pos)
 		pos = __pci_find_next_cap(dev->bus, dev->devfn, pos, cap);
 

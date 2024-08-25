@@ -88,6 +88,7 @@ struct virtio_config_ops {
 			       const struct cpumask *cpu_mask);
 	const struct cpumask *(*get_vq_affinity)(struct virtio_device *vdev,
 			int index);
+	int (*get_numaware)(struct virtio_device *vdev, int index);
 };
 
 /* If driver didn't advertise the feature, it will never appear. */
@@ -194,6 +195,9 @@ int virtio_find_vqs(struct virtio_device *vdev, unsigned nvqs,
 			const char * const names[],
 			struct irq_affinity *desc)
 {
+	/*
+	 * vp_modern_find_vqs()
+	 */
 	return vdev->config->find_vqs(vdev, nvqs, vqs, callbacks, names, NULL, desc);
 }
 

@@ -62,6 +62,12 @@ static void vp_iowrite64_twopart(u64 val,
 	vp_iowrite32(val >> 32, hi);
 }
 
+/*
+ * off是capability list中每个表在配置空间中的偏移
+ * minlen是最少要读到的字节数量
+ * - 对于必须的cfg，为对应cfg结构体的大小
+ * - 对于可选的cfg，设置为0
+ */
 static void __iomem *map_capability(struct pci_dev *dev, int off,
 				    size_t minlen,
 				    u32 align,

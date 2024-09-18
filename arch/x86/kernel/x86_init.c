@@ -142,6 +142,9 @@ struct x86_msi_ops x86_msi __ro_after_init = {
 /* MSI arch specific hooks */
 int arch_setup_msi_irqs(struct pci_dev *dev, int nvec, int type)
 {
+	/*
+	 * native_setup_msi_irqs()
+	 */
 	return x86_msi.setup_msi_irqs(dev, nvec, type);
 }
 

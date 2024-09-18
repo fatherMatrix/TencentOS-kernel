@@ -1281,6 +1281,10 @@ static void raid10_write_one_disk(struct mddev *mddev, struct r10bio *r10_bio,
 		plug = container_of(cb, struct raid10_plug_cb, cb);
 	else
 		plug = NULL;
+
+	/*
+	 * 上游优化：460af1f9d9e62acce4a21f9bd00b5bcd5963bcd4
+	 */
 	if (plug) {
 		bio_list_add(&plug->pending, mbio);
 		plug->pending_cnt++;
@@ -1289,6 +1293,9 @@ static void raid10_write_one_disk(struct mddev *mddev, struct r10bio *r10_bio,
 		bio_list_add(&conf->pending_bio_list, mbio);
 		conf->pending_count++;
 		spin_unlock_irqrestore(&conf->device_lock, flags);
+		/*
+		 * raid10d()
+		 */
 		md_wakeup_thread(mddev->thread);
 	}
 }

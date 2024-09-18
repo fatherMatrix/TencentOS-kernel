@@ -50,6 +50,10 @@ typedef struct xfs_inode {
 
 	/* Transaction and locking information. */
 	struct xfs_inode_log_item *i_itemp;	/* logging information */
+	/*
+	 * 初始化是在？
+	 * - xfs_fs_inode_init_once()
+	 */
 	mrlock_t		i_lock;		/* inode lock */
 	mrlock_t		i_mmaplock;	/* inode mmap IO lock */
 	/*

@@ -1296,6 +1296,9 @@ struct device {
 	struct dev_pin_info	*pins;
 #endif
 #ifdef CONFIG_GENERIC_MSI_IRQ
+	/*
+	 * 链表头，链表元素是msi_desc->list
+	 */
 	struct list_head	msi_list;
 #endif
 
@@ -1406,6 +1409,9 @@ static inline void set_dev_node(struct device *dev, int node)
 static inline struct irq_domain *dev_get_msi_domain(const struct device *dev)
 {
 #ifdef CONFIG_GENERIC_MSI_IRQ_DOMAIN
+	/*
+	 * tkernel4开启
+	 */
 	return dev->msi_domain;
 #else
 	return NULL;

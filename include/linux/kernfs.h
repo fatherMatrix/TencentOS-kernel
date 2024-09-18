@@ -154,6 +154,12 @@ struct kernfs_node {
 		struct kernfs_elem_attr		attr;
 	};
 
+	/*
+	 * 指向对应的kobject
+	 * - 参见:
+	 *   > sysfs_create_dir_ns()
+	 *   > sysfs_create_file()
+	 */
 	void			*priv;
 
 	union kernfs_node_id	id;

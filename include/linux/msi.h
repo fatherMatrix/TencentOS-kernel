@@ -83,8 +83,15 @@ struct ti_sci_inta_msi_desc {
  * @inta:	[INTA]	    TISCI based INTA specific msi descriptor data
  */
 struct msi_desc {
-	/* Shared device/bus type independent data */
+	/*
+	 * Shared device/bus type independent data
+	 * - 链表元素，链表头是device->msi_list
+	 */
 	struct list_head		list;
+	/*
+	 * 本msi_desc分配到的irq
+	 * - 参见：
+	 */
 	unsigned int			irq;
 	unsigned int			nvec_used;
 	struct device			*dev;
@@ -109,6 +116,10 @@ struct msi_desc {
 				u8	is_64		: 1;
 				u8	is_virtual	: 1;
 				u16	entry_nr;
+				/*
+				 * 来源是pci_dev->irq
+				 * - 参见msix_setup_entries()
+				 */
 				unsigned default_irq;
 			} msi_attrib;
 			union {

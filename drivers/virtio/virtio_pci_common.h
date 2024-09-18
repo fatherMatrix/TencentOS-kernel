@@ -93,11 +93,17 @@ struct virtio_pci_device {
 	/* MSI-X support */
 	int msix_enabled;
 	int intx_enabled;
+	/*
+	 * 每个中断的中断亲和性
+	 */
 	cpumask_var_t *msix_affinity_masks;
 	/* Name strings for interrupts. This size should be enough,
 	 * and I'm too lazy to allocate each name separately. */
 	char (*msix_names)[256];
-	/* Number of available vectors */
+	/*
+	 * Number of available vectors
+	 * - 本virtio_pci_device使用的中断向量的数量
+	 */
 	unsigned msix_vectors;
 	/* Vectors allocated, excluding per-vq vectors if any */
 	unsigned msix_used_vectors;

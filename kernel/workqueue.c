@@ -238,6 +238,8 @@ struct worker_pool {
  * 关系：
  * - workqueue_struct和pool_workqueue是1:N的关系；
  * - pool_workqueue和worker_pool是1:1的关系；相当于worker_pool的代理
+ *   > 既然pool_workqueue和worker_pool是1:1的关系，那pool_workqueue存在的
+ *     意义又是什么呢？
  *
  * pool_workqueue分配内存时按256字节对齐，内存的低8位可以存放其他内容；
  */
@@ -344,6 +346,8 @@ struct workqueue_struct {
 	struct pool_workqueue __percpu *cpu_pwqs; /* I: per-cpu pwqs */
 	/*
 	 * 不绑定处理器的工作队列的pool_workqueue
+	 * - 只有当alloc_workqueue()的flags中包括或间接包括了WQ_UNBOUND时，这里
+	 *   才会分配内存；
 	 */
 	struct pool_workqueue __rcu *numa_pwq_tbl[]; /* PWR: unbound pwqs indexed by node */
 };
@@ -4353,6 +4357,8 @@ static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 
 	/*
 	 * 如果没有设置WQ_UNBOUND，即处理bound类型workqueue
+	 * - 哦，卧槽，一个workqueue_struct，要么是bound的，要么是unbound的。
+	 *   > 只会有一个路径走
 	 */
 	if (!(wq->flags & WQ_UNBOUND)) {
 		/*
@@ -4525,6 +4531,9 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 	if (alloc_and_link_pwqs(wq) < 0)
 		goto err_unreg_lockdep;
 
+	/*
+	 * rescuer就是和work_queue同名的kworker内核线程
+	 */
 	if (wq_online && init_rescuer(wq) < 0)
 		goto err_destroy;
 

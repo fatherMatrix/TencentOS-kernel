@@ -1904,6 +1904,9 @@ struct sched_class {
 	void (*set_next_task)(struct rq *rq, struct task_struct *p, bool first);
 
 #ifdef CONFIG_SMP
+	/*
+	 * cfs: balance_fair()
+	 */
 	int (*balance)(struct rq *rq, struct task_struct *prev, struct rq_flags *rf);
 	/*
 	 * 为进程选择一个合适的cpu

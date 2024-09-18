@@ -816,6 +816,9 @@ struct inode {
 
 	/* Misc */
 	unsigned long		i_state;
+	/*
+	 * 这个是io操作使用的锁？
+	 */
 	struct rw_semaphore	i_rwsem;
 
 	/*
@@ -1775,7 +1778,10 @@ struct super_block {
 	/* Being remounted read-only */
 	int s_readonly_remount;
 
-	/* AIO completions deferred from interrupt context */
+	/*
+	 * AIO completions deferred from interrupt context
+	 * - 参见sb_init_dio_done_wq()
+	 */
 	struct workqueue_struct *s_dio_done_wq;
 	struct hlist_head s_pins;
 

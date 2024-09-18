@@ -29,6 +29,9 @@
 static int pci_msi_enable = 1;
 int pci_msi_ignore_mask;
 
+/*
+ * 参见：pci_msix_vec_count() -> MSI-X Table结构
+ */
 #define msix_table_size(flags)	((flags & PCI_MSIX_FLAGS_QSIZE) + 1)
 
 #ifdef CONFIG_PCI_MSI_IRQ_DOMAIN
@@ -728,6 +731,9 @@ static int msix_setup_entries(struct pci_dev *dev, void __iomem *base,
 		entry->msi_attrib.default_irq	= dev->irq;
 		entry->mask_base		= base;
 
+		/*
+		 * 将msi_desc->list链入device->msi_list尾部
+		 */
 		list_add_tail(&entry->list, dev_to_msi_list(&dev->dev));
 		if (masks)
 			curmsk++;
@@ -782,11 +788,18 @@ static int msix_capability_init(struct pci_dev *dev, struct msix_entry *entries,
 	pci_msix_clear_and_set_ctrl(dev, PCI_MSIX_FLAGS_ENABLE, 0);
 
 	pci_read_config_word(dev, dev->msix_cap + PCI_MSIX_FLAGS, &control);
-	/* Request & Map MSI-X table region */
+	/*
+	 * Request & Map MSI-X table region
+	 * - 在MSI-X Capability中找到Table在设备BAR中的位置，并map到内存空间
+	 *   > 相关Table Layout参见：pci_msix_vec_count()
+	 */
 	base = msix_map_region(dev, msix_table_size(control));
 	if (!base)
 		return -ENOMEM;
 
+	/*
+	 * 分配msi_desc，并链入device->msi_list
+	 */
 	ret = msix_setup_entries(dev, base, entries, nvec, affd);
 	if (ret)
 		return ret;
@@ -962,6 +975,38 @@ int pci_msix_vec_count(struct pci_dev *dev)
 	if (!dev->msix_cap)
 		return -EINVAL;
 
+	/*
+	 * MSI-X Capability结构：
+	 *
+	 *  31                      16 15          8 7          0
+	 * +--------------------------+-------------+------------+
+	 * |       Message Control    |     Next    |     ID     |
+	 * +--------------------------+-------------+-+----------+
+	 * |              Table Offset                | Table BAR|
+	 * +------------------------------------------+----------+
+	 * |                PBA Offset                |   PBA BAR|
+	 * +------------------------------------------+----------+
+	 *
+	 * Message Control:
+	 * - bit 15: MSI-X Enable
+	 * - bit 14: Function Mask
+	 * - bit [10:0]: Table Size
+	 *
+	 * MSI-X Table结构：
+	 *
+	 *       DWORD3           DWORD2           DWORD1           DWORD0
+	 * +----------------+----------------+----------------+----------------+
+	 * | Vector Control |    Msg Data    | Msg Upper Addr |    Msg Addr    |
+	 * +----------------+----------------+----------------+----------------+
+	 * | Vector Control |    Msg Data    | Msg Upper Addr |    Msg Addr    |
+	 * +----------------+----------------+----------------+----------------+
+	 * |       ...      |       ...      |       ...      |       ...      |
+	 * +----------------+----------------+----------------+----------------+
+	 * | Vector Control |    Msg Data    | Msg Upper Addr |    Msg Addr    |
+	 * +----------------+----------------+----------------+----------------+
+	 *
+	 * MSI-X PBA结构：
+	 */
 	pci_read_config_word(dev, dev->msix_cap + PCI_MSIX_FLAGS, &control);
 	return msix_table_size(control);
 }
@@ -978,13 +1023,21 @@ static int __pci_enable_msix(struct pci_dev *dev, struct msix_entry *entries,
 
 	/*
 	 * 获取设备支持的中断向量数
+	 * - 来源是MSI-X Capability中的Message Control字段
 	 */
 	nr_entries = pci_msix_vec_count(dev);
 	if (nr_entries < 0)
 		return nr_entries;
+	/*
+	 * 调用__pci_enable_msix()会针对这种返回调整入参nvec后重新调用本函数，直
+	 * 到某次调用后可以越过本if语句
+	 */
 	if (nvec > nr_entries && !(flags & PCI_IRQ_VIRTUAL))
 		return nr_entries;
 
+	/*
+	 * 最后一定可以走到这里来
+	 */
 	if (entries) {
 		/* Check for any invalid entries */
 		for (i = 0; i < nvec; i++) {
@@ -1002,6 +1055,9 @@ static int __pci_enable_msix(struct pci_dev *dev, struct msix_entry *entries,
 		pci_info(dev, "can't enable MSI-X (MSI IRQ already assigned)\n");
 		return -EINVAL;
 	}
+	/*
+	 * 配置MSI-X Table
+	 */
 	return msix_capability_init(dev, entries, nvec, affd);
 }
 
@@ -1116,6 +1172,10 @@ int pci_enable_msi(struct pci_dev *dev)
 }
 EXPORT_SYMBOL(pci_enable_msi);
 
+/*
+ * MSI-X Capability相关结构信息参见：
+ * - __pci_enable_msix() -> pci_msix_vec_count()注释
+ */
 static int __pci_enable_msix_range(struct pci_dev *dev,
 				   struct msix_entry *entries, int minvec,
 				   int maxvec, struct irq_affinity *affd,

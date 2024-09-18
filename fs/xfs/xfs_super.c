@@ -1003,6 +1003,9 @@ xfs_fs_dirty_inode(
 	 * - 也就是说，xfs_fs_dirty_inode()只承接SB_LAZYTIME时的任务
 	 */
 
+	/*
+	 * 仅有I_DIRTY_TIME时，这里直接返回了
+	 */
 	if (flag != I_DIRTY_SYNC || !(inode->i_state & I_DIRTY_TIME))
 		return;
 

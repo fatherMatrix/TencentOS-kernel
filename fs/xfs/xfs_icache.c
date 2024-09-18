@@ -519,6 +519,7 @@ xfs_iget_cache_hit(
 		 *
 		 * 返回值-EAGAIN的作用是等I_FREEING | I_WILL_FREE结束
 		 * - 这是vfs规定的
+		 * - ext4相关逻辑：iget_locked() -> wait_on_inode()
 		 */
 			trace_xfs_iget_skip(ip);
 			error = -EAGAIN;

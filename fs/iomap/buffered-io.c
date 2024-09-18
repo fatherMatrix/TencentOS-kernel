@@ -743,6 +743,10 @@ iomap_write_end(struct inode *inode, loff_t pos, unsigned len,
 		i_size_write(inode, pos + ret);
 		iomap->flags |= IOMAP_F_SIZE_CHANGED;
 	}
+	/*
+	 * 这里的解锁对应加锁的位置是？
+	 * - iomap_write_begin()?
+	 */
 	unlock_page(page);
 
 	if (old_size < pos)
@@ -835,6 +839,9 @@ again:
 		written += copied;
 		length -= copied;
 
+		/*
+		 * 脏页平衡
+		 */
 		balance_dirty_pages_ratelimited(inode->i_mapping);
 	} while (iov_iter_count(i) && length);
 

@@ -249,6 +249,9 @@ static inline
 int virtqueue_set_affinity(struct virtqueue *vq, const struct cpumask *cpu_mask)
 {
 	struct virtio_device *vdev = vq->vdev;
+	/*
+	 * modern: vp_set_vq_affinity()
+	 */
 	if (vdev->config->set_vq_affinity)
 		return vdev->config->set_vq_affinity(vq, cpu_mask);
 	return 0;

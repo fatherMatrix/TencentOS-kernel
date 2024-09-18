@@ -1892,6 +1892,8 @@ xfs_inactive_ifree(
 	 * inode释放
 	 * - 在磁盘上释放inode，此时内存中是没有对该inode的引用的，该inode目前处
 	 *   于unlink list上
+	 *   > 谁放到unlink_list上的？
+	 *     o vfs_unlink() -> xfs_vn_unlink() -> xfs_remove()
 	 */
 	error = xfs_ifree(tp, ip);
 	ASSERT(xfs_isilocked(ip, XFS_ILOCK_EXCL));

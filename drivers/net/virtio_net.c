@@ -210,7 +210,11 @@ struct virtnet_info {
 	/* Packet virtio header size */
 	u8 hdr_len;
 
-	/* Work struct for refilling if we run low on memory. */
+	/*
+	 * Work struct for refilling if we run low on memory.
+	 * - refill_work()
+	 *   > 参见：virtnet_alloc_queues()
+	 */
 	struct delayed_work refill;
 
 	/* Work struct for config space updates */
@@ -2805,6 +2809,9 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 	/* Parameters for control virtqueue, if any */
 	if (vi->has_cvq) {
 		callbacks[total_vqs - 1] = NULL;
+		/*
+		 * "control"字符串本身是链接到二进制中的
+		 */
 		names[total_vqs - 1] = "control";
 	}
 
@@ -2814,6 +2821,10 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 		callbacks[txq2vq(i)] = skb_xmit_done;
 		sprintf(vi->rq[i].name, "input.%d", i);
 		sprintf(vi->sq[i].name, "output.%d", i);
+		/*
+		 * name数组中每个元素都是一个字符串指针，这里是把该指针指向对应
+		 * send_queue/receive_queue的name
+		 */
 		names[rxq2vq(i)] = vi->rq[i].name;
 		names[txq2vq(i)] = vi->sq[i].name;
 		if (ctx)
@@ -2862,9 +2873,15 @@ static int virtnet_alloc_queues(struct virtnet_info *vi)
 	vi->ctrl = kzalloc(sizeof(*vi->ctrl), GFP_KERNEL);
 	if (!vi->ctrl)
 		goto err_ctrl;
+	/*
+	 * 分配send_queue数组
+	 */
 	vi->sq = kcalloc(vi->max_queue_pairs, sizeof(*vi->sq), GFP_KERNEL);
 	if (!vi->sq)
 		goto err_sq;
+	/*
+	 * 分配receive_queue数组
+	 */
 	vi->rq = kcalloc(vi->max_queue_pairs, sizeof(*vi->rq), GFP_KERNEL);
 	if (!vi->rq)
 		goto err_rq;

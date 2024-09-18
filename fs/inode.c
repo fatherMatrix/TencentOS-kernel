@@ -1459,6 +1459,7 @@ again:
 		inode = old;
 		/*
 		 * 等待inode的I_NEW位被清除
+		 * - 这里和xfs中xfs_iget_cache_hit() -> igrab()循环问题是一样的
 		 */
 		wait_on_inode(inode);
 		if (unlikely(inode_unhashed(inode))) {

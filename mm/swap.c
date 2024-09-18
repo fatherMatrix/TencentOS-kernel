@@ -265,6 +265,10 @@ static void __activate_page(struct page *page, struct lruvec *lruvec)
 		int lru = page_lru_base_type(page);
 
 		del_page_from_lru_list(page, lruvec, lru);
+		/*
+		 * 在page被放入activate_page_pvecs之后、执行SetPageActive()之前
+		 * 又被执行mark_page_accessed()该怎么办？
+		 */
 		SetPageActive(page);
 		lru += LRU_ACTIVE;
 		add_page_to_lru_list(page, lruvec, lru);
@@ -295,6 +299,11 @@ void activate_page(struct page *page)
 	if (PageLRU(page) && !PageActive(page) && !PageUnevictable(page)) {
 		/*
 		 * 放到per-cpu的active链表上
+		 * - 但这个过程中有一个中间的临时存储区域activate_page_pvecs
+		 *   > 注意：放到activate_page_pvecs中后，page的状态还是unactive
+		 *     的，直到activate_page_pvecs中被放满并触发__activate_page()
+		 *     后，再从原来的unactive lru list上拿下来，放入active lru
+		 *     list中
 		 */
 		struct pagevec *pvec = &get_cpu_var(activate_page_pvecs);
 
@@ -365,6 +374,9 @@ void mark_page_accessed(struct page *page)
 	if (!PageActive(page) && !PageUnevictable(page) &&
 			PageReferenced(page)) {
 
+	/*
+	 * 如果page不是active，但是referenced，则触发reactive
+	 */
 		/*
 		 * If the page is on the LRU, queue it for activation via
 		 * activate_page_pvecs. Otherwise, assume the page is on a
@@ -372,6 +384,9 @@ void mark_page_accessed(struct page *page)
 		 * LRU on the next drain.
 		 */
 		if (PageLRU(page))
+		/*
+		 * 如果page已经在lru中了
+		 */
 			activate_page(page);
 		else
 			__lru_cache_activate_page(page);

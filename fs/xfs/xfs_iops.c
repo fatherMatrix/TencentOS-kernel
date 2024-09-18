@@ -1123,6 +1123,9 @@ xfs_vn_update_time(
 
 	xfs_trans_ijoin(tp, ip, XFS_ILOCK_EXCL);
 	xfs_trans_log_inode(tp, ip, log_flags);
+	/*
+	 * 放锁动作在这里
+	 */
 	return xfs_trans_commit(tp);
 }
 

@@ -115,6 +115,10 @@ static int vp_request_msix_vectors(struct virtio_device *vdev, int nvectors,
 					   GFP_KERNEL);
 	if (!vp_dev->msix_names)
 		goto error;
+	/*
+	 * 对每个msix中断，分配一个对应的cpumask_var_t，用于记录该中断的中断亲和
+	 * 性；
+	 */
 	vp_dev->msix_affinity_masks
 		= kcalloc(nvectors, sizeof(*vp_dev->msix_affinity_masks),
 			  GFP_KERNEL);
@@ -132,7 +136,7 @@ static int vp_request_msix_vectors(struct virtio_device *vdev, int nvectors,
 
 	/*
 	 * 申请中断向量
-	 * - 申请了中断向量起始就是申请了irq
+	 * - 申请了中断向量其实就是申请了irq
 	 */
 	err = pci_alloc_irq_vectors_affinity(vp_dev->pci_dev, nvectors,
 					     nvectors, flags, desc);
@@ -303,7 +307,7 @@ static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned nvqs,
 	int i, err, nvectors, allocated_vectors, queue_idx = 0;
 
 	/*
-	 * 分配virtio_pci_vq_info数组
+	 * 分配virtio_pci_vq_info指针数组
 	 */
 	vp_dev->vqs = kcalloc(nvqs, sizeof(*vp_dev->vqs), GFP_KERNEL);
 	if (!vp_dev->vqs)
@@ -417,12 +421,15 @@ int vp_find_vqs(struct virtio_device *vdev, unsigned nvqs,
 
 	/*
 	 * Try MSI-X with one vector per queue.
-	 * - 每个queue一个中断向量
+	 * - 每个queue一个中断向量，config一个中断向量
 	 */
 	err = vp_find_vqs_msix(vdev, nvqs, vqs, callbacks, names, true, ctx, desc);
 	if (!err)
 		return 0;
-	/* Fallback: MSI-X with one vector for config, one shared for queues. */
+	/*
+	 * Fallback: MSI-X with one vector for config, one shared for queues.
+	 * - 所有queue共用一个中断向量，config单独一个中断向量
+	 */
 	err = vp_find_vqs_msix(vdev, nvqs, vqs, callbacks, names, false, ctx, desc);
 	if (!err)
 		return 0;

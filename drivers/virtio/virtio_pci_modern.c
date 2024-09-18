@@ -425,6 +425,9 @@ static int vp_modern_find_vqs(struct virtio_device *vdev, unsigned nvqs,
 			      const char * const names[], const bool *ctx,
 			      struct irq_affinity *desc)
 {
+	/*
+	 * 诶，virtnet_find_vqs() -> vp_modern_find_vqs()过程中，desc竟然是NULL
+	 */
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 	struct virtqueue *vq;
 	int rc = vp_find_vqs(vdev, nvqs, vqs, callbacks, names, ctx, desc);
@@ -502,6 +505,7 @@ static const struct virtio_config_ops virtio_pci_config_ops = {
  * @ioresource_types: IORESOURCE_MEM and/or IORESOURCE_IO.
  *
  * Returns offset of the capability, or 0.
+ * - 返回的应该是Capability List Item在配置空间中的偏移
  */
 static inline int virtio_pci_find_capability(struct pci_dev *dev, u8 cfg_type,
 					     u32 ioresource_types, int *bars)

@@ -124,6 +124,9 @@ static int internal_create_group(struct kobject *kobj, int update,
 		return -EINVAL;
 	}
 	kobject_get_ownership(kobj, &uid, &gid);
+	/*
+	 * 如果attribute_group->name被指定了，则使用该name创建一个新dir
+	 */
 	if (grp->name) {
 		if (update) {
 			kn = kernfs_find_and_get(kobj->sd, grp->name);

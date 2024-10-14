@@ -364,6 +364,7 @@ struct xfs_cil {
 
 	/*
 	 * xfs_log_commit_cil()中使用了这个信号量
+	 * - 用于事务向CIL提交 与 后台push的互斥
 	 */
 	struct rw_semaphore	xc_ctx_lock ____cacheline_aligned_in_smp;
 	/*

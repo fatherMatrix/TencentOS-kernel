@@ -2012,14 +2012,27 @@ static struct mapped_device *alloc_dev(int minor)
 	INIT_LIST_HEAD(&md->table_devices);
 	spin_lock_init(&md->uevent_lock);
 
+	/*
+	 * 按照正常的blk-mq使用方法，应该调用blk_mq_init_queue()，其会调用
+	 * blk_alloc_queue_node()和blk_mq_init_allocated_queue()。这里看样子似乎
+	 * 并没有完整实现blk_mq_init_allocated_queue()中的功能？
+	 */
 	md->queue = blk_alloc_queue_node(GFP_KERNEL, numa_node_id);
 	if (!md->queue)
 		goto bad;
+	/*
+	 * dm_make_request()的参数
+	 */
 	md->queue->queuedata = md;
 	/*
 	 * default to bio-based required ->make_request_fn until DM
 	 * table is loaded and md->type established. If request-based
 	 * table is loaded: blk-mq will override accordingly.
+	 * - 这部分功能原本是属于blk_mq_init_allocated_queue()中的，这里拿出来后
+	 *   难道blk_mq_init_allocated_queue()中的其他步骤就不需要了吗？
+	 *   > 哦，blk_mq_init_allocated_queue()中注册的make_request_fn是
+	 *     blk_mq_make_request()，可能是只有blk_mq_make_request()中才会使用
+	 *     到blk-mq的其他各种数据结构
 	 */
 	blk_queue_make_request(md->queue, dm_make_request);
 
@@ -2050,6 +2063,10 @@ static struct mapped_device *alloc_dev(int minor)
 			goto bad;
 	}
 
+	/*
+	 * 为什么是no_queue_reg呢？
+	 * - 似乎这里只是不向sysfs中注册相关kobject
+	 */
 	add_disk_no_queue_reg(md->disk);
 	format_dev_t(md->name, MKDEV(_major, minor));
 

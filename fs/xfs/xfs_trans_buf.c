@@ -86,6 +86,7 @@ _xfs_trans_bjoin(
 
 	/*
 	 * Take a reference for this transaction on the buf item.
+	 * - 将xfs_buf_log_item的引用计数增加到1
 	 */
 	atomic_inc(&bip->bli_refcount);
 
@@ -151,6 +152,10 @@ xfs_trans_get_buf_map(
 		bip = bp->b_log_item;
 		ASSERT(bip != NULL);
 		ASSERT(atomic_read(&bip->bli_refcount) > 0);
+		/*
+		 * 本trans已经引用这个xfs_buf，可以推断已经上锁，这里仅增加此
+		 * 计数即可
+		 */
 		bip->bli_recur++;
 		trace_xfs_trans_get_buf_recur(bip);
 		return bp;

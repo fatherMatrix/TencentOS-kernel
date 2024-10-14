@@ -442,6 +442,9 @@ xfs_buf_item_unpin(
 		 */
 		if (bip->bli_flags & XFS_BLI_STALE_INODE) {
 			xfs_buf_do_callbacks(bp);
+			/*
+			 * 内存是什么时候释放的呢？
+			 */
 			bp->b_log_item = NULL;
 			list_del_init(&bp->b_li_list);
 			bp->b_iodone = NULL;
@@ -789,6 +792,9 @@ xfs_buf_item_init(
 	 * 将xfs_buf关联到xfs_buf_log_item上；
 	 */
 	bp->b_log_item = bip;
+	/*
+	 * 增加xfs_buf的引用计数
+	 */
 	xfs_buf_hold(bp);
 	return 0;
 }
@@ -1021,7 +1027,10 @@ xfs_buf_do_callbacks(
 	struct xfs_buf_log_item *blip = bp->b_log_item;
 	struct xfs_log_item	*lip;
 
-	/* If there is a buf_log_item attached, run its callback */
+	/*
+	 * If there is a buf_log_item attached, run its callback
+	 * - xfs_log_item什么时候释放呢？
+	 */
 	if (blip) {
 		lip = &blip->bli_item;
 		lip->li_cb(bp, lip);

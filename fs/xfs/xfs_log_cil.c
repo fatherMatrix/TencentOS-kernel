@@ -392,8 +392,18 @@ xlog_cil_insert_format_items(
 		old_lv = lip->li_lv;
 		/*
 		 * 意思就是谁大用谁
+		 *
+		 * 另外，lip->li_lv不为NULL的前提是还未经历xlog_cil_push()，在
+		 * xlog_cil_push()中，会将xfs_log_item->li_lv全部摘下放入
+		 * xfs_cil_ctx->lv_chain上；
 		 */
 		if (lip->li_lv && shadow->lv_size <= lip->li_lv->lv_size) {
+		/*
+		 * 有这种可能吗？
+		 * - 第N-1次修改导致的日志需要100个字节来记录，第N次修改后，N-1
+		 *   和N的修改整合起来导致需要的字节数少于100。可能吗？
+		 *   > 实际加printk发现还真有小于的情况，但绝大部分情况是等于。
+		 */
 			/* same or smaller, optimise common overwrite case */
 			lv = lip->li_lv;
 			lv->lv_next = NULL;
@@ -404,6 +414,9 @@ xlog_cil_insert_format_items(
 			/*
 			 * set the item up as though it is a new insertion so
 			 * that the space reservation accounting is correct.
+			 *
+			 * 这里的操作要结合本函数最后调用的xfs_cil_prepare_item()
+			 * 来看
 			 */
 			*diff_iovecs -= lv->lv_niovecs;
 			*diff_len -= lv->lv_bytes;
@@ -413,6 +426,10 @@ xlog_cil_insert_format_items(
 
 			/* reset the lv buffer information for new formatting */
 			lv->lv_buf_len = 0;
+			/*
+			 * 这里我们确实可以随意更改CIL，因为外层做了down_read()，
+			 * 此时不可能有任何background push在运行
+			 */
 			lv->lv_bytes = 0;
 			lv->lv_buf = (char *)lv +
 					xlog_cil_iovec_space(lv->lv_niovecs);
@@ -986,6 +1003,8 @@ restart:
 	spin_lock(&cil->xc_push_lock);
 	/*
 	 * xlog_cil_push()要确保本次xfs_cil_ctx之前的ctx全部push结束了
+	 * - 仅关注commit_lsn的顺序性是不够的，参见：
+	 *   > bugfix upstream 68a74dcae6737c27b524b680e070fe41f0cad43a
 	 */
 	list_for_each_entry(new_ctx, &cil->xc_committing, committing) {
 		/*

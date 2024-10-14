@@ -588,6 +588,9 @@ static void __blk_mq_complete_request_remote(void *data)
 	struct request *rq = data;
 	struct request_queue *q = rq->q;
 
+	/*
+	 * nvme_mq_ops.nvme_pci_complete_rq()
+	 */
 	q->mq_ops->complete(rq);
 }
 
@@ -624,9 +627,15 @@ static void __blk_mq_complete_request(struct request *rq)
 	/*
 	 * For a polled request, always complete locallly, it's pointless
 	 * to redirect the completion.
+	 *
+	 * polled request，本cpu处理
 	 */
 	if ((rq->cmd_flags & REQ_HIPRI) ||
 	    !test_bit(QUEUE_FLAG_SAME_COMP, &q->queue_flags)) {
+		/*
+		 * nvme_mq_ops.nvme_pci_complete_rq()
+		 * scsi_mq_ops.scsi_softirq_done()
+		 */
 		q->mq_ops->complete(rq);
 		return;
 	}
@@ -2648,10 +2657,21 @@ static void blk_mq_map_swqueue(struct request_queue *q)
 		ctx = per_cpu_ptr(q->queue_ctx, i);
 		for (j = 0; j < set->nr_maps; j++) {	/* 遍历硬件队列类型 */
 			if (!set->map[j].nr_queues) {
+			/*
+			 * 如果对应类型（HCTX_MAX_TYPES）的映射表中没有硬件队列
+			 * 则使用HCTX_TYPE_DEFAULT类型
+			 */
+				/*
+				 * 将本软件队列对应的硬件队列实例blk_mq_hw_ctx
+				 * 保存到blk_mq_ctx->hctxs[j]中
+				 */
 				ctx->hctxs[j] = blk_mq_map_queue_type(q,
 						HCTX_TYPE_DEFAULT, i);
 				continue;
 			}
+			/*
+			 * 软件队列对应硬件队列的id
+			 */
 			hctx_idx = set->map[j].mq_map[i];
 			/* unmapped hw queue can be remapped after CPU topo changed */
 			if (!set->tags[hctx_idx] &&
@@ -2669,6 +2689,10 @@ static void blk_mq_map_swqueue(struct request_queue *q)
 			 * 取出对应的硬件队列
 			 */
 			hctx = blk_mq_map_queue_type(q, j, i);
+			/*
+			 * 标记软件队列blk_mq_ctx->hctxs，使其指向对应硬件队列的
+			 * blk_mq_hw_ctx实例
+			 */
 			ctx->hctxs[j] = hctx;
 			/*
 			 * If the CPU is already set in the mask, then we've
@@ -2777,6 +2801,9 @@ static void blk_mq_del_queue_tag_set(struct request_queue *q)
 	INIT_LIST_HEAD(&q->tag_set_list);
 }
 
+/*
+ * 同一个blk_mq_tag_set有可能被多个request_queue共享
+ */
 static void blk_mq_add_queue_tag_set(struct blk_mq_tag_set *set,
 				     struct request_queue *q)
 {
@@ -3269,6 +3296,9 @@ static int blk_mq_update_queue_map(struct blk_mq_tag_set *set)
 		for (i = 0; i < set->nr_maps; i++)
 			blk_mq_clear_mq_map(&set->map[i]);
 
+		/*
+		 * - nvme_pci_map_queues()
+		 */
 		return set->ops->map_queues(set);
 	} else {
 		/*
@@ -3288,9 +3318,9 @@ static int blk_mq_update_queue_map(struct blk_mq_tag_set *set)
  * 分配：
  * - blk_mq_tag_set
  *   - blk_mq_tag_set.map[i].mq_map
- * - blk_mq_tags
- *   - blk_mq_tags->rqs
- *     - blk_mq_tags->rqs->request
+ *   - blk_mq_tags
+ *     > blk_mq_tags->rqs
+ *     > blk_mq_tags->rqs->request
  */
 int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 {

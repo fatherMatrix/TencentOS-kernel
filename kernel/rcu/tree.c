@@ -2424,6 +2424,10 @@ static void invoke_rcu_core(void)
 	if (!cpu_online(smp_processor_id()))
 		return;
 	if (use_softirq)
+		/*
+		 * tiny: rcu_process_callbacks()
+		 * tree: rcu_core_si()
+		 */
 		raise_softirq(RCU_SOFTIRQ);
 	else
 		invoke_rcu_core_kthread();
@@ -2509,6 +2513,9 @@ static void __call_rcu_core(struct rcu_data *rdp, struct rcu_head *head,
 	/*
 	 * If called from an extended quiescent state, invoke the RCU
 	 * core in order to force a re-evaluation of RCU's idleness.
+	 * - 如果当前处于eqs，但是又注册了callback，由于没有了时钟中断判定qs，这
+	 *   时需要主动启用软中断来判定qs和gp
+	 *   > 正常qs是在时钟中断中判断的
 	 */
 	if (!rcu_is_watching())
 		invoke_rcu_core();
@@ -2527,7 +2534,10 @@ static void __call_rcu_core(struct rcu_data *rdp, struct rcu_head *head,
 	if (unlikely(rcu_segcblist_n_cbs(&rdp->cblist) >
 		     rdp->qlen_last_fqs_check + qhimark)) {
 
-		/* Are we ignoring a completed grace period? */
+		/*
+		 * Are we ignoring a completed grace period?
+		 * - 检查是否错过了已经结束的宽限期
+		 */
 		note_gp_changes(rdp);
 
 		/* Start a new grace period if one not already started. */
@@ -2557,6 +2567,10 @@ static void rcu_leak_callback(struct rcu_head *rhp)
  * normally be -1, indicating "currently running CPU".  It may specify
  * a CPU only if that CPU is a no-CBs CPU.  Currently, only rcu_barrier()
  * is expected to specify a CPU.
+ *
+ * 主要功能：
+ * - 将回调函数注册到rcu_data.rcu_segcblist
+ * - 判断是否需要开启新的宽限期
  */
 static void
 __call_rcu(struct rcu_head *head, rcu_callback_t func, bool lazy)
@@ -2599,7 +2613,10 @@ __call_rcu(struct rcu_head *head, rcu_callback_t func, bool lazy)
 	}
 	if (rcu_nocb_try_bypass(rdp, head, &was_alldone, flags))
 		return; // Enqueued onto ->nocb_bypass, so just leave.
-	/* If we get here, rcu_nocb_try_bypass() acquired ->nocb_lock. */
+	/*
+	 * If we get here, rcu_nocb_try_bypass() acquired ->nocb_lock.
+	 * - 将rcu_head加入rcu_data.rcu_segcblist链表
+	 */
 	rcu_segcblist_enqueue(&rdp->cblist, head, lazy);
 	if (__is_kfree_rcu_offset((unsigned long)func))
 		trace_rcu_kfree_callback(rcu_state.name, head,
@@ -2613,6 +2630,9 @@ __call_rcu(struct rcu_head *head, rcu_callback_t func, bool lazy)
 
 	/* Go handle any RCU core processing required. */
 	if (IS_ENABLED(CONFIG_RCU_NOCB_CPU) &&
+	/*
+	 * RCU_NOCB_CPU开启后会将rcu callback的执行从指定的cpu集合中排除
+	 */
 	    unlikely(rcu_segcblist_is_offloaded(&rdp->cblist))) {
 		/*
 		 * 内部会开中断

@@ -1290,6 +1290,9 @@ __xfs_filemap_fault(
 		file_update_time(vmf->vma->vm_file);
 	}
 
+	/*
+	 * 这里的锁可以和open()/write()互斥吗？
+	 */
 	xfs_ilock(XFS_I(inode), XFS_MMAPLOCK_SHARED);
 	if (IS_DAX(inode)) {
 		pfn_t pfn;
@@ -1298,6 +1301,14 @@ __xfs_filemap_fault(
 		if (ret & VM_FAULT_NEEDDSYNC)
 			ret = dax_finish_sync_fault(vmf, pe_size, pfn);
 	} else {
+		/*
+		 * 经由__do_fault() -> xfs_filemap_fault()进来时，仅当文件为dax
+		 * 时write_fault才可能为true，这是因为dax可以在write fault过程中
+		 * 优化处理；
+		 *
+		 * 对于非dax文件，只有经由do_page_mkwrite() ->
+		 * xfs_filemap_page_mkwrite()进来时，write fault才会为true；
+		 */
 		if (write_fault)
 		/*
 		 * page已经存在，只是当前pte entry中没有写权限，但用户写了这个

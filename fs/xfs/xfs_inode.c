@@ -2840,6 +2840,7 @@ xfs_ifree_cluster(
 				/*
 				 * 理论上，li_cb在xfs_log_item写入数据区后才会
 				 * 调用，但看这里的意思，似乎是停止写入？
+				 * - 因为走到这里，说明相关的inode全部被删除了
 				 */
 				lip->li_cb = xfs_istale_done;
 				xfs_trans_ail_copy_lsn(mp->m_ail,

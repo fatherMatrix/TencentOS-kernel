@@ -90,6 +90,15 @@ struct xfs_log_item {
 	/*
 	 * li_lv和li_lv_shadow的关系见xlog_cil_alloc_shadow_bufs()的注释；
 	 * - 最后一次使用是什么时候？
+	 *   > li_lv指针会在xlog_cil_push()中被置空，xfs_log_vec实体被转移到
+	 *     xfs_cil_ctx->lv_chain链表中
+	 *   > xlog_write()中最后一次使用了xfs_log_vec实体
+	 *   > 当前版本中释放xfs_log_vec实体是在xlog_cil_free_logvec()
+	 *
+	 * xfs_log_vec和其中的xfs_log_iovec其实是可以分离的，但为什么在
+	 * xlog_write()后xfs_log_iovec可以释放但是xfs_log_vec不可释放呢？
+	 * - 因为我们需要xfs_log_vec在xlog io done之后来找到对应的
+	 *   xfs_log_item
 	 */
 	struct xfs_log_vec		*li_lv;		/* active log vector */
 	struct xfs_log_vec		*li_lv_shadow;	/* standby vector */

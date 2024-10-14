@@ -39,6 +39,19 @@ struct rcu_exp_work {
  * Definition for node within the RCU grace-period-detection hierarchy.
  *
  * rcu_node用来描述一个处理器分组的RCU状态
+ * - 自下而上传递静止状态信息
+ * - 自上而下传递宽限期信息
+ *
+ * 来自内核文档：
+ * They provides local copies of the grace-period state in order to allow this
+ * information to be accessed in a synchronized manner without suffering the
+ * scalability limitations that would otherwise be imposed by global locking.
+ * In CONFIG_PREEMPT_RCU kernels, they manage the lists of tasks that have
+ * blocked while in their current RCU read-side critical section. In
+ * CONFIG_PREEMPT_RCU with CONFIG_RCU_BOOST, they manage the per-rcu_node
+ * priority-boosting kernel threads (kthreads) and state. Finally, they record
+ * CPU-hotplug state in order to determine which CPUs should be ignored during
+ * a given grace period.
  */
 struct rcu_node {
 	/* 保护本rcu_node的自旋锁 */
@@ -62,8 +75,13 @@ struct rcu_node {
 	unsigned long gp_seq_needed; /* Track furthest future GP request. */
 	unsigned long completedqs; /* All QSes done for this node. */
 	/*
- 	 * qsmask字段跟踪此rcu_node结构中哪些子结构在当前正常宽限期内仍然需要报
- 	 * 告静止状态
+	 * 来自内核文档：
+	 * - The ->qsmask field tracks which of this rcu_node structure's
+	 *   children still need to report quiescent states for the current
+	 *   normal grace period. 
+	 * - Such children will have a value of 1 in their corresponding bit.
+	 *   Note that the leaf rcu_node structures should be thought of as
+	 *   having rcu_data structures as their children.
  	 */ 
 	unsigned long qsmask;	/* CPUs or groups that need to switch in */
 				/*  order for current grace period to proceed.*/
@@ -72,7 +90,14 @@ struct rcu_node {
 				/*  bit corresponds to a child rcu_node */
 				/*  structure. */
 	unsigned long rcu_gp_init_mask;	/* Mask of offline CPUs at GP init. */
-	/* 初始化qsmask。是每个正常宽限期开始的时候静止状态位图的初始值 */
+	/*
+	 * 来自内核文档：
+	 * - The ->qsmaskinit field tracks which of this rcu_node structure's
+	 *   children cover for at least one online CPU. This mask is used to
+	 *   initialize ->qsmask, and ->expmaskinit is used to initialize
+	 *   ->expmask and the beginning of the normal and expedited grace
+	 *   periods, respectively.
+	 */
 	unsigned long qsmaskinit;
 				/* Per-GP initial value for qsmask. */
 				/*  Initialized from ->qsmaskinitnext at the */
@@ -83,12 +108,16 @@ struct rcu_node {
 	unsigned long qsmaskinitnext;
 				/* Online CPUs for next grace period. */
 	/*
- 	 * expmask字段跟踪此rcu_node结构中哪些子结构在当前快速宽限期内仍然需要报
- 	 * 告静止状态。 
- 	 *
- 	 * 快速宽限期的概念属性与正常宽限期相同，但快速实现极端的CPU开销，以获得
- 	 * 更低的宽限期延迟，例如，消耗数十微秒的CPU时间，将宽限期持续时间从毫秒
- 	 * 缩短到数十微秒。
+	 * 来自内核文档：
+	 * - Similarly, the ->expmask field tracks which of this rcu_node
+	 *   structure's children still need to report quiescent states for the
+	 *   current expedited grace period.
+	 * - An expedited grace period has the same conceptual properties as a
+	 *   normal grace period, but the expedited implementation accepts
+	 *   extreme CPU overhead to obtain much lower grace-period latency, for
+	 *   example, consuming a few tens of microseconds worth of CPU time to
+	 *   reduce grace-period duration from milliseconds to tens of
+	 *   microseconds.
  	 */
 	unsigned long expmask;	/* CPUs or groups that need to check in */
 				/*  to allow the current expedited GP */
@@ -103,13 +132,40 @@ struct rcu_node {
 				/*  Any CPU that has ever been online will */
 				/*  have its bit set. */
 	unsigned long ffmask;	/* Fully functional CPUs. */
+	/*
+	 * grpnum的bit mask对应项，用于在parent rcu_node bitmask中设置/清除本
+	 * rcu_node
+	 */
 	unsigned long grpmask;	/* Mask to apply to parent qsmask. */
 				/*  Only one bit will be set in this mask. */
+	/*
+	 * 本rcu_node控制的cpu编号最小、最大值
+	 */
 	int	grplo;		/* lowest-numbered CPU or group here. */
 	int	grphi;		/* highest-numbered CPU or group here. */
+	/*
+	 * 该分组在上一层分组里的编号
+	 * - rcu_node有多个children，记录一个child在parent的children中的位置
+	 */
 	u8	grpnum;		/* CPU/group number for next level up. */
+	/*
+	 * 在rcu_node tree中的层级
+	 */
 	u8	level;		/* root is at level 0. */
 	bool	wait_blkd_tasks;/* Necessary to wait for blocked tasks to */
+				/* exit RCU read-side critical sections */
+				/* before propagating offline up the */
+				/* rcu_node tree? */
+	/*
+	 * 构建tree topology
+	 */
+	struct rcu_node *parent;
+	/*
+	 * 链表元素是task_struct->rcu_node_entry
+	 */
+	struct list_head blkd_tasks;
+				/* Tasks blocked in RCU read-side critical */
+				/*  section.  Tasks are placed at the head */
 				/*  of this list and age towards the tail. */
 	/*
  	 * 通过task_struct->rcu_node_entry连接task_struct，进而管理task_struct
@@ -191,8 +247,15 @@ struct rcu_data {
  	 */
 	unsigned long	gp_seq;		/* Track rsp->rcu_gp_seq counter. */
 	unsigned long	gp_seq_needed;	/* Track furthest future GP request. */
-	/* 当前cpu还没有经历过静止状态 */
+	/*
+	 * - The ->cpu_no_qs flag indicates that the CPU has not yet passed
+	 *   through a quiescent state,
+	 */
 	union rcu_noqs	cpu_no_qs;	/* No QSes yet for this CPU. */
+	/*
+	 * - while the ->core_needs_qs flag indicates that the RCU core needs
+	 *   a quiescent state from the corresponding CPU
+	 */
 	bool		core_needs_qs;	/* Core waits for quiesc state. */
 	bool		beenonline;	/* CPU online at least once. */
 	/* 意味着gp_seq有回绕的可能 */
@@ -208,10 +271,28 @@ struct rcu_data {
 	struct irq_work defer_qs_iw;	/* Obtain later scheduler attention. */
 	bool defer_qs_iw_pending;	/* Scheduler attention pending? */
 
-	/* 2) batch handling */
+	/*
+	 * 2) batch handling
+	 * - call_rcu()注册的回调链表
+	 *
+	 * 来自内核文档：
+	 * - The ->cblist structure is the segmented callback list described
+	 *   earlier. The CPU advances the callbacks in its rcu_data structure
+	 *   whenever it notices that another RCU grace period has completed.
+	 *   The CPU detects the completion of an RCU grace period by noticing
+	 *   that the value of its rcu_data structure's ->gp_seq field differs
+	 *   from that of its leaf rcu_node structure. Recall that each rcu_node
+	 *   structure's ->gp_seq field is updated at the beginnings and ends
+	 *   of each grace period.
+	 */
 	struct rcu_segcblist cblist;	/* Segmented callback list, with */
 					/* different callbacks waiting for */
 					/* different grace periods. */
+	/*
+	 * - The ->qlen_last_fqs_check and ->n_force_qs_snap coordinate the
+	 *   forcing of quiescent states from call_rcu() and friends when
+	 *   callback lists grow excessively long.
+	 */
 	long		qlen_last_fqs_check;
 					/* qlen at last check for QS forcing */
 	unsigned long	n_force_qs_snap;
@@ -219,6 +300,14 @@ struct rcu_data {
 	long		blimit;		/* Upper limit on a processed batch */
 
 	/* 3) dynticks interface. */
+	/*
+	 * - The ->dynticks_snap field is used to take a snapshot of the
+	 *   corresponding CPU's dyntick-idle state when forcing quiescent
+	 *   states, and is therefore accessed from other CPUs.
+	 * - Finally, the ->dynticks_fqs field is used to count the number of
+	 *   times this CPU is determined to be in dyntick-idle state, and is
+	 *   used for tracing and debugging purposes.
+	 */
 	int dynticks_snap;		/* Per-GP tracking for dynticks. */
 	long dynticks_nesting;		/* Track process nesting level. */
 	long dynticks_nmi_nesting;	/* Track irq/NMI nesting level. */
@@ -335,9 +424,15 @@ do {									\
  * 描述rcu的全局状态
  */
 struct rcu_state {
-	/* 定义了rcu tree中所有的rcu node */
+	/*
+	 * 定义了rcu tree中所有的rcu node
+	 * - 整棵树中的所有节点
+	 */
 	struct rcu_node node[NUM_RCU_NODES];	/* Hierarchy. */
-	/* 保存每个层级中的第一个rcu node的指针 */
+	/*
+	 * 保存每个层级中的第一个rcu node的指针
+	 * - 树中每层的最左节点
+	 */
 	struct rcu_node *level[RCU_NUM_LVLS + 1];
 						/* Hierarchy levels (+1 to */
 						/*  shut bogus gcc warning) */
@@ -350,9 +445,16 @@ struct rcu_state {
 						/* Subject to priority boost. */
 	/* 
  	 * 当前宽限期序列号。低2位保存当前宽限期的状态：
- 	 *   - 0：	表示当前未开始宽限期，是空闲的
- 	 *   - 1：	表示当前宽限期正在进行中
- 	 *   - others：	表示有地方出了问题
+ 	 * - 0：	表示当前未开始宽限期，是空闲的
+ 	 * - 1：	表示当前宽限期正在进行中
+ 	 * - others：	表示有地方出了问题
+ 	 *
+ 	 * 本字段由root rcu_node->lock保护。
+ 	 *
+ 	 * 本字段是最新的rcu宽限期编号
+ 	 * - 宽限期是由rcu_state -> rcu_node -> rcu_data传递的
+ 	 * - rcu_node/rcu_data使用其对应的字段与此字段对比来判定宽限期的开始和
+ 	 *   结束
  	 */
 	unsigned long gp_seq;			/* Grace-period sequence #. */
 	/* 宽限期线程 */
@@ -402,9 +504,25 @@ struct rcu_state {
 						/*  a reluctant CPU. */
 	unsigned long n_force_qs_gpstart;	/* Snapshot of n_force_qs at */
 						/*  GP start. */
+	/*
+	 * 记录最长的宽限期的耗时
+	 * - 单位是jiffies
+	 * - 被root rcu_node->lock保护
+	 */
 	unsigned long gp_max;			/* Maximum GP duration in */
 						/*  jiffies. */
+	/*
+	 * 下面两个字段用于信息打印和调试
+	 * - "rcu_preempt"
+	 *       ^
+	 * - "rcu_sched"
+	 *       ^
+	 */
 	const char *name;			/* Name of structure. */
+	/*
+	 * - 'p'
+	 * - 's'
+	 */
 	char abbr;				/* Abbreviated name. */
 
 	raw_spinlock_t ofl_lock ____cacheline_internodealigned_in_smp;

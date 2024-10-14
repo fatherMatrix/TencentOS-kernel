@@ -275,7 +275,10 @@ static void rcu_qs(void)
  * critical section, we will no longer be able to rely on the CPU to
  * record that fact, so we enqueue the task on the blkd_tasks list.
  * The task will dequeue itself when it exits the outermost enclosing
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * RCU read-side critical section.  Therefore, the current grace period
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ *    进程怎么知道自己退出了最后一个rcu read临界区？
  * cannot be permitted to complete until the blkd_tasks list entries
  * predating the current grace period drain, in other words, until
  * rnp->gp_tasks becomes NULL.

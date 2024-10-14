@@ -4408,6 +4408,10 @@ xfs_bmapi_allocate(
 	/*
 	 * 触发分配说明bno原来所处的位置要么是hole，要么是delay extents
 	 * - 对于direct io，应该是走了这里，直接将extent转换为了real状态
+	 *                                  xxxxxxxxxxxxxxxxxxxxxxxxxxxx 错误
+	 *   > 这里不论是什么情况，底下总会走一个，那岂不是都要转换为real？
+	 *     o 这里根本没有做转换，而是将XFS_EXT_NORM或者XFS_EXT_UNWRITTEN的
+	 *       extents插入磁盘上的btree树
 	 */
 	if (bma->wasdel)
 		error = xfs_bmap_add_extent_delay_real(bma, whichfork);
@@ -4454,6 +4458,14 @@ xfs_bmapi_convert_unwritten(
 	 * check if we need to do unwritten->real conversion
 	 * - dio会设置XFS_BMAPI_PREALLOC标记，因此会在这里直接返回
 	 *   > 参见: xfs_iomap_write_direct()
+	 *   > 那么dio的unwritten -> real conversion是在哪里做的呢？
+	 *
+	 * dio中会有两次进入到这里：
+	 * - iomap_begin()阶段：
+	 *   > xfs_iomap_write_direct() ~> xfs_bmapi_convert_unwritten()路径进来
+	 *     时，flags是XFS_BMAPI_PREALLOC
+	 *   > iomap_dio_complete() ~> xfs_dio_write_end_io()
+	 *     ~> xfs_bmapi_convert_unwritten()路径进来时，flags是XFS_BMAPI_CONVERT
 	 */
 	if (mval->br_state == XFS_EXT_UNWRITTEN &&
 	    (flags & XFS_BMAPI_PREALLOC))

@@ -31,6 +31,10 @@ struct blk_mq_ctx {
 	/*
  	 * 指向对应的硬件队列
  	 * - 和blk_mq_tag_set中的映射表功能是否重复？
+	 *   > 这里的数据来源就是blk_mq_tag_set中的映射表
+	 *     o 参见blk_mq_map_swqueue() -> blk_mq_map_queue_type()
+	 *   > 这里只是保存了本软件队列对应的硬件队列是谁，blk_mq_tag_set中保存
+	 *     了所有软件队列到硬件队列的映射
  	 *
  	 * 一个软件队列只能对应唯一的硬件队列（不考虑类型的话）；
  	 * 一个硬件队列可以对应多个软件队列；
@@ -45,6 +49,9 @@ struct blk_mq_ctx {
 	unsigned long		____cacheline_aligned_in_smp rq_completed[2];
 
 	struct request_queue	*queue;
+	/*
+	 * 反指回blk_mq_ctxs
+	 */
 	struct blk_mq_ctxs      *ctxs;
 	struct kobject		kobj;
 } ____cacheline_aligned_in_smp;
@@ -103,6 +110,10 @@ static inline struct blk_mq_hw_ctx *blk_mq_map_queue_type(struct request_queue *
 							  enum hctx_type type,
 							  unsigned int cpu)
 {
+	/*
+	 * mq_map是在哪里设置的呢？
+	 * - blk_mq_update_queue_map()
+	 */
 	return q->queue_hw_ctx[q->tag_set->map[type].mq_map[cpu]];
 }
 

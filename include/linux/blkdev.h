@@ -450,7 +450,7 @@ struct request_queue {
 	 *
 	 * 硬件队列数组，现代硬件都有多个硬件队列
 	 * - 下标是什么？
-	 *   + 每个硬件队列的编号
+	 *   > 每个硬件队列的编号
 	 */
 	struct blk_mq_hw_ctx	**queue_hw_ctx;
 	unsigned int		nr_hw_queues;
@@ -459,7 +459,7 @@ struct request_queue {
 	 * backing_dev_info是随request queue的分配一起分配的
 	 * block_device中也有一个backing_dev_info，和这个是什么关系？
 	 * - block_device中的backing_dev_info的来源是这里；
-	 *   - 参见__blkdev_get()
+	 *   > 参见__blkdev_get()
 	 */ 
 	struct backing_dev_info	*backing_dev_info;
 

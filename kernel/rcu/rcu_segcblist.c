@@ -260,7 +260,14 @@ void rcu_segcblist_enqueue(struct rcu_segcblist *rsclp,
 		rsclp->len_lazy++;
 	smp_mb(); /* Ensure counts are updated before callback is enqueued. */
 	rhp->next = NULL;
+	/*
+	 * tails中保存是rcu_head.next的地址，所以这一句是让已有的rcu_head.next
+	 * 指向新添加的rcu_head
+	 */
 	WRITE_ONCE(*rsclp->tails[RCU_NEXT_TAIL], rhp);
+	/*
+	 * 数组元素指向新添加的rcu_head的next
+	 */
 	WRITE_ONCE(rsclp->tails[RCU_NEXT_TAIL], &rhp->next);
 }
 

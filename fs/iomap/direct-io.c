@@ -273,6 +273,9 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 	if ((pos | length | align) & ((1 << blkbits) - 1))
 		return -EINVAL;
 
+	/*
+	 * 来源是xfs_bmbt_to_iomap() <- xfs_file_iomap_begin()
+	 */
 	if (iomap->type == IOMAP_UNWRITTEN) {
 		dio->flags |= IOMAP_DIO_UNWRITTEN;
 		need_zeroout = true;

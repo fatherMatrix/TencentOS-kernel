@@ -735,6 +735,7 @@ static void dispose_list(struct list_head *head)
 		/*
 		 * 对于正常的iput()流程，在调用evict()之前是有机会被拦截从而防
 		 * 入icache的；在这里就直接调用evict()了；
+		 * - 参见iput_final()
 		 */
 		evict(inode);
 		cond_resched();
@@ -1819,6 +1820,7 @@ static void iput_final(struct inode *inode)
 	 *
 	 * - 哦，inode最后一次iput()时如果文件没有被删除，那么会将其放入icache；
 	 *   但前提是该文件没有被删除。
+	 *   > 回收路径在prune_icache_sb()
 	 * - 如果文件已经被删除（i_nlink == 0）导致的iput()，才会走到后面的
 	 *   evict流程。
 	 *

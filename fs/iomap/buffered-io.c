@@ -1085,6 +1085,10 @@ vm_fault_t iomap_page_mkwrite(struct vm_fault *vmf, const struct iomap_ops *ops)
 	loff_t offset, size;
 	ssize_t ret;
 
+	/*
+	 * 这个lock对应的unlock在哪里？
+	 * - do_shared_fault()中的最后面，if的两个分支中最后都会unlock_page()
+	 */
 	lock_page(page);
 	size = i_size_read(inode);
 	offset = page_offset(page);

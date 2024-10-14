@@ -144,7 +144,18 @@ BUFFER_FNS(Defer_Completion, defer_completion)
 
 #define bh_offset(bh)		((unsigned long)(bh)->b_data & ~PAGE_MASK)
 
-/* If we *know* page->private refers to buffer_heads */
+/*
+ * If we *know* page->private refers to buffer_heads
+ *
+ * bugfix upstream cc5095747edfb054ca2068d01af20be3fcc3634f
+ * - 该问题为linux kernel中GUP file-backed pages + writeback场景下遗留的问题，自
+ *   05年开始到目前一直存在。具体原理为，kernel中gup+kmap用户态mmap的file-backed
+ *   pages，当该page被writeback后，page_mkclean()无法通过rmap机制清除内核态中建
+ *   立的页表项的writable标记，导致内核中对该page的读写（DMA/RDMA等）不会触发页
+ *   保护异常，进而无法通过页保护异常调用vm_ops->page_mkwrite()准备writeback所需
+ *   的必要信息（xfs中为iomap_page，ext4中为buffer_head），最终导致空指针。
+ *   > 参见：https://www.eklektix.com/Articles/930667/
+ */
 #define page_buffers(page)					\
 	({							\
 		BUG_ON(!PagePrivate(page));			\

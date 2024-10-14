@@ -2585,6 +2585,8 @@ xlog_write(
 	 * split regions in this function.
 	 *
 	 * 有XLOG_TIC_INITED标记表示要写start record
+	 * - 写入start record时会删除这个标志，参见：
+	 *   > xlog_write_start_rec()
 	 */
 	if (ticket->t_flags & XLOG_TIC_INITED)
 		ticket->t_curr_res -= sizeof(xlog_op_header_t);

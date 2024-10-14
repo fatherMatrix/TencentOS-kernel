@@ -73,9 +73,13 @@
  *
  * In the former case, long reader critical section will impede the progress
  * of writers which is usually more important for system performance. In
+ *                                                                    ^^
  * the later case, reader optimistic spinning tends to make the reader
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * groups that contain readers that acquire the lock together smaller
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * leading to more of them. That may hurt performance in some cases. In
+ * ^^^^^^^^^^^^^^^^^^^^^^^^
  * other words, the setting of nonspinnable bits indicates that reader
  * optimistic spinning may not be helpful for those workloads that cause
  * it.
@@ -174,6 +178,12 @@
  */
 static inline void rwsem_set_owner(struct rw_semaphore *sem)
 {
+	/*
+	 * writer通过快速路径获取到rw_semaphore时，会同时清除
+	 * RWSEM_WR_NONSPINNABLE 和 RWSEM_RD_NONSPINNABLE标记
+	 * - 思想就是writer可以通过快速路径获取到锁了，此时锁竞争不是那么激烈，
+	 *   可以进行spin以降低延迟
+	 */
 	atomic_long_set(&sem->owner, (long)current);
 }
 
@@ -672,6 +682,14 @@ static inline bool rwsem_can_spin_on_owner(struct rw_semaphore *sem,
 	owner = rwsem_owner_flags(sem, &flags);
 	/*
 	 * Don't check the read-owner as the entry may be stale.
+	 * 不使用spin opt的两种情况：
+	 * - flags中已经有nonspinnable的标记了
+	 * - flags中没有nonspinnable的标记，但：
+	 *   > owner不为空
+	 *   > 没有RWSEM_READER_OWNED，即不是读者own这把锁
+	 *     o 这种情况是不是一定是writer占用着这把锁？
+	 *       x 可能是的；
+	 *   > owner未on cpu
 	 */
 	if ((flags & nonspinnable) ||
 	    (owner && !(flags & RWSEM_READER_OWNED) && !owner_on_cpu(owner)))
@@ -799,6 +817,10 @@ static bool rwsem_optimistic_spin(struct rw_semaphore *sem, bool wlock)
 	/* sem->wait_lock should not be held when doing optimistic spinning */
 	if (!osq_lock(&sem->osq))
 		goto done;
+
+	/*
+	 * osq_lock()返回了true，此时意味着成功获取到了rw_semaphore->osq
+	 */
 
 	/*
 	 * Optimistically spin on the owner field and attempt to acquire the
@@ -1399,10 +1421,21 @@ static inline void __down_write(struct rw_semaphore *sem)
 {
 	long tmp = RWSEM_UNLOCKED_VALUE;
 
+	/*
+	 * atomic_long_try_cmpxchg_acquire()返回值含义：
+	 * - true表示count原值为RWSEM_UNLOCKED_VALUE，此时成功cmpxchg
+	 * - false表示count原值不为RWSEM_UNLOCKED_VALUE，此时未进行cmpxchg
+	 */
 	if (unlikely(!atomic_long_try_cmpxchg_acquire(&sem->count, &tmp,
 						      RWSEM_WRITER_LOCKED)))
+	/*
+	 * 未快速获取锁，要走慢速路径
+	 */
 		rwsem_down_write_slowpath(sem, TASK_UNINTERRUPTIBLE);
 	else
+	/*
+	 * 此时成功cmpxchg，表示快速路径成功获取锁
+	 */
 		rwsem_set_owner(sem);
 }
 

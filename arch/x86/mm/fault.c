@@ -941,6 +941,9 @@ __bad_area_nosemaphore(struct pt_regs *regs, unsigned long error_code,
 	if (is_f00f_bug(regs, address))
 		return;
 
+	/*
+	 * 其中会有fixup段处理
+	 */
 	no_context(regs, error_code, address, SIGSEGV, si_code);
 }
 

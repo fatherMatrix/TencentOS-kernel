@@ -177,6 +177,11 @@ struct bio {
 	 */
 	bio_end_io_t		*bi_end_io;
 
+	/*
+	 * 可能有多种含义：
+	 * - ext4_end_bio()
+	 * - __bio_chain_endio()
+	 */
 	void			*bi_private;
 #ifdef CONFIG_BLK_CGROUP
 	/*

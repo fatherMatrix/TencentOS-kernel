@@ -48,10 +48,14 @@ struct blk_mq_hw_ctx {
 	unsigned int		dispatch_busy;
 
 	unsigned short		type;
+	/*
+	 * ctxs指针数组中当前有效元素个数
+	 */
 	unsigned short		nr_ctx;
 	/*
 	 * 此硬件队列对应的软件队列；
 	 * - 指针数组内存的分配在blk_mq_alloc_hctx()
+	 *   > 元素个数是cpu个数
 	 * - 元素赋值（即获取映射到的软件队列）是在blk_mq_map_swqueue()
 	 */
 	struct blk_mq_ctx	**ctxs;
@@ -106,6 +110,11 @@ struct blk_mq_hw_ctx {
 	struct srcu_struct	srcu[0];
 };
 
+/*
+ * 这里反应的是软硬队列index和index的映射关系
+ * - 软件队列实例blk_mq_ctx的hctxs指针数组字段中保存了软件队列对应硬件队列的
+ *   势力blk_mq_hw_ctx的指针
+ */
 struct blk_mq_queue_map {
 	/*
 	 * 用于保存软硬队列的映射关系。
@@ -113,8 +122,12 @@ struct blk_mq_queue_map {
 	 *
 	 * 如何处理cpu热插拔？
 	 * - 内存是在blk_mq_alloc_tag_set()中分配的；
+	 * - 内容是在blk_mq_update_queue_map()中填充的；
 	 */
 	unsigned int *mq_map;
+	/*
+	 * 看blk_mq_update_queue_map()的第一行注释，这里是硬件队列个数
+	 */
 	unsigned int nr_queues;
 	unsigned int queue_offset;
 };
@@ -143,9 +156,13 @@ struct blk_mq_tag_set {
 	 *
 	 * 
 	 * 硬件队列ctx到软件队列hctx的映射表。
-	 *
-	 * blk-mq中将一个或者多个软件队列映射到一个硬件队列。一个器件可能支持多
-	 * 种类型的硬件队列。
+	 * - blk-mq中将一个或者多个软件队列映射到一个硬件队列。一个器件可能支持
+	 *   多种类型的硬件队列。
+	 * - 软件队列和硬件队列实体本身在：
+	 *   > request_queue->blk_mq_hw_ctx
+	 * - 软件队列和硬件队列本身的分配工作在：
+	 *   > blk_mq_init_queue
+	 *       blk_mq_init_allocated_queue
 	 */
 	struct blk_mq_queue_map	map[HCTX_MAX_TYPES];
 	/*

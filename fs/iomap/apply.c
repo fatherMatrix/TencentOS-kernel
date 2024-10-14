@@ -74,6 +74,8 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	 *
 	 * 难道还会出现iomap.offset和pos不相同的情况吗？
 	 * - 这倒不会，但是会出现iomap.length和length不同的情况
+	 *   > 如果iomap.offset + iomap.length > pos + length，说明我们产生了
+	 *     prealloc，此时会保持length不变，即为用户实际发起的io长度；
 	 */
 	if (iomap.offset + iomap.length < pos + length)
 		length = iomap.offset + iomap.length - pos;

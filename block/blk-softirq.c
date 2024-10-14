@@ -34,6 +34,9 @@ static __latent_entropy void blk_done_softirq(struct softirq_action *h)
 
 		rq = list_entry(local_list.next, struct request, ipi_list);
 		list_del_init(&rq->ipi_list);
+		/*
+		 * nvme_mq_ops.nvme_pci_complete_rq()
+		 */
 		rq->q->mq_ops->complete(rq);
 	}
 }
@@ -135,6 +138,8 @@ do_local:
 		 * signal a raise of the softirq. If there are already
 		 * entries there, someone already raised the irq but it
 		 * hasn't run yet.
+		 *
+		 * BLOCK_SOFTIRQ软中断对应的处理函数是blk_done_softirq()
 		 */
 		if (list->next == &req->ipi_list)
 			raise_softirq_irqoff(BLOCK_SOFTIRQ);

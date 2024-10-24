@@ -1276,6 +1276,10 @@ struct device {
 					   device */
 	void		*platform_data;	/* Platform specific data, device
 					   core doesn't touch it */
+	/*
+	 * 对于pci_dev，其pci_dev->dev->driver_data保存的是其对应的
+	 * virtio_pci_device地址
+	 */
 	void		*driver_data;	/* Driver data, set and get with
 					   dev_set_drvdata/dev_get_drvdata */
 #ifdef CONFIG_PROVE_LOCKING

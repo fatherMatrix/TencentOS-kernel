@@ -1039,6 +1039,7 @@ __xfs_trans_commit(
 	 *   > xfs_trans_roll()到最后一定会经过一次xfs_trans_commit()，那个时候
 	 *     就会处理defer items
 	 * - xfs_defer_finish_noroll()中会一路调回到__xfs_trans_commit(true)
+	 *   > 所以noroll的含义是？
 	 */
 		error = xfs_defer_finish_noroll(&tp);
 		if (error)
@@ -1094,6 +1095,9 @@ __xfs_trans_commit(
 	 */
 	if (sync) {
 		error = xfs_log_force_lsn(mp, commit_lsn, XFS_LOG_SYNC, NULL);
+		/*
+		 * 啥时候同步提交？
+		 */
 		XFS_STATS_INC(mp, xs_trans_sync);
 	} else {
 		XFS_STATS_INC(mp, xs_trans_async);

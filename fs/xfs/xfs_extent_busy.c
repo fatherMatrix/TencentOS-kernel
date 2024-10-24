@@ -610,6 +610,11 @@ xfs_extent_busy_flush(
 	if (error)
 		return;
 
+	/*
+	 * upstream commit id: 8ebbf262d4684e035af5e7aa2a71cab636673a9b
+	 * - 这里有避免deadlock的bugfix
+	 */
+
 	do {
 		prepare_to_wait(&pag->pagb_wait, &wait, TASK_KILLABLE);
 		if  (busy_gen != READ_ONCE(pag->pagb_gen))

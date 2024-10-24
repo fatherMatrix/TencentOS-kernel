@@ -3148,12 +3148,22 @@ xfs_bmap_adjacent(
 							ap->tp->t_firstblock);
 	/*
 	 * If allocating at eof, and there's a previous real block,
+	 *                                              ^^^^^^^^^^
+	 *                                   prev.br_startoff != NULLFILEOFF
 	 * try to use its last block as our starting point.
 	 */
 	if (ap->eof && ap->prev.br_startoff != NULLFILEOFF &&
 	    !isnullstartblock(ap->prev.br_startblock) &&
 	    ISVALID(ap->prev.br_startblock + ap->prev.br_blockcount,
 		    ap->prev.br_startblock)) {
+	/*
+	 * 如果我们是在文件eof后N个block处写新的数据，那么我们倾向于分配文件eof
+	 * 对应的物理块后N个block处的物理块。
+	 * - 这样的好处是如果后面当前eof和新eof之间的这N个block的hole被写入数据
+	 *   的话，刚好填充并合并成一个大的extent
+	 * - 当然，这要满足当前eof对应的物理块后有足够的物理块可供分配
+	 *   > 下面的ISVALID()
+	 */
 		ap->blkno = ap->prev.br_startblock + ap->prev.br_blockcount;
 		/*
 		 * Adjust for the gap between prevp and us.
@@ -3201,8 +3211,19 @@ xfs_bmap_adjacent(
 			if (prevdiff <= XFS_ALLOC_GAP_UNITS * ap->length &&
 			    ISVALID(prevbno + prevdiff,
 				    ap->prev.br_startblock))
+			/*
+			 * 如果待分配的target extent离prev extent比较近，那么我
+			 * 们要考虑prev extent和target extent中间的extent后面很
+			 * 快会被填充。
+			 * > 针对这种情况，我们优先考虑让磁盘上也保持和逻辑块一
+			 *   样的布局；
+			 */
 				prevbno += adjust;
 			else
+			/*
+			 * gap比我们要分配的piece大，或者ISVALID()失败，则使用
+			 * prevbno，即前面一个extents的结尾
+			 */
 				prevdiff += adjust;
 			/*
 			 * If the firstblock forbids it, can't use it,
@@ -3245,6 +3266,10 @@ xfs_bmap_adjacent(
 				gotbno -= ap->length;
 				gotdiff += adjust - ap->length;
 			} else
+			/*
+			 * gap相对于我们要分配的太大了，则使用next extent的
+			 * start bno
+			 */
 				gotdiff += adjust;
 			/*
 			 * If the firstblock forbids it, can't use it,
@@ -3539,6 +3564,10 @@ xfs_bmap_btalloc(
 
 	/*
 	 * 要分配的extent是否可以和前面或者后面的extent结合起来？
+	 * - 如果要分配的extent与prev、next两个逻辑extents离得比较近，则要考虑
+	 *   在物理上按照逻辑extents的相对位置来分配
+	 *   > 核心思想是认为target extent与prev、next两个逻辑extents之间的hole
+	 *     很快也会被填充
 	 */
 	xfs_bmap_adjacent(ap);
 
@@ -4221,6 +4250,10 @@ xfs_bmapi_reserve_delalloc(
 	indlen = (xfs_extlen_t)xfs_bmap_worst_indlen(ip, alen);
 	ASSERT(indlen > 0);
 
+	/*
+	 * 命令df中显示的空闲空间是扣除了prealloc部分的
+	 * - 参见xfs_fs_statfs()
+	 */
 	error = xfs_mod_fdblocks(mp, -((int64_t)alen), false);
 	if (error)
 		goto out_unreserve_quota;
@@ -4347,6 +4380,9 @@ xfs_bmapi_allocate(
 			bma->datatype |= XFS_ALLOC_USERDATA_ZERO;
 	}
 
+	/*
+	 * 判断是否需要连续磁盘块
+	 */
 	bma->minlen = (bma->flags & XFS_BMAPI_CONTIG) ? bma->length : 1;
 
 	/*
@@ -4407,15 +4443,26 @@ xfs_bmapi_allocate(
 
 	/*
 	 * 触发分配说明bno原来所处的位置要么是hole，要么是delay extents
-	 * - 对于direct io，应该是走了这里，直接将extent转换为了real状态
-	 *                                  xxxxxxxxxxxxxxxxxxxxxxxxxxxx 错误
 	 *   > 这里不论是什么情况，底下总会走一个，那岂不是都要转换为real？
 	 *     o 这里根本没有做转换，而是将XFS_EXT_NORM或者XFS_EXT_UNWRITTEN的
 	 *       extents插入磁盘上的btree树
+	 *   > 既然这里没有做转换，那么转换是在哪里做的呢？
+	 *     o 参见xfs_bmapi_convert_unwritten() / xfs_bmapi_convert_delalloc()
 	 */
 	if (bma->wasdel)
+	/*
+	 * 正常的delay extents会在这里转换为XFS_EXT_NORM状态
+	 * - 进入到这里，说明查到了一个delayed extent
+	 *   > delayed extents仅存在于内存中，所以这里是向磁盘btree中插入一个状
+	 *     态为XFS_EXT_NORM的extent
+	 */
 		error = xfs_bmap_add_extent_delay_real(bma, whichfork);
 	else
+	/*
+	 * direct io这里会插入一个XFS_EXT_UNWRITTEN状态的extent
+	 * - 同样的，hole extents仅存在于内存中，所以这里是向磁盘btree中插入一个
+	 *   状态为XFS_EXT_UNWRITTEN的extent
+	 */
 		error = xfs_bmap_add_extent_hole_real(bma->tp, bma->ip,
 				whichfork, &bma->icur, &bma->cur, &bma->got,
 				&bma->logflags, bma->flags);

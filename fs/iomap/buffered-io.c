@@ -1046,9 +1046,15 @@ iomap_truncate_page(struct inode *inode, loff_t pos, bool *did_zero,
 	unsigned int blocksize = i_blocksize(inode);
 	unsigned int off = pos & (blocksize - 1);
 
-	/* Block boundary? Nothing to do */
+	/*
+	 * Block boundary? Nothing to do
+	 * - new size处于page边界上
+	 */
 	if (!off)
 		return 0;
+	/*
+	 * new size处于page中间，将该page中new size之后的部分写为0
+	 */
 	return iomap_zero_range(inode, pos, blocksize - off, did_zero, ops);
 }
 EXPORT_SYMBOL_GPL(iomap_truncate_page);

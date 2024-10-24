@@ -1837,6 +1837,16 @@ void bio_set_pages_dirty(struct bio *bio)
 
 static void bio_dirty_fn(struct work_struct *work);
 
+/*
+ * 为什么需要bio_dirty_list？
+ * - 解决direct io读完成时，bio->bi_end_io无法设置PG_dirty问题。详述如下：
+ *   > direct io完成时执行bio->bi_end_io回调，对应函数为blkdev_bio_end_io，这个
+ *     回调函数处于软中断上下文，所以不能睡眠。这就带来一个问题：读操作完成时，
+ *     bio->bi_io_vec->bv_page中填入了刚读入的数据，所以需要设置PG_dirty标记。
+ *     linux按lock_page -> set_page_dirty -> unlock_page设置PG_dirty，这里
+ *     lock_page会睡眠，所以不能用在blkdev_bio_end_io函数中。
+ *   > 引入bio_dirty_list解决上面的问题。
+ */
 static DECLARE_WORK(bio_dirty_work, bio_dirty_fn);
 static DEFINE_SPINLOCK(bio_dirty_lock);
 static struct bio *bio_dirty_list;
@@ -1877,6 +1887,13 @@ void bio_check_pages_dirty(struct bio *bio)
 	return;
 defer:
 	spin_lock_irqsave(&bio_dirty_lock, flags);
+	/*
+	 * 为什么要redirty？
+	 * > 参见bio_dirty_fn()注释
+	 *
+	 * 为什么要使用bio_dirty_list来进行reditry？
+	 * > 参见bio_dirty_list注释
+	 */
 	bio->bi_private = bio_dirty_list;
 	bio_dirty_list = bio;
 	spin_unlock_irqrestore(&bio_dirty_lock, flags);

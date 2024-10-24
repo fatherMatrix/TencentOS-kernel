@@ -1923,6 +1923,7 @@ xfs_btree_lookup(
 	 * 将xfs_btree_ptr指向btree的root block
 	 * - 对于refcount btree，xfs_refcountbt_init_ptr_from_cur()
 	 * - 对于ino btee，xfs_inobt_init_ptr_from_cur()
+	 * - 对于cnt free btree，xfs_allocbt_init_ptr_from_cur()
 	 */
 	cur->bc_ops->init_ptr_from_cur(cur, &ptr);
 	pp = &ptr;
@@ -2009,6 +2010,7 @@ xfs_btree_lookup(
 				 *  - equal, we're done
 				 *
 				 * 逆天啊，这里是kp - cur，这尼玛真反人类啊！
+				 * - cnt free btree，xfs_cntbt_key_diff()
 				 */
 				diff = cur->bc_ops->key_diff(cur, kp);
 				if (diff < 0)		/* kp - cur < 0 => cur > kp，在右边找； */
@@ -4288,6 +4290,9 @@ error0:
  *
  * 从xfs_btree_cur转换为xfs_btree_rec
  * - 这里转换的重点是从xfs_btree_cur指向的block中取出我们需要的一个record；
+ * - stat返回值：
+ *   > 返回1表示成功从leaf node中取到对应xfs_btree_cur->bc_ptrs[0]的record
+ *   > 返回0表示对应位置record无效
  */
 int					/* error */
 xfs_btree_get_rec(

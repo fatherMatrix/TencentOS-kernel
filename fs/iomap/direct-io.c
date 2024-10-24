@@ -178,6 +178,7 @@ static void iomap_dio_bio_end_io(struct bio *bio)
 	/*
 	 * 如果是read操作，用户态的read操作，就会设置IOMAP_DIO_DIRTY标记
 	 * - 为什么？
+	 *   > 参见bio_check_pages_dirty()
 	 */
 	bool should_dirty = (dio->flags & IOMAP_DIO_DIRTY);
 
@@ -374,7 +375,10 @@ iomap_dio_bio_actor(struct inode *inode, loff_t pos, loff_t length,
 			bio->bi_opf = REQ_OP_READ;
 			/*
 			 * 为什么这里要set_page_dirty？
-			 * - 这里要dirty_page
+			 * - 参见bio_check_pages_dirty()
+			 *
+			 * 但为什么要保证dio read后的page是dirty的呢？
+			 * - note：这里的page都是用户态页
 			 */
 			if (dio->flags & IOMAP_DIO_DIRTY)
 				bio_set_pages_dirty(bio);

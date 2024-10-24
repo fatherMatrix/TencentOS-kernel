@@ -1343,6 +1343,7 @@ static bool rcu_advance_cbs(struct rcu_node *rnp, struct rcu_data *rdp)
 	/*
 	 * Find all callbacks whose ->gp_seq numbers indicate that they
 	 * are ready to invoke, and put them into the RCU_DONE_TAIL sublist.
+	 * - rcu_node->gp_seq在什么地方修改？
 	 */
 	rcu_segcblist_advance(&rdp->cblist, rnp->gp_seq);
 
@@ -1475,7 +1476,10 @@ static bool rcu_gp_init(void)
 
 	/* Advance to a new grace period and initialize state. */
 	record_gp_stall_check_time();
-	/* Record GP times before starting GP, hence rcu_seq_start(). */
+	/*
+	 * Record GP times before starting GP, hence rcu_seq_start().
+	 * - 宽限期编号加1
+	 */
 	rcu_seq_start(&rcu_state.gp_seq);
 	trace_rcu_grace_period(rcu_state.name, rcu_state.gp_seq, TPS("start"));
 	raw_spin_unlock_irq_rcu_node(rnp);
@@ -1552,8 +1556,18 @@ static bool rcu_gp_init(void)
 		raw_spin_lock_irqsave_rcu_node(rnp, flags);
 		rdp = this_cpu_ptr(&rcu_data);
 		rcu_preempt_check_blocked_tasks(rnp);
+		/*
+		 * 每个rcu_node的qsmark设置为初始值，即重新开始观察静止状态
+		 */
 		rnp->qsmask = rnp->qsmaskinit;
+		/*
+		 * 向下传递新的宽限期编号
+		 */
 		WRITE_ONCE(rnp->gp_seq, rcu_state.gp_seq);
+		/*
+		 * 如果是本cpu的rcu_data对应的rcu_node，则记录宽限期的开始
+		 * - __note_gp_changes()用于记录宽限期的开始和结束
+		 */
 		if (rnp == rdp->mynode)
 			(void)__note_gp_changes(rnp, rdp);
 		rcu_preempt_boost_start_gp(rnp);
@@ -1643,6 +1657,11 @@ static void rcu_gp_fqs_loop(void)
 				       READ_ONCE(rcu_state.gp_seq),
 				       TPS("fqswait"));
 		rcu_state.gp_state = RCU_GP_WAIT_FQS;
+		/*
+		 * 返回的两个条件：
+		 * - 当前宽限期已经完成
+		 * - 超时，需要产生一个强制静止状态
+		 */
 		ret = swait_event_idle_timeout_exclusive(
 				rcu_state.gp_wq, rcu_gp_fqs_check_wake(&gf), j);
 		rcu_state.gp_state = RCU_GP_DOING_FQS;
@@ -1657,6 +1676,9 @@ static void rcu_gp_fqs_loop(void)
 			trace_rcu_grace_period(rcu_state.name,
 					       READ_ONCE(rcu_state.gp_seq),
 					       TPS("fqsstart"));
+			/*
+			 * 强制宽限期
+			 */
 			rcu_gp_fqs(first_gp_fqs);
 			first_gp_fqs = false;
 			trace_rcu_grace_period(rcu_state.name,
@@ -1775,23 +1797,47 @@ static void rcu_gp_cleanup(void)
 
 /*
  * Body of kthread that handles grace periods.
+ *
+ * 摘抄：
+ * - 等待rsp->gp_flags设置RCU_GP_FLAG_INIT标志位，这个标志一旦置位，就说明需要
+ *   开启一个新的宽限期；这个标志会在函数rcu_gp_cleanup()及rcu_start_this_gp()
+ *   里被置位
+ * - 等待所有CPU都度过宽限期，如果所有CPU都在超时前度过宽限期，就会顺利的进入到
+ *   下一阶段；否则，到期时间一到，会强制那些没有度过宽限期的CPU产生静止状态
+ * - 用于完成宽限期结束后的清理动作
  */
 static int __noreturn rcu_gp_kthread(void *unused)
 {
+	/*
+	 * 将本内核线程绑定到housekeeper cpu
+	 */
 	rcu_bind_gp_kthread();
 	for (;;) {
 
-		/* Handle grace-period start. */
+		/*
+		 * Handle grace-period start.
+		 *
+		 * 本循环开启新的宽限期
+		 */
 		for (;;) {
 			trace_rcu_grace_period(rcu_state.name,
 					       READ_ONCE(rcu_state.gp_seq),
 					       TPS("reqwait"));
 			rcu_state.gp_state = RCU_GP_WAIT_GPS;
+			/*
+			 * 等待启动新的宽限期
+			 * - RCU_GP_FLAG_INIT是谁来设置的呢？
+			 *   > rcu_start_this_gp()
+			 *   > rcu_gp_cleanup()
+			 */
 			swait_event_idle_exclusive(rcu_state.gp_wq,
 					 READ_ONCE(rcu_state.gp_flags) &
 					 RCU_GP_FLAG_INIT);
 			rcu_state.gp_state = RCU_GP_DONE_GPS;
-			/* Locking provides needed memory barrier. */
+			/*
+			 * Locking provides needed memory barrier.
+			 * - 启动新的宽限期并初始化
+			 */
 			if (rcu_gp_init())
 				break;
 			cond_resched_tasks_rcu_qs();
@@ -2269,12 +2315,21 @@ static void force_qs_rnp(int (*f)(struct rcu_data *rdp))
 	struct rcu_node *rnp;
 
 	rcu_for_each_leaf_node(rnp) {
+		/*
+		 * CONFIG_TASKS_RCU未开启，该语句等价于cond_resched()
+		 */
 		cond_resched_tasks_rcu_qs();
 		mask = 0;
 		raw_spin_lock_irqsave_rcu_node(rnp, flags);
 		if (rnp->qsmask == 0) {
+		/*
+		 * 本rcu_node中的所有cpu都经过了一次静止状态
+		 */
 			if (!IS_ENABLED(CONFIG_PREEMPTION) ||
 			    rcu_preempt_blocked_readers_cgp(rnp)) {
+			/*
+			 * tkernel4未开启CONFIG_PREEMPT，会走这里
+			 */
 				/*
 				 * No point in scanning bits because they
 				 * are all zero.  But we might need to
@@ -2290,6 +2345,10 @@ static void force_qs_rnp(int (*f)(struct rcu_data *rdp))
 		for_each_leaf_node_possible_cpu(rnp, cpu) {
 			unsigned long bit = leaf_node_cpu_bit(rnp, cpu);
 			if ((rnp->qsmask & bit) != 0) {
+				/*
+				 * - dyntick_save_progress_counter()
+				 * - rcu_implicit_dynticks_qs()
+				 */
 				if (f(per_cpu_ptr(&rcu_data, cpu)))
 					mask |= bit;
 			}
@@ -2358,6 +2417,12 @@ static __latent_entropy void rcu_core(void)
 
 	/* Report any deferred quiescent states if preemption enabled. */
 	if (!(preempt_count() & PREEMPT_MASK)) {
+	/*
+	 * 抢占处于开启状态
+	 */
+		/*
+		 * 未定义CONFIG_PREEMPT_RCU，本函数为空操作
+		 */
 		rcu_preempt_deferred_qs(current);
 	} else if (rcu_preempt_need_deferred_qs(current)) {
 		set_tsk_need_resched(current);
@@ -2837,7 +2902,10 @@ static int rcu_pending(void)
 	if (rcu_nocb_need_deferred_wakeup(rdp))
 		return 1;
 
-	/* Is this CPU a NO_HZ_FULL CPU that should ignore RCU? */
+	/*
+	 * Is this CPU a NO_HZ_FULL CPU that should ignore RCU?
+	 * - CONFIG_NO_HZ_FULL未配置，该语句跳过
+	 */
 	if (rcu_nohz_full_cpu())
 		return 0;
 

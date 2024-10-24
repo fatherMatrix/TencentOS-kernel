@@ -563,6 +563,8 @@ static bool rcu_preempt_need_deferred_qs(struct task_struct *t)
  * not being in an RCU read-side critical section.  The caller must
  * evaluate safety in terms of interrupt, softirq, and preemption
  * disabling.
+ *
+ * 定义了CONFIG_PREEMPT_RCU
  */
 static void rcu_preempt_deferred_qs(struct task_struct *t)
 {
@@ -687,6 +689,9 @@ static void rcu_flavor_sched_clock_irq(int user)
 	struct task_struct *t = current;
 
 	if (user || rcu_is_cpu_rrupt_from_idle()) {
+		/*
+		 * 未开启CONFIG_TASKS_RCU，本函数为空操作
+		 */
 		rcu_note_voluntary_context_switch(current);
 	}
 	if (t->rcu_read_lock_nesting > 0 ||

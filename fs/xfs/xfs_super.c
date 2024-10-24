@@ -1139,6 +1139,10 @@ xfs_fs_statfs(
 	statp->f_blocks = sbp->sb_dblocks - lsize;
 	spin_unlock(&mp->m_sb_lock);
 
+	/*
+	 * xfs buffer io中的prealloc部分也是计算在了fdblocks中的
+	 * - 参见xfs_bmapi_reserve_delalloc()
+	 */
 	statp->f_bfree = fdblocks - mp->m_alloc_set_aside;
 	statp->f_bavail = statp->f_bfree;
 

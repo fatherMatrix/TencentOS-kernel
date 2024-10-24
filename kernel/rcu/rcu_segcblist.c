@@ -426,6 +426,9 @@ void rcu_segcblist_advance(struct rcu_segcblist *rsclp, unsigned long seq)
 	/*
 	 * Find all callbacks whose ->gp_seq numbers indicate that they
 	 * are ready to invoke, and put them into the RCU_DONE_TAIL segment.
+	 * - 将rcu_segcblist->tails中宽限期编号小于seq的的rcu_head收集到区间
+	 *   (head, RCU_DONE_TAIL]区间中。
+	 *   > 该区间表示宽限期已过，回调函数可以调用
 	 */
 	for (i = RCU_WAIT_TAIL; i < RCU_NEXT_TAIL; i++) {
 		if (ULONG_CMP_LT(seq, rsclp->gp_seq[i]))
@@ -437,7 +440,11 @@ void rcu_segcblist_advance(struct rcu_segcblist *rsclp, unsigned long seq)
 	if (i == RCU_WAIT_TAIL)
 		return;
 
-	/* Clean up tail pointers that might have been misordered above. */
+	/*
+	 * Clean up tail pointers that might have been misordered above.
+	 * - 上面的for循环中，RCU_DONE_TAIL可能向后跃过了RCU_WAIT_TAIL、
+	 *   RCU_NEXT_READY_TAIL、...，这里调整后面的区段tail标记
+	 */
 	for (j = RCU_WAIT_TAIL; j < i; j++)
 		WRITE_ONCE(rsclp->tails[j], rsclp->tails[RCU_DONE_TAIL]);
 
@@ -485,6 +492,8 @@ bool rcu_segcblist_accelerate(struct rcu_segcblist *rsclp, unsigned long seq)
 	 * with any later segments, can be merged in with any newly arrived
 	 * callbacks in the RCU_NEXT_TAIL segment, and assigned "seq"
 	 * as their ->gp_seq[] grace-period completion sequence number.
+	 *
+	 * 找到第一个
 	 */
 	for (i = RCU_NEXT_READY_TAIL; i > RCU_DONE_TAIL; i--)
 		if (rsclp->tails[i] != rsclp->tails[i - 1] &&

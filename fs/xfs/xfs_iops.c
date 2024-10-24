@@ -908,6 +908,10 @@ xfs_setattr_size(
 		 * cow block over a hole) and subsequently skips zeroing the
 		 * newly post-EOF portion of the page. Flush the new EOF to
 		 * convert the block before the pagecache truncate.
+		 *
+		 * from upstream commit id: 869ae85dae64b5540e4362d7fe4cd520e10ec05c
+		 * - 主要作用是让EOF page不为XFS_EXT_UNWRITTEN
+		 *   > 因为iomap_truncate_page()不处理XFS_EXT_UNWRITTEN
 		 */
 		error = filemap_write_and_wait_range(inode->i_mapping, newsize,
 						     newsize);

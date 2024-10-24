@@ -1562,6 +1562,16 @@ restart:
 				goto error0;
 			XFS_WANT_CORRUPTED_GOTO(args->mp, i == 1, error0);
 
+			/*
+			 * 这里的作用是确保我们上面找到的record与busy extent不重
+			 * 叠。
+			 * - busy extent是已经执行了unmap，从btree中标记为空闲的
+			 *   extent，但这种extent不能用来写用户数据。
+			 *   > 因为其xfs_trans还未提交到disk log space，此时如果
+			 *     发生断电，该事务会回滚，即重新回到原来的所属文件
+			 *     中。
+			 *   > 所以这里要避开这种extent
+			 */
 			busy = xfs_alloc_compute_aligned(args, fbno, flen,
 					&rbno, &rlen, &busy_gen);
 
@@ -1585,6 +1595,10 @@ restart:
 				xfs_btree_del_cursor(cnt_cur,
 						     XFS_BTREE_NOERROR);
 				trace_xfs_alloc_size_busy(args);
+				/*
+				 * 这里的逻辑上层有bugfix
+				 * - 参见内部注释
+				 */
 				xfs_extent_busy_flush(args->mp,
 							args->pag, busy_gen);
 				goto restart;
@@ -1935,6 +1949,7 @@ xfs_free_ag_extent(
 
 	/*
 	 * Update the freespace totals in the ag and superblock.
+	 * - 更新文件系统空闲块计数
 	 */
 	pag = xfs_perag_get(mp, agno);
 	error = xfs_alloc_update_counters(tp, pag, agbp, len);

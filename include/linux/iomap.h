@@ -83,6 +83,9 @@ struct iomap {
 	struct dax_device	*dax_dev; /* dax_dev for dax operations */
 	void			*inline_data;
 	void			*private; /* filesystem private */
+	/*
+	 * xfs: NULL
+	 */
 	const struct iomap_page_ops *page_ops;
 };
 

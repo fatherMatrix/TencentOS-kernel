@@ -668,6 +668,9 @@ xfs_ialloc_ag_alloc(
 	    percpu_counter_read_positive(&args.mp->m_icount) + newlen >
 							igeo->maxicount)
 		return -ENOSPC;
+	/*
+	 * 最小分配单位，要连续
+	 */
 	args.minlen = args.maxlen = igeo->ialloc_blks;
 	/*
 	 * First try to allocate inodes contiguous with the last-allocated
@@ -799,6 +802,9 @@ sparse_alloc:
 		args.alignment = args.mp->m_sb.sb_spino_align;
 		args.prod = 1;
 
+		/*
+		 * ialloc_min_blks好像是4
+		 */
 		args.minlen = igeo->ialloc_min_blks;
 		args.maxlen = args.minlen;
 

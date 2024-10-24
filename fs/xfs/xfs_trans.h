@@ -195,6 +195,12 @@ typedef struct xfs_trans {
 	unsigned int		t_magic;	/* magic number */
 	unsigned int		t_log_res;	/* amt of log space resvd */
 	unsigned int		t_log_count;	/* count for perm log res */
+	/*
+	 * xfs_trans需要分配的磁盘块在xfs_mount->m_fdblocks中保留出来后暂存到这
+	 * 里，其中包括：
+	 * - 更新元数据需要的块（元数据btree节点新增、分裂）
+	 * - 用户写入的实际数据
+	 */
 	unsigned int		t_blk_res;	/* # of blocks resvd */
 	unsigned int		t_blk_res_used;	/* # of resvd blocks used */
 	unsigned int		t_rtx_res;	/* # of rt extents resvd */

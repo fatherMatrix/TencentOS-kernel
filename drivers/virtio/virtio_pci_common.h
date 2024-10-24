@@ -44,6 +44,8 @@ struct virtio_pci_vq_info {
  *
  * virtio设备作为pci设备挂载时，会首先出现在pci总线上，表现为一个pci_dev，即
  * virtio_pci_device->pci_dev；
+ * - pci_dev如果反向查找到对应的virtio_pci_device？
+ *   > virtio_pci_probe() -> pci_set_drvdata()
  * 当virtio_pci_device初始化完成后，会向virtio_bus注册virtio_device，并匹配
  * virtio_driver（比如virtblk_driver），由virtio_driver完成virtio层面的初始化；
  */

@@ -173,8 +173,11 @@ xfs_calc_finobt_res(
  * chunk free always invalidates the buffers and only requires reservation for
  * headers (N == 0). An inode chunk allocation requires a chunk sized
  * reservation on v4 and older superblocks to initialize the chunk. No chunk
+ *                                                                  ^^^^^^^^
  * reservation is required for allocation on v5 supers, which use ordered
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * buffers to initialize.
+ * ^^^^^^^^^^^^^^^^^^^^^^
  */
 STATIC uint
 xfs_calc_inode_chunk_res(

@@ -90,9 +90,21 @@ struct partition {
  * - 参见：proc_genhd_init()
  */
 struct disk_stats {
+	/*
+	 * io完成的耗时
+	 */
 	u64 nsecs[NR_STAT_GROUPS];
+	/*
+	 * io的sector数量
+	 */
 	unsigned long sectors[NR_STAT_GROUPS];
+	/*
+	 * io数量
+	 */
 	unsigned long ios[NR_STAT_GROUPS];
+	/*
+	 * io合并的数量
+	 */
 	unsigned long merges[NR_STAT_GROUPS];
 	unsigned long io_ticks;
 	unsigned long time_in_queue;

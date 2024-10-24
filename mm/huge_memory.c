@@ -268,6 +268,9 @@ static ssize_t defrag_store(struct kobject *kobj,
 
 	return count;
 }
+/*
+ * 对应文件是：/sys/kernel/mm/transparent_hugepage/defrag
+ */
 static struct kobj_attribute defrag_attr =
 	__ATTR(defrag, 0644, defrag_show, defrag_store);
 
@@ -656,25 +659,40 @@ static inline gfp_t alloc_hugepage_direct_gfpmask(struct vm_area_struct *vma)
 {
 	const bool vma_madvised = !!(vma->vm_flags & VM_HUGEPAGE);
 
-	/* Always do synchronous compaction */
+	/*
+	 * Always do synchronous compaction
+	 * - always
+	 */
 	if (test_bit(TRANSPARENT_HUGEPAGE_DEFRAG_DIRECT_FLAG, &transparent_hugepage_flags))
 		return GFP_TRANSHUGE | (vma_madvised ? 0 : __GFP_NORETRY);
 
-	/* Kick kcompactd and fail quickly */
+	/*
+	 * Kick kcompactd and fail quickly
+	 * - defer
+	 */
 	if (test_bit(TRANSPARENT_HUGEPAGE_DEFRAG_KSWAPD_FLAG, &transparent_hugepage_flags))
 		return GFP_TRANSHUGE_LIGHT | __GFP_KSWAPD_RECLAIM;
 
-	/* Synchronous compaction if madvised, otherwise kick kcompactd */
+	/*
+	 * Synchronous compaction if madvised, otherwise kick kcompactd
+	 * - defer+madvise
+	 */
 	if (test_bit(TRANSPARENT_HUGEPAGE_DEFRAG_KSWAPD_OR_MADV_FLAG, &transparent_hugepage_flags))
 		return GFP_TRANSHUGE_LIGHT |
 			(vma_madvised ? __GFP_DIRECT_RECLAIM :
 					__GFP_KSWAPD_RECLAIM);
 
-	/* Only do synchronous compaction if madvised */
+	/*
+	 * Only do synchronous compaction if madvised
+	 * - madvise
+	 */
 	if (test_bit(TRANSPARENT_HUGEPAGE_DEFRAG_REQ_MADV_FLAG, &transparent_hugepage_flags))
 		return GFP_TRANSHUGE_LIGHT |
 		       (vma_madvised ? __GFP_DIRECT_RECLAIM : 0);
 
+	/*
+	 * - never
+	 */
 	return GFP_TRANSHUGE_LIGHT;
 }
 

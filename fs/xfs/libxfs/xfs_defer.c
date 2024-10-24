@@ -233,7 +233,7 @@ xfs_defer_create_intents(
 		 * 尾部xfs_extent数组中；并设置对应的xfs_log_item为dirty，下次事
 		 * 务提交时会写入日志
 		 *
-		 * - xfs_extent_free_log_item()
+		 * - xfs_extent_free_item: xfs_extent_free_log_item()
 		 * -
 		 */
 		list_for_each(li, &dfp->dfp_work)
@@ -456,6 +456,11 @@ xfs_defer_finish_noroll(
 
 		/* Finish the work items. */
 		state = NULL;
+		/*
+		 * dfp是一个xfs_defer_pending，其中包含一个item链表：
+		 * - xfs_extent_free_item
+		 * -
+		 */
 		list_for_each_safe(li, n, &dfp->dfp_work) {
 			list_del(li);
 			dfp->dfp_count--;
@@ -469,6 +474,10 @@ xfs_defer_finish_noroll(
 			 * 这里真正去做EFI表示的工作；
 			 * - 做完之后会标记done item的XFS_LI_DIRTY标志，从而会
 			 *   在后面被写入iclog
+			 *
+			 * Note: 这里有可能会产生新的xfs_defer_pending结构体，
+			 *       按照现在的逻辑，新产生的xfs_defer_pending结构体
+			 *       会放到dop_pending链表的最后面，无法及时处理
 			 */
 			error = ops->finish_item(*tp, li, dfp->dfp_done,
 					&state);
@@ -499,6 +508,8 @@ xfs_defer_finish_noroll(
 			 * and roll the transaction.  See "Requesting
 			 * a Fresh Transaction while Finishing
 			 * Deferred Work" above.
+			 * 前面intent item中的工作，在对应done item中只完成了部
+			 * 分，这里对没有完成的工作生成新的intent item
 			 * - 此时dfp_count中仅包括还没有log done item的
 			 */
 			dfp->dfp_intent = ops->create_intent(*tp,
@@ -628,6 +639,7 @@ xfs_defer_add(
 	/*
 	 * defer ops什么时候被处理呢？
 	 * - 猜测是commit的时候？在commit之前对象都是被lock的。
+	 *   > xfs_trans_commit() ~> xfs_defer_finish_noroll()
 	 */
 }
 

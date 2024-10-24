@@ -527,6 +527,8 @@ struct xlog {
 						 * log entries" */
 	/*
 	 * l_iclog链表，是一个ring，循环使用；
+	 * - 指向的是当前正在使用的iclog
+	 *   > 参加xlog_state_switch_iclogs()
 	 */
 	xlog_in_core_t		*l_iclog;       /* head log queue	*/
 	spinlock_t		l_icloglock;    /* grab to change iclog state */

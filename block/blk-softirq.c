@@ -36,6 +36,7 @@ static __latent_entropy void blk_done_softirq(struct softirq_action *h)
 		list_del_init(&rq->ipi_list);
 		/*
 		 * nvme_mq_ops.nvme_pci_complete_rq()
+		 * scsi_mq_ops.scsi_softirq_done()
 		 */
 		rq->q->mq_ops->complete(rq);
 	}

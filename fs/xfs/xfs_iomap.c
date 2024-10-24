@@ -207,6 +207,9 @@ xfs_iomap_write_direct(
 	/*
 	 * 啊，对directio，直接就XFS_BMAPI_PREALLOC了
 	 * - prealloc有什么好处和必要性呢？
+	 *   > 第一次进入xfs_bmapi_convert_unwritten()时直接返回，当数据写完之后
+	 *     在iomap_dio_complete()中再次进入xfs_bmapi_convert_unwritten()
+	 *     o 详见notes笔记
 	 */
 	int		bmapi_flags = XFS_BMAPI_PREALLOC;
 	uint		tflags = 0;
@@ -726,6 +729,12 @@ xfs_file_iomap_begin_delay(
 	 */
 	if (xfs_is_cow_inode(ip)) {
 		if (!ip->i_cowfp) {
+			/*
+			 * 这个ASSERT()是不是意味着一个cow inode如果其i_cowfp还
+			 * 未初始化，那么其一定不是reflink inode？
+			 * - 反过来说，是不是reflink inode会在一个比较早的时间对
+			 *   其i_cowfp进行初始化？
+			 */
 			ASSERT(!xfs_is_reflink_inode(ip));
 			xfs_ifork_init_cow(ip);
 		}

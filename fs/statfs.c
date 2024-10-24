@@ -61,6 +61,9 @@ static int statfs_by_dentry(struct dentry *dentry, struct kstatfs *buf)
 	retval = security_sb_statfs(dentry);
 	if (retval)
 		return retval;
+	/*
+	 * xfs_fs_statfs()
+	 */
 	retval = dentry->d_sb->s_op->statfs(dentry, buf);
 	if (retval == 0 && buf->f_frsize == 0)
 		buf->f_frsize = buf->f_bsize;

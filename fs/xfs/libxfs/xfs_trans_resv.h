@@ -27,6 +27,10 @@ struct xfs_trans_res {
 				 * a reservation request is permanent or not */
 };
 
+/*
+ * 初始化位置：
+ * - xfs_trans_resv_calc()
+ */
 struct xfs_trans_resv {
 	struct xfs_trans_res	tr_write;	/* extent alloc trans */
 	struct xfs_trans_res	tr_itruncate;	/* truncate trans */

@@ -307,6 +307,9 @@ int vfs_fallocate(struct file *file, int mode, loff_t offset, loff_t len)
 		return -EOPNOTSUPP;
 
 	file_start_write(file);
+	/*
+	 * xfs_file_fallocate()
+	 */
 	ret = file->f_op->fallocate(file, mode, offset, len);
 
 	/*

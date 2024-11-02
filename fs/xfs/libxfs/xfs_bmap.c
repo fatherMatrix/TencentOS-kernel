@@ -3200,6 +3200,7 @@ xfs_bmap_adjacent(
 			adjust = prevdiff = ap->offset -
 				(ap->prev.br_startoff +
 				 ap->prev.br_blockcount);
+
 			/*
 			 * Figure the startblock based on the previous block's
 			 * end and the gap size.
@@ -3207,11 +3208,18 @@ xfs_bmap_adjacent(
 			 * If the gap is large relative to the piece we're
 			 * allocating, or using it gives us an invalid block
 			 * number, then just use the end of the previous block.
+			 *
+			 * TDSQL punch hole的场景中：
+			 * - prev diff是12k
+			 * - XFS_ALLOC_GAP_UNITS * length = 16k
+			 * 导致刚好进入下面的if
 			 */
 			if (prevdiff <= XFS_ALLOC_GAP_UNITS * ap->length &&
 			    ISVALID(prevbno + prevdiff,
 				    ap->prev.br_startblock))
 			/*
+			 * 精简结论：物理块分配按照逻辑块的布局来留出hole
+			 *
 			 * 如果待分配的target extent离prev extent比较近，那么我
 			 * 们要考虑prev extent和target extent中间的extent后面很
 			 * 快会被填充。
@@ -3221,10 +3229,15 @@ xfs_bmap_adjacent(
 				prevbno += adjust;
 			else
 			/*
-			 * gap比我们要分配的piece大，或者ISVALID()失败，则使用
-			 * prevbno，即前面一个extents的结尾
+			 * gap相对我们要分配的piece大太多，或者ISVALID()失败，则
+			 * 使用prevbno，即前面一个extents的结尾。
+			 * - 没有对prevbno做改动就说明是使用prevbno的原值，即prev
+			 *   extent的结尾；
+			 * - 这里的prevdiff是为了量化prev和next中靠近哪个是更优的
+			 *   > 但这个指标的实际意义是什么？
 			 */
 				prevdiff += adjust;
+
 			/*
 			 * If the firstblock forbids it, can't use it,
 			 * must use default.
@@ -3261,6 +3274,10 @@ xfs_bmap_adjacent(
 			 */
 			if (gotdiff <= XFS_ALLOC_GAP_UNITS * ap->length &&
 			    ISVALID(gotbno - gotdiff, gotbno))
+			/*
+			 * 同样的，这个hole比较小，我们在next extent的物理块前越过
+			 * 这个hole的距离来分配
+			 */
 				gotbno -= adjust;
 			else if (ISVALID(gotbno - ap->length, gotbno)) {
 				gotbno -= ap->length;
@@ -3296,6 +3313,10 @@ xfs_bmap_adjacent(
 			ap->blkno = gotbno;
 	}
 #undef ISVALID
+	/*
+	 * 一个文件中第一次写入的extent，不满足上述三种情况中所有条件，其
+	 * xfs_bmalloca->blkno保持为0，不予调整
+	 */
 }
 
 static int
@@ -3344,6 +3365,10 @@ xfs_bmap_select_minlen(
 		/*
 		 * Since we did a BUF_TRYLOCK above, it is possible that
 		 * there is space for this request.
+		 *
+		 * AGFL本身没有初始化成功，或者找到的最大连续块比我们期望的最小
+		 * 分配长度还要小，那么我们就按照最小的分配期望值分配，这意味着
+		 * 我们被迫接受非连续分配
 		 */
 		args->minlen = ap->minlen;
 	} else if (*blen < args->maxlen) {
@@ -3543,6 +3568,9 @@ xfs_bmap_btalloc(
 	nullfb = ap->tp->t_firstblock == NULLFSBLOCK;
 	fb_agno = nullfb ? NULLAGNUMBER : XFS_FSB_TO_AGNO(mp,
 							ap->tp->t_firstblock);
+	/*
+	 * 这里应该是第一次对xfs_bmalloca->blkno做设置
+	 */
 	if (nullfb) {
 		if (xfs_alloc_is_userdata(ap->datatype) &&
 		    xfs_inode_is_filestream(ap->ip)) {
@@ -3552,6 +3580,7 @@ xfs_bmap_btalloc(
 		} else {
 			/*
 			 * 将extents的分配blkno放到xfs_inode所在fsblock附近
+			 * - 此时似乎还没有固定使用哪个AG
 			 */
 			ap->blkno = XFS_INO_TO_FSB(mp, ap->ip->i_ino);
 		}
@@ -3568,12 +3597,15 @@ xfs_bmap_btalloc(
 	 *   在物理上按照逻辑extents的相对位置来分配
 	 *   > 核心思想是认为target extent与prev、next两个逻辑extents之间的hole
 	 *     很快也会被填充
+	 * - 主要作用是确定在哪个物理块附近分配
 	 */
 	xfs_bmap_adjacent(ap);
 
 	/*
 	 * If allowed, use ap->blkno; otherwise must use firstblock since
 	 * it's in the right allocation group.
+	 * - 这里再判断一遍是因为上面的xfs_bmap_adjacent()中会对xfs_bmalloca->blkno
+	 *   进行调整
 	 */
 	if (nullfb || XFS_FSB_TO_AGNO(mp, ap->blkno) == fb_agno)
 		;
@@ -3592,6 +3624,10 @@ xfs_bmap_btalloc(
 	/* Trim the allocation back to the maximum an AG can fit. */
 	args.maxlen = min(ap->length, mp->m_ag_max_usable);
 	blen = 0;
+	/*
+	 * 确定分配的最小长度
+	 * - 会设置xfs_alloc_args.type
+	 */
 	if (nullfb) {
 		/*
 		 * Search for an allocation group with a single extent large
@@ -3599,6 +3635,7 @@ xfs_bmap_btalloc(
 		 * the minimum allocation size to the largest space found.
 		 *
 		 * 这里的作用是找到合适的AG和AGBNO，但未进行分配动作；
+		 * - 此时xfs_alloc_arg.type = 0
 		 */
 		if (xfs_alloc_is_userdata(ap->datatype) &&
 		    xfs_inode_is_filestream(ap->ip))
@@ -3634,6 +3671,13 @@ xfs_bmap_btalloc(
 		args.prod = 1;
 		args.mod = 0;
 	} else {
+		/*
+		 * 一个page中包含多个fsblock
+		 * - xfs_alloc_args->prod的含义是理想的对齐值
+		 * - xfs_alloc_args->mod的含义是offset后有多少是未对齐的
+		 *   > mod = offset % prod是offset到其前面对齐边界的距离，
+		 *     prod - mod之后是offset到其后面对齐边界的距离
+		 */
 		args.prod = PAGE_SIZE >> mp->m_sb.sb_blocklog;
 		div_u64_rem(ap->offset, args.prod, &args.mod);
 		if (args.mod)
@@ -3649,7 +3693,16 @@ xfs_bmap_btalloc(
 	 * at the end of file.
 	 */
 	if (!(ap->tp->t_flags & XFS_TRANS_LOWMODE) && ap->aeof) {
+	/*
+	 * xfs_alloc_arg->aeof为1说明（AND）：
+	 * - allocation length >= stripe unit
+	 * - allocation offset post-EOF
+	 */
 		if (!ap->offset) {
+			/*
+			 * 如果文件新建（offset=0），且当前不是LOWMODE，要
+			 * 考虑向stripe unit对齐
+			 */
 			args.alignment = stripe_align;
 			atype = args.type;
 			isaligned = 1;
@@ -3687,6 +3740,13 @@ xfs_bmap_btalloc(
 				args.minalignslop = 0;
 		}
 	} else {
+	/*
+	 * 进到这里说明（OR）：
+	 * - 当前处于LOWMODE
+	 * - allocation length < stripe unit || allocation not post-EOF
+	 *
+	 * 这么说，即便有stripe，更多的还是走这种对齐为1的
+	 */
 		args.alignment = 1;
 		args.minalignslop = 0;
 	}
@@ -4398,6 +4458,7 @@ xfs_bmapi_allocate(
 
 	/*
 	 * 上面都是设置一些分配的参数，现在开始正式分配；
+	 * - 上面在逻辑地址中查找了一遍，所以这里要分配的是逻辑上连续的块
 	 */
 	error = xfs_bmap_alloc(bma);
 	if (error)
@@ -4908,6 +4969,9 @@ xfs_bmapi_convert_delalloc(
 	bma.ip = ip;
 	bma.wasdel = true;
 	bma.offset = bma.got.br_startoff;
+	/*
+	 * 这里的max_t()有什么意义吗？直接MAXEXTLEN不就行了？
+	 */
 	bma.length = max_t(xfs_filblks_t, bma.got.br_blockcount, MAXEXTLEN);
 	bma.total = XFS_EXTENTADD_SPACE_RES(ip->i_mount, XFS_DATA_FORK);
 	bma.minleft = xfs_bmapi_minleft(tp, ip, whichfork);
@@ -4917,6 +4981,10 @@ xfs_bmapi_convert_delalloc(
 	if (!xfs_iext_peek_prev_extent(ifp, &bma.icur, &bma.prev))
 		bma.prev.br_startoff = NULLFILEOFF;
 
+	/*
+	 * xfs_bmapi_write()中对该函数的调用是循环的，即一定要分配到要求的块
+	 * 数再停手；而这里只调用一次，有可能出现分配不足的情况
+	 */
 	error = xfs_bmapi_allocate(&bma);
 	if (error)
 		goto out_finish;

@@ -2010,7 +2010,8 @@ xfs_btree_lookup(
 				 *  - equal, we're done
 				 *
 				 * 逆天啊，这里是kp - cur，这尼玛真反人类啊！
-				 * - cnt free btree，xfs_cntbt_key_diff()
+				 * - cnt free btree, xfs_cntbt_key_diff()
+				 * - bno free btree, xfs_bnobt_key_diff()
 				 */
 				diff = cur->bc_ops->key_diff(cur, kp);
 				if (diff < 0)		/* kp - cur < 0 => cur > kp，在右边找； */

@@ -22,6 +22,7 @@ struct xfs_alloc_arg;
  * - busy extents指的是已经被free，但是free它的xfs_trans还没有写到disk log space
  *   的extents
  *   > 要注意的点是？
+ *     o 参见 xfs_extent_busy_trim()
  */
 struct xfs_extent_busy {
 	/*

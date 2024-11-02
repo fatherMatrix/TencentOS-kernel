@@ -951,8 +951,11 @@ xfs_setattr_size(
 	 * We are going to log the inode size change in this transaction so
 	 * any previous writes that are beyond the on disk EOF and the new
 	 * EOF that have not been written out need to be written here.  If we
+	 *                                                              ^^^^^
 	 * do not write the data out, we expose ourselves to the null files
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * problem. Note that this includes any block zeroing we did above;
+	 * ^^^^^^^^
 	 * otherwise those blocks may not be zeroed after a crash.
 	 */
 	if (did_zeroing ||

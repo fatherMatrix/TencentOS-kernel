@@ -153,6 +153,7 @@ xfs_extent_busy_update_extent(
 	 * and retry.
 	 * - 该busy extents正在被清除，这意味着其xfs_trans已经写完了，这会儿正
 	 *   在将其从busy list/tree上删除掉
+	 *   > 参见： xfs_extent_busy_clear()
 	 */
 	if (busyp->flags & XFS_EXTENT_BUSY_DISCARDED) {
 		spin_unlock(&pag->pagb_lock);
@@ -168,10 +169,23 @@ xfs_extent_busy_update_extent(
 	 * Fortunately this does not happen during normal operation, but
 	 * only if the filesystem is very low on space and has to dip into
 	 * the AGFL for normal allocations.
+	 *
+	 * 用户数据是不能使用busy extents的
+	 * - 如果用户数据写了busy extents，但此时xfs_trans因某些原因回滚，则会
+	 *   导致原有数据被破坏
+	 * - 为什么非用户数据就可以写busy extent呢？
 	 */
 	if (userdata)
 		goto out_force_log;
 
+	/*
+	 *
+	 * 我们不能向xfs_trans->b_busy或者xfs_cil_ctx->busy_extent链表中添加、
+	 * 删除元素。因此对于需要将busy extent进行分裂的情况，我们无能为力；
+	 * 但我们可以更改已经插入到链表中的busy extent的起始地址、长度，从而
+	 * 将部分busy extent转变为非busy extent。
+	 * - 问题是写完后被回滚怎么办？
+	 */
 	if (bbno < fbno && bend > fend) {
 		/*
 		 * Case 1:
@@ -371,6 +385,16 @@ restart:
 		/*
 		 * If this is a metadata allocation, try to reuse the busy
 		 * extent instead of trimming the allocation.
+		 *
+		 * metadata的写是可以复用busy extents的，userdata的写要避开
+		 * busy extent。
+		 * - userdata不可用可以理解，但为什么metadata就是可以用的呢？
+		 *   > userdata向磁盘中的数据写和xfs_trans落盘是并发操作的
+		 *     o 当xfs_trans真正向disk metadata space中的磁盘块写数据时，
+		 *       其一定是已经在disk log space中持久化了，不会发生回滚，
+		 *       只会重做；
+		 *     o 而userdata在xfs_trans_commit()执行后就立马开始向disk上
+		 *       写数据了；
 		 */
 		if (!xfs_alloc_is_userdata(args->datatype) &&
 		    !(busyp->flags & XFS_EXTENT_BUSY_DISCARDED)) {
@@ -559,6 +583,7 @@ xfs_extent_busy_put_pag(
  * Remove all extents on the passed in list from the busy extents tree.
  * If do_discard is set skip extents that need to be discarded, and mark
  * these as undergoing a discard operation instead.
+ * - 实际的discrad操作在哪里呢？
  */
 void
 xfs_extent_busy_clear(

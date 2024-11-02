@@ -11,6 +11,9 @@
 /* buf log item flags */
 #define	XFS_BLI_HOLD		0x01
 #define	XFS_BLI_DIRTY		0x02
+/*
+ * 参见xfs_trans_binval()
+ */
 #define	XFS_BLI_STALE		0x04
 #define	XFS_BLI_LOGGED		0x08
 #define	XFS_BLI_INODE_ALLOC_BUF	0x10

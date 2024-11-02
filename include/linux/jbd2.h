@@ -686,7 +686,7 @@ struct transaction_s
 	 * - 当一个缓冲区正在被checkpointed，但是后来由调用journal_forget()，
 	 *   此时以前的checkpointed项就没用了。因此需要在这里记录下这个缓冲区，
 	 *   然后un-checkpoint这个缓冲区。
-	 * - BJ_Shadow链表中的项在iobufs中的对应项写入磁盘后也会放到这里面；
+	 * - BJ_Shadow链表中的项在iobufs中的对应项写入磁盘后也会放到这里面；
 	 *   参见提交阶段3；
 	 */
 	struct journal_head	*t_forget;

@@ -55,6 +55,7 @@ struct journal_head {
 	 *
 	 * 当jbd遇到需要转义的块时，将buffer_head指向的缓冲区数据拷贝出来，冻
 	 * 结起来，供写入日志使用
+	 * - 什么叫需要转义的块？
 	 */
 	char *b_frozen_data;
 

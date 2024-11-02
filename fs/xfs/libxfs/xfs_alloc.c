@@ -718,6 +718,9 @@ xfs_alloc_ag_vextent_small(
 	 * the tree. Try the AGFL if the cntbt is empty, otherwise fail the
 	 * allocation. Make sure to respect minleft even when pulling from the
 	 * freelist.
+	 *
+	 * 进到这里，说明xfs_alloc_lookup_ge()没有找到足够大的空闲extents，此时
+	 * xfs_btree_cur做decrement操作刚好是count free btree中最大的那个extent
 	 */
 	if (ccur)
 		error = xfs_btree_decrement(ccur, 0, &i);
@@ -737,12 +740,21 @@ xfs_alloc_ag_vextent_small(
 	     args->minleft))
 		goto out;
 
+	/*
+	 * 如果xfs_alloc_arg.minlen == 1，说明什么呢？
+	 * - 下面选择在AGFL中分配block，但似乎只支持分配一个block，所以上面才要检
+	 *   查minlen是不是等于1
+	 */
+
 	error = xfs_alloc_get_freelist(args->tp, args->agbp, &fbno, 0);
 	if (error)
 		goto error;
 	if (fbno == NULLAGBLOCK)
 		goto out;
 
+	/*
+	 * 保证我们可以reuse busy extent
+	 */
 	xfs_extent_busy_reuse(args->mp, args->agno, fbno, 1,
 			      xfs_alloc_allow_busy_reuse(args->datatype));
 
@@ -754,6 +766,7 @@ xfs_alloc_ag_vextent_small(
 			error = -EFSCORRUPTED;
 			goto error;
 		}
+		// ?
 		xfs_trans_binval(args->tp, bp);
 	}
 	*fbnop = args->agbno = fbno;
@@ -1162,6 +1175,9 @@ restart:
 				&ltlen, &i)))
 			goto error0;
 		if (i == 0 || ltlen == 0) {
+		/*
+		 * 从freelist中找到了，或者从任何地方都没找到，两种情况都到了退出的时候
+		 */
 			xfs_btree_del_cursor(cnt_cur, XFS_BTREE_NOERROR);
 			trace_xfs_alloc_near_noentry(args);
 			return 0;
@@ -1212,6 +1228,9 @@ restart:
 			if (!i)
 				break;
 		}
+		/*
+		 * 此时i表示leaf node中第一个len > minlen的record位置
+		 */
 		i = cnt_cur->bc_ptrs[0];
 		for (j = 1, blen = 0, bdiff = 0;
 		     !error && j && (blen < args->maxlen || bdiff > 0);

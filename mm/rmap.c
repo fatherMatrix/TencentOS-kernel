@@ -1041,7 +1041,7 @@ static bool invalid_mkclean_vma(struct vm_area_struct *vma, void *arg)
 }
 
 /*
- * 返回mkclean的page数量
+ * 返回mkclean的pte数量
  * - 要注意的是RMAP机制仅用于进程地址空间（用户态地址空间）的页表遍历与操作，对
  *   于未映射至进程地址空间的page，不会去操作；
  *   > 这就导致了GUP的page有可能在page_mkclean后被内核态的地址操作，提交给块层，

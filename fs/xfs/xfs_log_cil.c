@@ -507,7 +507,10 @@ xlog_cil_insert_items(
 	len += iovhdr_res;
 	ctx->nvecs += diff_iovecs;
 
-	/* attach the transaction to the CIL if it has any busy extents */
+	/*
+	 * attach the transaction to the CIL if it has any busy extents
+	 * - xfs_trans->t_busy中的元素来源是 __xfs_free_extent()
+	 */
 	if (!list_empty(&tp->t_busy))
 		list_splice_init(&tp->t_busy, &ctx->busy_extents);
 

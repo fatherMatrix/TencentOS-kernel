@@ -506,6 +506,11 @@ xfs_map_blocks(
 	struct xfs_writepage_ctx *wpc,
 	struct inode		*inode,
 	loff_t			offset)
+/*
+ * 这里进来时只有一个待回写page的offset，如何知道对应extent的长度呢？
+ * - 在回写开始之前，buffer io write的iomap_begin()阶段就已经确定了对应extent
+ *   的长度，并已经以delay extent的形式插入到了incore btree中
+ */
 {
 	struct xfs_inode	*ip = XFS_I(inode);
 	struct xfs_mount	*mp = ip->i_mount;
@@ -826,6 +831,8 @@ xfs_add_to_ioend(
 		 *   > 这也就是说，只有老的xfs_ioend会被提交，最新的xfs_ioend不
 		 *     会被上一层函数提交。所以，才需要在上上上层函数中特别处理
 		 *     最后一个xfs_ioend
+		 *   > 这里对上层函数中，一个page仅包含一个fsblock的循环也有优化
+		 *     作用，使其不会每个page都触发一次submit_bio()
 		 */
 		if (wpc->ioend)
 			list_add(&wpc->ioend->io_list, iolist);
@@ -989,6 +996,9 @@ xfs_writepage_map(
 		/*
 		 * 其实本处的循环只是为了处理大尺寸page中的多个fsblock。对于x86
 		 * 上4K的block，只会循环一次。
+		 * - 对于这种只循环一次的情况，并不会每次在下面的
+		 *   xfs_submit_ioend()中进行提交，这样会导致下发很多离散的io
+		 *   > 只有当前page与xfs_writepage_ctx->xfs_ioend中现有的
 		 */
 		xfs_add_to_ioend(inode, file_offset, page, iop, wpc, wbc,
 				 &submit_list);
@@ -1031,6 +1041,10 @@ xfs_writepage_map(
 		 */
 		set_page_writeback_keepwrite(page);
 	} else {
+		/*
+		 * 本函数之后，再有对该page的mmap write，则会触发页保护异常，并在
+		 * 异常处理函数中因锁而等待
+		 */
 		clear_page_dirty_for_io(page);
 		set_page_writeback(page);
 	}
@@ -1169,6 +1183,7 @@ xfs_do_writepage(
 		 * offset is just equal to the EOF.
 		 *
 		 * page完全在文件末尾之后
+		 * - 这是由于ftruncate()在运行中
 		 */
 		if (page->index > end_index ||
 		    (page->index == end_index && offset_into_page == 0))

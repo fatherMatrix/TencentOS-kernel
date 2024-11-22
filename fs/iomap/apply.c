@@ -63,6 +63,10 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	ret = ops->iomap_begin(inode, pos, length, flags, &iomap);
 	if (ret)
 		return ret;
+	/*
+	 * 诶，这里似乎说明返回的offset不会大于pos，但有可能小于pos吗？
+	 * - 理论上小于pos是可能的，比如我就是在一个extent的中间开始写？
+	 */
 	if (WARN_ON(iomap.offset > pos))
 		return -EIO;
 	if (WARN_ON(iomap.length == 0))
@@ -73,7 +77,9 @@ iomap_apply(struct inode *inode, loff_t pos, loff_t length, unsigned flags,
 	 * as it might not be able to give us the whole size that we requested.
 	 *
 	 * 难道还会出现iomap.offset和pos不相同的情况吗？
-	 * - 这倒不会，但是会出现iomap.length和length不同的情况
+	 * - 如果我就是从一个extent的中间开始写？
+	 *   >
+	 * - 会出现iomap.length和length不同的情况
 	 *   > 如果iomap.offset + iomap.length > pos + length，说明我们产生了
 	 *     prealloc，此时会保持length不变，即为用户实际发起的io长度；
 	 */

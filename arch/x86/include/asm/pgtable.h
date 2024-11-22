@@ -989,6 +989,15 @@ static inline int pgd_bad(pgd_t pgd)
 
 static inline int pgd_none(pgd_t pgd)
 {
+	/*
+	 * 如果5 level没有开启，则pgd永远存在？
+	 * - 为什么呢？
+	 *   > 首先，这里并不是pgd永远存在的意思
+	 *   > 走到这里说明config中配置了5级页表，但运行时没有打开。此时pgd和p4d
+	 *     是完全一样的，这里返回非none，会导致相关检查offload到p4d那一级；
+	 *     相当于这种时候对pgd完全放权，认为所有操作都是合法的，反正在p4d那
+	 *     一级会重新进行检查；
+	 */
 	if (!pgtable_l5_enabled())
 		return 0;
 	/*

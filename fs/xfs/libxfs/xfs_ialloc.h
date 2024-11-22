@@ -24,7 +24,7 @@ struct xfs_btree_cur;
  * - chunk是inodes分配的基本单位
  * - cluster是xfs_buf读取的基本单位
  * - chunk的尺寸必定大于等于cluster的尺寸
- *   > 参见xfs_ialloc_setup_geometry()
+ *   > 参见 xfs_ialloc_setup_geometry()
  */
 struct xfs_icluster {
 	bool		deleted;	/* record is deleted */

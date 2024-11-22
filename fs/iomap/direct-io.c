@@ -675,6 +675,10 @@ iomap_dio_rw(struct kiocb *iocb, struct iov_iter *iter,
 			}
 			break;
 		}
+		/*
+		 * 诶，这里不对吧？iomap_apply()中可能会更改bma->offset，也就
+		 * 是说写的offset不一定就是pos
+		 */
 		pos += ret;
 
 		if (iov_iter_rw(iter) == READ && pos >= dio->i_size) {

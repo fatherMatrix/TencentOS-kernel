@@ -68,6 +68,11 @@ void __rq_qos_requeue(struct rq_qos *rqos, struct request *rq)
 void __rq_qos_throttle(struct rq_qos *rqos, struct bio *bio)
 {
 	do {
+		/*
+		 * - wbt_wait()
+		 *   > 参见 wbt_init()
+		 * - ... ...
+		 */
 		if (rqos->ops->throttle)
 			rqos->ops->throttle(rqos, bio);
 		rqos = rqos->next;

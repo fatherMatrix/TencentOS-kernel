@@ -2099,6 +2099,7 @@ static blk_qc_t blk_mq_make_request(struct request_queue *q, struct bio *bio)
 
 	/*
 	 * 将bio中的位置信息设置到request中
+	 * - 内部包含blk_accout_io_start
 	 */
 	blk_mq_bio_to_request(rq, bio, nr_segs);
 

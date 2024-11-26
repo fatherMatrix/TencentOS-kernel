@@ -3843,6 +3843,9 @@ xfs_iflush_cluster(
 		 * - 理论上，位锁性能是不如自旋锁的
 		 */
 		if (!xfs_iflock_nowait(cip)) {
+		/*
+		 * xfs_iflock_nowait()返回值为0，说明未获取到XFS_IFLOCK位锁
+		 */
 			xfs_iunlock(cip, XFS_ILOCK_SHARED);
 			continue;
 		}
@@ -4166,6 +4169,10 @@ xfs_iflush_int(
 	if (ip->i_d.di_flushiter == DI_MAX_FLUSH)
 		ip->i_d.di_flushiter = 0;
 
+	/*
+	 * data fork和attr fork都是紧跟在xfs_dinode后面的，xfs_inode_to_disk()仅
+	 * 处理xfs_dinode本身，这里分别处理两个fork
+	 */
 	xfs_iflush_fork(ip, dip, iip, XFS_DATA_FORK);
 	if (XFS_IFORK_Q(ip))
 		xfs_iflush_fork(ip, dip, iip, XFS_ATTR_FORK);

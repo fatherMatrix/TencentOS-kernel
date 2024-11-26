@@ -415,6 +415,8 @@ xfs_buf_allocate_memory(
 		}
 		/*
 		 * 走到这里，说明没有b_addr指向的内存没有横跨两个页；
+		 *
+		 * 此时，我们可以继续。记录xfs_buf起始地址在第一个page中的偏移
 		 */
 		bp->b_offset = offset_in_page(bp->b_addr);
 		/*

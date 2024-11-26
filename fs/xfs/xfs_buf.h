@@ -199,6 +199,7 @@ typedef struct xfs_buf {
 	/*
 	 * xfs_buf_bio_end_io()回调中包含对这里的回调
 	 * - xfs_buf_iodone_callbacks()，参见xfs_buf_attach_iodone()
+	 *   > 用于回调xfs_log_item->li_cb()
 	 * - xlog_recover_iodone()
 	 */
 	xfs_buf_iodone_t	b_iodone;	/* I/O completion function */
@@ -248,6 +249,11 @@ typedef struct xfs_buf {
 	 */
 	atomic_t		b_io_remaining;	/* #outstanding I/O requests */
 	unsigned int		b_page_count;	/* size of page array */
+	/*
+	 * xfs_buf的起始地址可能不是page对齐的，即xfs_buf有可能起始在一个page的
+	 * 中间位置；b_offset表示起始地址在第一个page中的偏移
+	 * - 参见： xfs_buf_allocate_memory()
+	 */
 	unsigned int		b_offset;	/* page offset in first page */
 	int			b_error;	/* error code on I/O */
 

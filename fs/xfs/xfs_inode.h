@@ -286,6 +286,10 @@ static inline int xfs_isiflocked(struct xfs_inode *ip)
 
 extern void __xfs_iflock(struct xfs_inode *ip);
 
+/*
+ * 返回值为0说明未获取到锁；
+ * 返回值非0说明成功获取到锁；
+ */
 static inline int xfs_iflock_nowait(struct xfs_inode *ip)
 {
 	return !xfs_iflags_test_and_set(ip, XFS_IFLOCK);

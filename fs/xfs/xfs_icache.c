@@ -1240,6 +1240,10 @@ restart:
 		if (!(sync_mode & SYNC_WAIT))
 			goto out_ifunlock;
 		xfs_iunpin_wait(ip);
+		/*
+		 * wait返回之后，由于上面获取了XFS_ILOCK_EXCL，不会再有新的pin
+		 * 出现；
+		 */
 	}
 	if (xfs_inode_clean(ip)) {
 		xfs_ifunlock(ip);

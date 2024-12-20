@@ -116,9 +116,6 @@ EXPORT_SYMBOL(read_cache_pages);
 static int read_pages(struct address_space *mapping, struct file *filp,
 		struct list_head *pages, unsigned int nr_pages, gfp_t gfp)
 {
-	/*
-	 * 这是一个栈上对象，所以在其生命期结束之前势必要将内容转存
-	 */ 
 	struct blk_plug plug;
 	unsigned page_idx;
 	int ret;
@@ -133,6 +130,12 @@ static int read_pages(struct address_space *mapping, struct file *filp,
 	 * xfs: xfs_vm_readpages()
 	 */
 	if (mapping->a_ops->readpages) {
+		/*
+		 * 为什么下面的mapping->a_ops->readpage()前需要add_to_page_cache_lru(),
+		 * 这里就没有呢？
+		 * - readpages接口中由文件系统决定调用时机
+		 *   > xfs: iomap_next_page()
+		 */
 		ret = mapping->a_ops->readpages(filp, mapping, pages, nr_pages);
 		/* Clean up the remaining pages */
 		put_pages_list(pages);
@@ -485,6 +488,9 @@ ondemand_readahead(struct address_space *mapping,
 
 initial_readahead:
 	ra->start = offset;
+	/*
+	 * 确定预读大小
+	 */
 	ra->size = get_init_ra_size(req_size, max_pages);
 	ra->async_size = ra->size > req_size ? ra->size - req_size : ra->size;
 

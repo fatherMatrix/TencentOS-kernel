@@ -42,6 +42,7 @@
  * 描述一个回写任务；
  * - 这个结构体看上去只是指定了本次回写任务最多写多少数据到disk上，至于写哪些数
  *   据由wb_workfn()内部自己决定
+ * - 对比 writeback_control
  */
 struct wb_writeback_work {
 	/*
@@ -49,7 +50,7 @@ struct wb_writeback_work {
 	 */
 	long nr_pages;
 	/*
-	 * writeback所属的superblock
+	 * writeback该super_block下的inode，其他inode忽略，不做处理
 	 */
 	struct super_block *sb;
 	/*
@@ -61,6 +62,10 @@ struct wb_writeback_work {
 	unsigned int range_cyclic:1;
 	unsigned int for_background:1;
 	unsigned int for_sync:1;	/* sync(2) WB_SYNC_ALL writeback */
+	/*
+	 * __writeback_inodes_sb_nr() 中生成的总work为0
+	 * bdi_split_work_to_wbs() 中生成的子work为1
+	 */
 	unsigned int auto_free:1;	/* free on completion */
 	enum wb_reason reason;		/* why was writeback initiated? */
 
@@ -204,6 +209,9 @@ static void wb_queue_work(struct bdi_writeback *wb,
 {
 	trace_writeback_queue(wb, work);
 
+	/*
+	 * 这个done是栈上的，但外层保证了queue的过程中会一直存在，不会弹栈
+	 */
 	if (work->done)
 		atomic_inc(&work->done->cnt);
 
@@ -216,6 +224,9 @@ static void wb_queue_work(struct bdi_writeback *wb,
 		 */
 		mod_delayed_work(bdi_wq, &wb->dwork, 0);
 	} else
+		/*
+		 * 有可能本bdi_writeback被 wb_shutdown() 关闭了
+		 */
 		finish_writeback_work(wb, work);
 
 	spin_unlock_bh(&wb->work_lock);
@@ -890,6 +901,8 @@ static long wb_split_bdi_pages(struct bdi_writeback *wb, long nr_pages)
  * have dirty inodes.  If @base_work->nr_page isn't %LONG_MAX, it's
  * distributed to the busy wbs according to each wb's proportion in the
  * total active write bandwidth of @bdi.
+ *
+ * 定义了CONFIG_CGROUP_WRITEBACK的版本
  */
 static void bdi_split_work_to_wbs(struct backing_dev_info *bdi,
 				  struct wb_writeback_work *base_work,
@@ -921,18 +934,32 @@ restart:
 		if (skip_if_busy && writeback_in_progress(wb))
 			continue;
 
+		/*
+		 * 根据每个memcg对应的bdi_writeback带宽在总带宽中的比重领取对应
+		 * 份额的page数量
+		 */
 		nr_pages = wb_split_bdi_pages(wb, base_work->nr_pages);
 
 		work = kmalloc(sizeof(*work), GFP_ATOMIC);
 		if (work) {
 			*work = *base_work;
 			work->nr_pages = nr_pages;
+			/*
+			 * 子work在完成时自动释放
+			 */
 			work->auto_free = 1;
 			wb_queue_work(wb, work);
 			continue;
 		}
 
-		/* alloc failed, execute synchronously using on-stack fallback */
+		/*
+		 * alloc failed, execute synchronously using on-stack fallback
+		 * - 上面分配子wb_writeback_work失败了，强行使用我们在栈上准备
+		 *   的子wb_writeback_work，但要在这里wb_wait_for_completion()
+		 *   以等待下发的任务执行完成
+		 *   > 注意，这里的执行完成只是submit_bio()执行完成，不需要等
+		 *     提交的IO完成
+		 */
 		work = &fallback_work;
 		*work = *base_work;
 		work->nr_pages = nr_pages;
@@ -1104,6 +1131,9 @@ static long wb_split_bdi_pages(struct bdi_writeback *wb, long nr_pages)
 	return nr_pages;
 }
 
+/*
+ * 未定义CONFIG_CGROUP_WRITEBACK的版本
+ */
 static void bdi_split_work_to_wbs(struct backing_dev_info *bdi,
 				  struct wb_writeback_work *base_work,
 				  bool skip_if_busy)
@@ -1522,6 +1552,7 @@ __writeback_single_inode(struct inode *inode, struct writeback_control *wbc)
 
 	/*
 	 * 进来后，inode->i_lock应该是解锁状态
+	 * - 多个内核路径的互斥是通过I_SYNC？
 	 */
 
 	WARN_ON(!(inode->i_state & I_SYNC));
@@ -1765,9 +1796,17 @@ static long writeback_sb_inodes(struct super_block *sb,
 	long wrote = 0;  /* count both pages and inodes */
 
 	while (!list_empty(&wb->b_io)) {
+		/*
+		 * 看样子是从 bdi_writeback->b_io 链表的尾部取第一个
+		 */
 		struct inode *inode = wb_inode(wb->b_io.prev);
 		struct bdi_writeback *tmp_wb;
 
+		/*
+		 * 本函数仅处理super_block为 wb_writeback_work->sb 的inodes
+		 * > 如果我们不准备处理某个inode，需要将该inode重新放入
+		 *   bdi_writeback->b_dirty 链表中
+		 */
 		if (inode->i_sb != sb) {
 			if (work->sb) {
 				/*
@@ -1811,6 +1850,8 @@ static long writeback_sb_inodes(struct super_block *sb,
 			spin_unlock(&inode->i_lock);
 			/*
 			 * 将该inode重新放入b_io_more链表
+			 * - 所以在回写过程中的inode是可以变换其在bdi_writeback中
+			 *   链表的位置的
 			 */
 			requeue_io(inode, wb);
 			trace_writeback_sb_inodes_requeue(inode);
@@ -1823,6 +1864,11 @@ static long writeback_sb_inodes(struct super_block *sb,
 		 * are doing WB_SYNC_NONE writeback. So this catches only the
 		 * WB_SYNC_ALL case.
 		 * - 如果该inode已经处于writeback状态了，则等待其回写结束
+		 *   > 上面的if整体将非WB_SYNC_ALL的I_SYNC的inode放入了b_io_more
+		 *     链表，所以剩下的inode中只要还有I_SYNC标记，那么一定可以
+		 *     说明sync_mode为WB_SYNC_ALL
+		 *   > 为什么会处于回写状态？
+		 *     o 因为前面并没有互斥I_SYNC，这里才开始互斥
 		 */
 		if (inode->i_state & I_SYNC) {
 			/* Wait for I_SYNC. This function drops i_lock... */
@@ -1942,8 +1988,15 @@ static long writeback_inodes_wb(struct bdi_writeback *wb, long nr_pages,
 
 	blk_start_plug(&plug);
 	spin_lock(&wb->list_lock);
+	/*
+	 * 向bdi_writeback->b_io链表中添加inode，以操作这些inode
+	 */
 	if (list_empty(&wb->b_io))
 		queue_io(wb, &work, jiffies);
+	/*
+	 * 这个函数进入时是带着bdi_writeback.list_lock自旋锁的，没关系吗？
+	 * - 参见 writeback_sb_inodes() 前的注释
+	 */
 	__writeback_inodes_wb(wb, &work);
 	spin_unlock(&wb->list_lock);
 	blk_finish_plug(&plug);
@@ -1966,8 +2019,8 @@ static long writeback_inodes_wb(struct bdi_writeback *wb, long nr_pages,
  * dirtied_before takes precedence over nr_to_write.  So we'll only write back
  * all dirty pages if they are all attached to "old" mappings.
  *
- * writeback核心函数，主要步骤是将dirty inode、expired inode都集中到一个list中，
- * 然后进行集中处理；
+ * writeback核心函数，本函数针对一个wb_writeback_work
+ * - 主要步骤是将dirty inode、expired inode都集中到一个list中，然后进行集中处理；
  */
 static long wb_writeback(struct bdi_writeback *wb,
 			 struct wb_writeback_work *work)
@@ -1994,6 +2047,12 @@ static long wb_writeback(struct bdi_writeback *wb,
 		 * so that e.g. sync can proceed. They'll be restarted
 		 * after the other works are all done.
 		 * - 如果bdi_writeback->work_list不为空，则break？
+		 *   > 本函数这次处理的wb_writeback_works如果为background
+		 *     或者kupdate的话，就应该不做处理，给其他非此类情况
+		 *     的wb_writeback_works让路
+		 *     o 因为background和kupdate回写是一直在进行的，此时
+		 *       我们应该给进程主动触发的wb_writeback_work留出更
+		 *       多运行机会
 		 */
 		if ((work->for_background || work->for_kupdate) &&
 		    !list_empty(&wb->work_list))
@@ -2025,8 +2084,14 @@ static long wb_writeback(struct bdi_writeback *wb,
 		if (list_empty(&wb->b_io))
 			queue_io(wb, work, dirtied_before);
 		if (work->sb)
+			/*
+			 * 感觉这里是只回写特定sb下的inode
+			 */
 			progress = writeback_sb_inodes(work->sb, wb, work);
 		else
+			/*
+			 * 这里是回写所有sb下的inode，即不做排除
+			 */
 			progress = __writeback_inodes_wb(wb, work);
 		trace_writeback_written(wb, work);
 
@@ -2173,6 +2238,8 @@ static long wb_do_writeback(struct bdi_writeback *wb)
 	set_bit(WB_writeback_running, &wb->state);
 	/*
 	 * 先处理该bdi_writeback上已有的wb_writeback_work
+	 * - wb_writeback_work 的添加在：
+	 *   > wb_queue_work() -> list_add_tail()
 	 */
 	while ((work = get_next_work_item(wb)) != NULL) {
 		trace_writeback_exec(wb, work);
@@ -2220,6 +2287,7 @@ void wb_workfn(struct work_struct *work)
 		 * work_list is empty.  Note that this path is also taken
 		 * if @wb is shutting down even when we're running off the
 		 * rescuer as work_list needs to be drained.
+		 * - 最后也是会调用 __writeback_inodes_wb()
 		 */
 		do {
 			pages_written = wb_do_writeback(wb);
@@ -2230,7 +2298,9 @@ void wb_workfn(struct work_struct *work)
 		 * bdi_wq can't get enough workers and we're running off
 		 * the emergency worker.  Don't hog it.  Hopefully, 1024 is
 		 * enough for efficient IO.
-		 * - 如果没有足够的worker了，则同步处理
+		 * - 如果没有足够的worker了，则简化处理
+		 *   > 直接调用 __writeback_inodes_wb()
+		 *   > 这里好像不是简化处理，而是处理所有sb下的回写任
 		 */
 		pages_written = writeback_inodes_wb(wb, 1024,
 						    WB_REASON_FORKER_THREAD);
@@ -2704,6 +2774,9 @@ static void __writeback_inodes_sb_nr(struct super_block *sb, unsigned long nr,
 	WARN_ON(!rwsem_is_locked(&sb->s_umount));
 
 	bdi_split_work_to_wbs(sb->s_bdi, &work, skip_if_busy);
+	/*
+	 * 这里等待的是提交动作完成，而不是提交的IO完成
+	 */
 	wb_wait_for_completion(&done);
 }
 
@@ -2733,6 +2806,7 @@ EXPORT_SYMBOL(writeback_inodes_sb_nr);
  * Start writeback on some inodes on this super_block. No guarantees are made
  * on how many (if any) will be written, and this function does not wait
  * for IO completion of submitted IO.
+ * - 这个函数并不确保写下去多少，也不管写没写完
  */
 void writeback_inodes_sb(struct super_block *sb, enum wb_reason reason)
 {
@@ -2782,6 +2856,10 @@ void sync_inodes_sb(struct super_block *sb)
 	 * Can't skip on !bdi_has_dirty() because we should wait for !dirty
 	 * inodes under writeback and I_DIRTY_TIME inodes ignored by
 	 * bdi_has_dirty() need to be written out too.
+	 *
+	 * 各文件系统情况：
+	 * - bd_type: noop_backing_dev_info
+	 * - ... ...
 	 */
 	if (bdi == &noop_backing_dev_info)
 		return;

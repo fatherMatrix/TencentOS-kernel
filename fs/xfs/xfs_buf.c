@@ -144,6 +144,7 @@ xfs_buf_stale(
 	 * Clear the delwri status so that a delwri queue walker will not
 	 * flush this buffer to disk now that it is stale. The delwri queue has
 	 * a reference to the buffer, so this is safe to do.
+	 * - 这里的修改不需要和delwri侧的读做互斥吗？
 	 */
 	bp->b_flags &= ~_XBF_DELWRI_Q;
 
@@ -236,6 +237,7 @@ _xfs_buf_alloc(
 	INIT_LIST_HEAD(&bp->b_li_list);
 	/*
 	 * 设置为0，表示在xfs_buf_unlock()之前不能xfs_buf_lock()了
+	 * - 对应的up()在哪里？
 	 */
 	sema_init(&bp->b_sema, 0); /* held, no waiters */
 	spin_lock_init(&bp->b_lock);
@@ -743,6 +745,9 @@ found:
 			XFS_STATS_INC(btp->bt_mount, xb_busy_locked);
 			return -EAGAIN;
 		}
+		/*
+		 * 锁定该xfs_buf
+		 */
 		xfs_buf_lock(bp);
 		XFS_STATS_INC(btp->bt_mount, xb_get_locked_waited);
 	}
@@ -799,7 +804,7 @@ xfs_buf_get_map(
 	int			error = 0;
 
 	/*
-	 * 现在xfs_buf的缓存中查找目标buf
+	 * 先在xfs_buf的缓存中查找目标buf
 	 * - 返回时xfs_buf处于lock状态，且引用计数被加一
 	 */
 	error = xfs_buf_find(target, map, nmaps, flags, NULL, &bp);
@@ -1140,6 +1145,7 @@ xfs_buf_get_uncached(
  *	Increment reference count on buffer, to hold the buffer concurrently
  *	with another thread which may release (free) the buffer asynchronously.
  *	Must hold the buffer already to call this function.
+ * - peer function看样子应该是 xfs_buf_rele()
  */
 void
 xfs_buf_hold(
@@ -1739,6 +1745,7 @@ __xfs_buf_submit(
 	 * could occur before submission returns.
 	 *
 	 * 增加一次b_hold，这个引用计数保护的是整个io提交过程；
+	 * - 对应的减小在哪里？
 	 */
 	xfs_buf_hold(bp);
 

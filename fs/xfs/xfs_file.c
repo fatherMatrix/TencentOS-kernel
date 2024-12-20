@@ -567,6 +567,9 @@ xfs_file_dio_aio_write(
 		}
 		iolock = XFS_IOLOCK_EXCL;
 	} else {
+		/*
+		 * 对比：buffer io时不论什么情况都加互斥锁
+		 */
 		iolock = XFS_IOLOCK_SHARED;
 	}
 
@@ -707,6 +710,10 @@ xfs_file_buffered_aio_write(
 		return -EOPNOTSUPP;
 
 write_retry:
+	/*
+	 * buffer io时，vfs inode->i_rwsem加互斥锁
+	 * - direct io时，如果是对齐的则加共享锁，否则加互斥锁
+	 */
 	iolock = XFS_IOLOCK_EXCL;
 	/*
 	 * 锁的是vfs inode中的i_rwsem

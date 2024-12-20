@@ -377,7 +377,8 @@ xfsaild_push_item(
 	if (!lip->li_ops->iop_push)
 		return XFS_ITEM_PINNED;
 	/*
-	 * inode: xfs_inode_item_push()
+	 * xfs_inode: xfs_inode_item_push()
+	 * xfs_buf: xfs_buf_item_push()
 	 */
 	return lip->li_ops->iop_push(lip, &ailp->ail_buf_list);
 }
@@ -519,6 +520,8 @@ xfsaild_push(
 		/*
 		 * 越过XFS_ITEM_PINNED去处理下一个AIL链表上的元素是安全的吗？AIL
 		 * 链表上的元素顺序是否有关联关系？
+		 * - 此时所有的log item都已经写入disk log space了，这里不存在掉电
+		 *   问题。掉电后恢复一下即可
 		 */
 		lip = xfs_trans_ail_cursor_next(ailp, &cur);
 		if (lip == NULL)

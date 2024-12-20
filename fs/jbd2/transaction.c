@@ -389,6 +389,9 @@ repeat:
 		write_lock(&journal->j_state_lock);
 		if (!journal->j_running_transaction &&
 		    (handle->h_reserved || !journal->j_barrier_count)) {
+			/*
+			 * 将transaction_t和journal_t关联
+			 */
 			jbd2_get_transaction(journal, new_transaction);
 			new_transaction = NULL;
 		}

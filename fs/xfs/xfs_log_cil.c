@@ -150,6 +150,7 @@ xlog_cil_alloc_shadow_bufs(
 		 * get number of vecs and size of data to be stored
 		 *
 		 * CUI: refcount update intent item: xfs_cui_item_ops.xfs_cui_item_size()
+		 * xfs_buf_item_ops.xfs_buf_item_size()
 		 */
 		lip->li_ops->iop_size(lip, &niovecs, &nbytes);
 
@@ -285,6 +286,7 @@ xfs_cil_prepare_item(
 	if (!old_lv) {
 		/*
 		 * pin log item，不同类型的log item有不同的方法
+		 * xfs_buf: xfs_buf_item_pin()
 		 */
 		if (lv->lv_item->li_ops->iop_pin)
 			lv->lv_item->li_ops->iop_pin(lv->lv_item);
@@ -449,6 +451,7 @@ xlog_cil_insert_format_items(
 		 * 这里也是定义了与xfs_log_item类型相关的format方法，用于将其格式化
 		 * 到memory buffer中去；
 		 * - 对于xfs_inode_log_item，是 xfs_inode_item_format()
+		 * - 对于xfs_buf_log_item，是 xfs_buf_item_format()
 		 */
 		lip->li_ops->iop_format(lip, lv);
 insert:
@@ -601,6 +604,11 @@ xlog_cil_insert_items(
 		 * - xfs_log_force_lsn() ~> xlog_cil_push()
 		 */
 		if (!list_is_last(&lip->li_cil, &cil->xc_cil))
+			/*
+			 * 感觉已在CIL中的元素后移这个操作并无必要，因为CIL本身
+			 * 就是作为一个原子操作写入日志的
+			 * - v6.6似乎只有新元素插入了，并没有已存在元素后移了？
+			 */
 			list_move_tail(&lip->li_cil, &cil->xc_cil);
 	}
 
@@ -1298,6 +1306,7 @@ xfs_log_commit_cil(
 		/*
 		 * 解锁item（这个item指的是object本身，比如inode）
 		 * - xfs_inode_log_item -> xfs_inode_item_committing()
+		 * - xfs_buf_log_item -> xfs_buf_item_committing()
 		 */
 		if (lip->li_ops->iop_committing)
 			lip->li_ops->iop_committing(lip, xc_commit_lsn);

@@ -51,11 +51,15 @@ struct xfs_buf_log_item {
 	struct xfs_buf		*bli_buf;	/* real buffer pointer */
 	unsigned int		bli_flags;	/* misc flags */
 	/*
-	 * 参见xfs_trans_get_buf_map()
+	 * 参见 xfs_trans_get_buf_map()
 	 */
 	unsigned int		bli_recur;	/* lock recursion count */
 	atomic_t		bli_refcount;	/* cnt of tp refs */
 	int			bli_format_count;	/* count of headers */
+	/*
+	 * 难道一个xfs_buf本身对应的物理磁盘块还有可能不连续？
+	 * - 是的，参见 xfs_buf->b_maps
+	 */
 	struct xfs_buf_log_format *bli_formats;	/* array of in-log header ptrs */
 	struct xfs_buf_log_format __bli_format;	/* embedded in-log header */
 };

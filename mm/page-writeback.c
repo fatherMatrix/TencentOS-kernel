@@ -2246,6 +2246,11 @@ int write_cache_pages(struct address_space *mapping,
 			/*
 			 * 设置PG_locked
 			 * - 放锁在哪里？
+			 *   > 下面的writeback中标记上PG_writeback之后就unlock_page()，
+			 *     后续路径在PageWriteback()上等待
+			 *     o 这里不对，iomap_page_mkwrite() -> wait_for_stable_page()
+			 *       并不总是会被调用
+			 *       = 难道，写pagecache和刷pagecache真的是可以并发的？
 			 */
 			lock_page(page);
 
@@ -2311,8 +2316,9 @@ continue_unlock:
 
 			trace_wbc_writepage(wbc, inode_to_bdi(mapping->host));
 			/*
-			 * xfs: xfs_do_writepage()
-			 * - 将这个page进行提交
+			 * 将这个page进行提交
+			 * - xfs:  xfs_do_writepage()
+			 * - 裸设备： __writepage()
 			 */
 			error = (*writepage)(page, wbc, data);
 			if (unlikely(error)) {
@@ -2379,6 +2385,9 @@ static int __writepage(struct page *page, struct writeback_control *wbc,
 		       void *data)
 {
 	struct address_space *mapping = data;
+	/*
+	 * 裸设备： def_blk_aops.blkdev_writepage()
+	 */
 	int ret = mapping->a_ops->writepage(page, wbc);
 	mapping_set_error(mapping, ret);
 	return ret;
@@ -2429,6 +2438,9 @@ int do_writepages(struct address_space *mapping, struct writeback_control *wbc)
 		if (mapping->a_ops->writepages)
 			ret = mapping->a_ops->writepages(mapping, wbc);
 		else
+		/*
+		 * 裸设备读写应该走的是这里
+		 */
 			ret = generic_writepages(mapping, wbc);
 		if ((ret != -ENOMEM) || (wbc->sync_mode != WB_SYNC_ALL))
 			break;
@@ -2634,6 +2646,15 @@ EXPORT_SYMBOL(redirty_page_for_writepage);
  */
 int set_page_dirty(struct page *page)
 {
+	/*
+	 * 设置pte中的dirty标记、可写标记
+	 * - 进入到这里，说明本page是被mmap(fd)到用户空间，并被写导致的。此时我
+	 *   们将对应的pte设置为dirty标记、可写标记。后面继续对此页进行写操作就
+	 *   可以正常进行。
+	 *   > 当本page被回写时，会清除通过rmap清除所有pte的dirty标记、可写标记，
+	 *     此后，再次对这个page进行写操作又会触发page fault并回到这里。
+	 *     x 参见：write_cache_pages() -> clear_page_dirty_for_io() -> page_mkclean()
+	 */
 	struct address_space *mapping = page_mapping(page);
 
 	page = compound_head(page);

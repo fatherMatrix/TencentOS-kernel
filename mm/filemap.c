@@ -2075,6 +2075,9 @@ static ssize_t generic_file_buffered_read(struct kiocb *iocb,
 	iov_iter_truncate(iter, inode->i_sb->s_maxbytes);
 
 	index = *ppos >> PAGE_SHIFT;
+	/*
+	 * 上次预读的位置
+	 */
 	prev_index = ra->prev_pos >> PAGE_SHIFT;
 	prev_offset = ra->prev_pos & (PAGE_SIZE-1);
 	last_index = (*ppos + iter->count + PAGE_SIZE-1) >> PAGE_SHIFT;
@@ -2097,6 +2100,9 @@ find_page:
 		if (!page) {
 			if (iocb->ki_flags & IOCB_NOWAIT)
 				goto would_block;
+			/*
+			 * 同步预读
+			 */
 			page_cache_sync_readahead(mapping,
 					ra, filp,
 					index, last_index - index);
@@ -2104,9 +2110,12 @@ find_page:
 			if (unlikely(page == NULL))
 				goto no_cached_page;
 		}
+		/*
+		 * 走到这里，说明上面的预读成功了。因此触发更多的预读
+		 */
 		if (PageReadahead(page)) {
 			/*
-			 * 异步读
+			 * 异步预读
 			 */
 			page_cache_async_readahead(mapping,
 					ra, filp, page,

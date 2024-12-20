@@ -155,7 +155,7 @@ struct xfs_ino_geometry {
 	unsigned int	inodes_per_cluster;
 	/*
 	 * 每个fs block中包含几个inode cluster
-	 * - 非inode chunk，参见xfs_icluster
+	 * - 非inode chunk，参见 xfs_icluster
 	 */
 	unsigned int	blocks_per_cluster;
 
@@ -171,7 +171,7 @@ struct xfs_ino_geometry {
 	/* Size of inode allocations under normal operation. */
 	/*
 	 * 每次inode chunk分配时批量分配的inode数量
-	 * - xfs中一个inode chunk的表示为：xfs_icluster
+	 * - xfs中一个inode chunk的表示为： xfs_icluster
 	 *   > xfs_icluster是xfs inode分配的基本单位
 	 *   > xfs_icluster中包含多个cluster，一个cluster对应一个xfs_buf
 	 */

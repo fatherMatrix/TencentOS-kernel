@@ -320,6 +320,9 @@ static int mounts_open_common(struct inode *inode, struct file *file,
 	p = m->private;
 	p->ns = ns;
 	p->root = root;
+	/*
+	 * m_show()
+	 */
 	p->show = show;
 	p->cached_event = ~0ULL;
 

@@ -51,7 +51,7 @@ struct xfs_imap {
 	unsigned short	im_len;		/* length in BBs of inode chunk */
 	/*
 	 * 在cluster中的偏移
-	 * - 单位是字节，参见xfs_imap()
+	 * - 单位是字节，参见 xfs_imap()
 	 */
 	unsigned short	im_boffset;	/* inode offset in block in bytes */
 };

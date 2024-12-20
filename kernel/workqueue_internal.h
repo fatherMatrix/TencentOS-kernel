@@ -30,7 +30,7 @@ struct worker {
 	 *
 	 * worker根据工作状态，可以添加到worker_pool的空闲链表和忙碌链表中；
 	 * - idle状态：链接到worker_pool->idle_list链表中；
-	 * - busy状态：谅解到worker_pool->bush_hash链表中；
+	 * - busy状态：链接到worker_pool->bush_hash链表中；
 	 */
 	union {
 		struct list_head	entry;	/* L: while idle */

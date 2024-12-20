@@ -18,7 +18,7 @@ struct xfs_btree_cur;
 
 /*
  * 怎么感觉这里表示的是一个chunk？
- * - 对的，这里表示的确实是一个chunk，参见xfs_difree_inobt()
+ * - 对的，这里表示的确实是一个chunk，参见 xfs_difree_inobt()
  *
  * chunk与cluster的对比：
  * - chunk是inodes分配的基本单位

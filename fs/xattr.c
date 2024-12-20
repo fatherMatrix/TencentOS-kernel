@@ -54,7 +54,7 @@ static const struct xattr_handler *
 xattr_resolve_name(struct inode *inode, const char **name)
 {
 	/*
-	 * 这里是ext4_xattr_handlers，是个数组。里面包含了多套xattr_handler，用
+	 * 这里是 ext4_xattr_handlers ，是个数组。里面包含了多套xattr_handler，用
 	 * 于不同的场景（普通场景、security前缀场景）
 	 */
 	const struct xattr_handler **handlers = inode->i_sb->s_xattr;

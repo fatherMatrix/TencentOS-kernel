@@ -295,7 +295,7 @@ struct wq_device;
  */
 struct workqueue_struct {
 	/*
-	 * 作为链表头，所有的pool_workqueue数据结构，都挂入此链表
+	 * 作为链表头，所有的 pool_workqueue 数据结构，都挂入此链表
 	 * - 链表元素是pool_workqueue->pwqs_node
 	 */
 	struct list_head	pwqs;		/* WR: all pwqs of this wq */
@@ -1533,9 +1533,14 @@ retry:
 
 	/*
 	 * If @work was previously on a different pool, it might still be
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * running there, in which case the work needs to be queued on that
+	 * ^^^^^^^^^^^^^
 	 * pool to guarantee non-reentrancy.
+	 *      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 *
+	 * 用户在queue一个work_struct的时候，可能是不知道其是否正在运行的，要
+	 * 避免重入；
 	 * 如果work_struct正在被其他pool_workqueue的worker来执行，那么还是将
 	 * work_struct添加到正在执行的pool_workqueue中；
 	 */
@@ -1634,7 +1639,7 @@ bool queue_work_on(int cpu, struct workqueue_struct *wq,
 
 	/*
  	 * 如果工作项没有被添加过，那么给工作项设置标志位
- 	 * WORK_STRUCT_PENDING_BIT，然后吧主要工作委托给函数__queue_work()
+	 * WORK_STRUCT_PENDING_BIT，然后把主要工作委托给函数__queue_work()
  	 */ 
 	if (!test_and_set_bit(WORK_STRUCT_PENDING_BIT, work_data_bits(work))) {
 		__queue_work(cpu, wq, work);
@@ -1769,6 +1774,7 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 	 * 这个定时器是用来延迟delayed_work的工作的，只会被触发一次，触发后则
 	 * queue_work()将delayed_work中的work_struct送到对应的workqueue_struct；
 	 * 后面不再触发，worker干完活后自己恢复idle状态；
+	 * - timer_list到期后执行的函数是： delayed_work_timer_fn()
 	 */
 	if (unlikely(cpu != WORK_CPU_UNBOUND))
 		add_timer_on(timer, cpu);
@@ -1832,11 +1838,18 @@ bool mod_delayed_work_on(int cpu, struct workqueue_struct *wq,
 	int ret;
 
 	do {
+		/*
+		 * 这里应该是想保证快要触发的delayed_work先等一等，重新数
+		 * delay个时间再触发吧？
+		 */
 		ret = try_to_grab_pending(&dwork->work, true, &flags);
 	} while (unlikely(ret == -EAGAIN));
 
 	if (likely(ret >= 0)) {
 		__queue_delayed_work(cpu, wq, dwork, delay);
+		/*
+		 * 对应的local_irq_save()在上面的try_to_grab_pending()中
+		 */
 		local_irq_restore(flags);
 	}
 
@@ -4364,6 +4377,14 @@ static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 		/*
 		 * 分配per cpu的pool_workqueue
 		 * - per内存节点pool_workqueue啥时候分配呢？
+		 *   > per numa node的pool_workqueue的分配分为两部分：
+		 *     o 指向pool_workqueue的指针数组。该指针数组处于workqueue_struct
+		 *       尾部的零长数组中，在 alloc_workqueue() 中伴随workqueue_struct
+		 *       一起分配
+		 *     o pool_workqueue本身：
+		 *         apply_workqueue_attrs()
+		 *           apply_workqueue_attrs_locked()
+		               apply_wqattrs_prepare()
 		 */
 		wq->cpu_pwqs = alloc_percpu(struct pool_workqueue);
 		if (!wq->cpu_pwqs)
@@ -4492,6 +4513,12 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 	/*
 	 * tlb_size指的是：
 	 * 	内存节点数量 * sizeof(pool_workqueue *)
+	 *
+	 * - 对于WQ_UNBOUND类型的工作队列，其per numa的pool_workqueue由紧跟在
+	 *   workqueue_struct尾部的零长指针数组指向，pool_workqueue的实际分配
+	 *   在apply_workqueue_attrs()中的调用链中
+	 * - 对于WQ_BOUND类型的工作队列，workqueue_struct中有一个percpu变量指
+	 *   向pool_workqueue
 	 */
 	wq = kzalloc(sizeof(*wq) + tbl_size, GFP_KERNEL);
 	if (!wq)
@@ -6165,7 +6192,7 @@ int __init workqueue_init_early(void)
 		i = 0;
 		/*
 		 * 遍历每个cpu对应的per-cpu worker_pool（其实也就只有两个），这
-		 * 些worker_pool对应数据结构的内存是静态定义的cpu_worker_pools
+		 * 些worker_pool对应数据结构的内存是静态定义的 cpu_worker_pools
 		 * 全局变量；
 		 */
 		for_each_cpu_worker_pool(pool, cpu) {
@@ -6174,6 +6201,9 @@ int __init workqueue_init_early(void)
 			 */
 			BUG_ON(init_worker_pool(pool));
 			pool->cpu = cpu;
+			/*
+			 * 这里是bound类型的worker_pool，因此修改cpumask为对应cpu
+			 */
 			cpumask_copy(pool->attrs->cpumask, cpumask_of(cpu));
 			pool->attrs->nice = std_nice[i++];
 			pool->node = cpu_to_node(cpu);

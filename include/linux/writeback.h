@@ -49,7 +49,10 @@ enum writeback_sync_modes {
  * always on the stack, and hence need no locking.  They are always initialised
  * in a manner such that unspecified fields are set to zero.
  *
- * 控制回写哪个offset区间的page
+ * 控制回写一个inode的哪个offset区间的page
+ * - 这个结构体用于 __writeback_single_inode() 这类回写一个特定inode的路径
+ * - 对比struct wb_writeback_work 用于一个writeback任务，不局限于哪个inode，甚至
+ *   可以不局限于哪个super_block
  */
 struct writeback_control {
 	long nr_to_write;		/* Write this many pages, and decrement

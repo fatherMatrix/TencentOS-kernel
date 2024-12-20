@@ -463,6 +463,9 @@ pgd_t *pgd_alloc(struct mm_struct *mm)
 	 */
 	spin_lock(&pgd_lock);
 
+	/*
+	 * pgd中内核部分的拷贝
+	 */
 	pgd_ctor(mm, pgd);
 	pgd_prepopulate_pmd(mm, pgd, pmds);
 	pgd_prepopulate_user_pmd(mm, pgd, u_pmds);

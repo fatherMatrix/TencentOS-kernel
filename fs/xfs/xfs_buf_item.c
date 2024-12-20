@@ -369,6 +369,11 @@ xfs_buf_item_pin(
 
 	trace_xfs_buf_item_pin(bip);
 
+	/*
+	 * 这里对refcount的增加，导致 xfs_buf_item_committing() 中可能无法对
+	 * xfs_buf调用 xfs_buf_unlock()
+	 * - 要看stale状态、hold状态
+	 */
 	atomic_inc(&bip->bli_refcount);
 	atomic_inc(&bip->bli_buf->b_pin_count);
 }
@@ -625,6 +630,12 @@ xfs_buf_item_release(
 	 * per-transaction state from the bli, which has been copied above.
 	 */
 	bp->b_transp = NULL;
+	/*
+	 * hold是一次性的， xfs_defer_trans_roll() 中的 ~> xfs_trans_commit()
+	 * 会依赖这个hold在进入这里时不调用本函数最后的xfs_buf_unlock()；但此
+	 * 这里已经将其的hold干掉了，所以 xfs_defer_trans_roll() 中要再次hold
+	 * 一次
+	 */
 	bip->bli_flags &= ~(XFS_BLI_LOGGED | XFS_BLI_HOLD | XFS_BLI_ORDERED);
 
 	/*
@@ -636,6 +647,15 @@ xfs_buf_item_release(
 	released = xfs_buf_item_put(bip);
 	if (hold || (stale && !released))
 		return;
+	/*
+	 * 上面返回了之后，xfs_buf_relse()由谁调用呢？
+	 * - stale xfs_buf会在 xfs_buf_item_unpin() 中执行xfs_buf_relse()
+	 * - hold xfs_buf呢？
+	 *   > 难道是会在上面的 xfs_buf_item_put() 中被处理？
+	 *     o 不会的， xfs_trans_bhold() 中明确说了hold的作用就是不要在
+	 *       iop_committing中释放xfs_buf
+	 *       x 这里和roll有关系，hold标记仅会发挥一次作用
+	 */
 	ASSERT(!stale || aborted);
 	xfs_buf_relse(bp);
 }
@@ -768,6 +788,9 @@ xfs_buf_item_init(
 	 *
 	 * Discontiguous buffer support follows the layout of the underlying
 	 * buffer. This makes the implementation as simple as possible.
+	 *
+	 * 分配对应xfs_buf->b_maps的xfs_buf_log_format，每个b_maps元素对应一
+	 * 个xfs_buf_log_format
 	 */
 	error = xfs_buf_item_get_format(bip, bp->b_map_count);
 	ASSERT(error == 0);
@@ -998,7 +1021,9 @@ xfs_buf_attach_iodone(
 	ASSERT(xfs_buf_islocked(bp));
 
 	/*
-	 * 用于将xfs_log_item在AIL上写回到data space后的回调
+	 * 用于将xfs_log_item在AIL上写回到metadata space后的回调
+	 * - 这种是由于xfs_inode这类对象最终写入metadata space时是以xfs_buf做
+	 *   I/O操作的，将xfs_inode->xfs_inode_log_item挂入其所在的xfs_buf
 	 */
 	lip->li_cb = cb;
 	list_add_tail(&lip->li_bio_list, &bp->b_li_list);
@@ -1032,6 +1057,9 @@ xfs_buf_do_callbacks(
 	 * - xfs_log_item什么时候释放呢？
 	 */
 	if (blip) {
+		/*
+		 * xfs_buf_iodone()
+		 */
 		lip = &blip->bli_item;
 		lip->li_cb(bp, lip);
 	}

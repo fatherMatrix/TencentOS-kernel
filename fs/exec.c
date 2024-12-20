@@ -1625,6 +1625,7 @@ static void bprm_fill_uid(struct linux_binprm *bprm)
 	 * crash实验发现：
 	 * - 对于有set-uid标志的可执行文件，运行起来后：
 	 *   > suid = euid = fs-set-uid；
+	 *     o suid是在这之后的 cap_bprm_set_creds() 中改变的
 	 *   > uid = 运行可执行文件的uid；
 	 */
 	if (mode & S_ISUID) {

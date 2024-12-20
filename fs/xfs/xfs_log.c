@@ -3058,7 +3058,7 @@ xlog_state_iodone_process_iclog(
 	 * 走到这里，说明iclog拥有最小的h_lsn
 	 * - 最小h_lsn的iclog，要被标记XLOG_STATE_CALLBACK，使得caller立即调用
 	 *   该iclog的callback
-	 * - 更新l_last_sync_lsn
+	 * - 更新 l_last_sync_lsn
 	 */
 	xlog_state_set_callback(log, iclog, header_lsn);
 	return false;

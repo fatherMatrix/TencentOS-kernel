@@ -1007,7 +1007,7 @@ void dput(struct dentry *dentry)
 		 * - xfs在这个函数下似乎永远返回true
 		 *   > 对于retain_dentry()返回true的情况，在什么地方实际释放
 		 *     dentry呢？总不能一直保持在内存中吧？
-		 *     x prune_dcache_sb()
+		 *     o prune_dcache_sb()在内存回收时释放
 		 *
 		 * 返回false表示立即删除该dentry；
 		 */

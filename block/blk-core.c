@@ -1145,9 +1145,9 @@ blk_qc_t generic_make_request(struct bio *bio)
 			bio_list_init(&bio_list_on_stack[0]);
 			/*
 			 * 通过blk_queue_make_request()设置：
-			 * - 正常io：blk_mq_make_request()
-			 * - zram: zram_make_request()
-			 * - lvm: dm_make_request()
+			 * - 正常io： blk_mq_make_request()
+			 * - zram:  zram_make_request()
+			 * - lvm:  dm_make_request()
 			 */
 			ret = q->make_request_fn(q, bio);
 

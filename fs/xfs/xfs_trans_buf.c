@@ -257,6 +257,7 @@ xfs_trans_read_buf_map(
 	 *
 	 * 在当前的transaction的log items中查找是否已经包含了这个xfs_buf；
 	 * - 如果该xfs_buf现在正被其他transaction关联会怎么样？
+	 *   > 一个xfs_buf在同一时刻只能被一个xfs_trans关联吧？
 	 */
 	if (tp)
 		bp = xfs_trans_buf_item_match(tp, target, map, nmaps);
@@ -429,6 +430,8 @@ xfs_trans_brelse(
 	/*
 	 * If the release is for a recursive lookup, then decrement the count
 	 * and return.
+	 * - xfs_trans_read_buf()中会主动调用xfs_lock_buf()，xfs_trans_read_buf()
+	 *   在同一个xfs_trans中第二次被调用时，仅会增加bli_recur，从而避免死锁。
 	 */
 	if (bip->bli_recur > 0) {
 		bip->bli_recur--;
@@ -438,6 +441,7 @@ xfs_trans_brelse(
 	/*
 	 * If the buffer is invalidated or dirty in this transaction, we can't
 	 * release it until we commit.
+	 * - 这个时候谁来解锁呢？
 	 */
 	if (test_bit(XFS_LI_DIRTY, &bip->bli_item.li_flags))
 		return;
@@ -466,6 +470,7 @@ xfs_trans_brelse(
  * Mark the buffer as not needing to be unlocked when the buf item's
  * iop_committing() routine is called.  The buffer must already be locked
  * and associated with the given transaction.
+ * - 什么地方解锁呢？
  */
 /* ARGSUSED */
 void

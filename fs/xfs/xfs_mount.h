@@ -353,8 +353,21 @@ typedef struct xfs_mount {
 static inline unsigned long
 xfs_preferred_iosize(xfs_mount_t *mp)
 {
+	/*
+	 * 如果没有mount -o largeio挂载选项，则返回PAGE_SIZE
+	 * - aarch64架构上，最大可配置为64K
+	 *   > 麒麟配置的是16K，即65536
+	 */
 	if (mp->m_flags & XFS_MOUNT_COMPAT_IOSIZE)
 		return PAGE_SIZE;
+
+	/*
+	 * 如果有mount -o largeio挂载选项，则有三种情况：
+	 * - 如果是条带化的设备，则返回stripe width
+	 * - 如果不是条带化的设备，但配置了mount -o allocsize挂载选项，则返回
+	 *   allocsize
+	 * - 否则，返回PAGE_SIZE
+	 */
 	return (mp->m_swidth ?
 		(mp->m_swidth << mp->m_sb.sb_blocklog) :
 		((mp->m_flags & XFS_MOUNT_DFLT_IOSIZE) ?

@@ -2533,7 +2533,7 @@ out_map:
 		 */
 		((offset_agbno / M_IGEO(mp)->blocks_per_cluster) *
 		/*
-		 * 这行算出本cluster前面有几个block
+		 * 这行配合上一行算出本cluster前面有几个block
 		 * - 加上前面的chunk_agbno就是本cluster的起始block agbno
 		 */
 		 M_IGEO(mp)->blocks_per_cluster);

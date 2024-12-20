@@ -740,11 +740,14 @@ out_unlock:
  *
  * If xfs_dialloc() does not have an available inode, it will replenish
  * its supply by doing an allocation. Since we can only do one
+ *                                    ^^^^^^^^^^^^^^^^^^^^^^^^
  * allocation within a transaction without deadlocks, we must commit
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * the current transaction before returning the inode itself.
  * In this case, therefore, we will set ialloc_context and return.
  * The caller should then commit the current transaction, start a new
  * transaction, and call xfs_ialloc() again to actually get the inode.
+ * - 每个事务只能做一次分配是什么意思？
  *
  * To ensure that some other process does not grab the inode that
  * was allocated during the first call to xfs_ialloc(), this routine
@@ -1085,6 +1088,10 @@ xfs_dir_ialloc(
 		 * allocation group.
 		 * - XFS_BLI_HOLD标志的buffer在iop_release/xfs_buf_item_release()
 		 *   阶段不会被xfs_buf_relse()
+		 *   > 什么时候会被释放呢？
+		 *     o xfs_trans_roll()的过程中，xfs_buf_item_committing()中发现
+		 *       是hold buf，就清除hold标记，然后不做relse。那么roll之后的
+		 *       下一次提交，这个xfs_buf就不再是hold buf了，就会被relse？
 		 */
 		xfs_trans_bhold(tp, ialloc_context);
 
@@ -3021,7 +3028,9 @@ xfs_ifree(
 	 * 在磁盘上删除该inode
 	 * - 更新allocated inode tree和free inode tree
 	 * - inode对应的文件数据所占用的磁盘什么时候删除？
-	 *   > 瞎啊，不就在下面吗？
+	 *   > 本函数的上层
+	 *     o xfs_inactive_symlink()
+	 *     o xfs_inactive_truncate()
 	 */
 	error = xfs_difree(tp, ip->i_ino, &xic);
 	if (error)
@@ -4162,6 +4171,7 @@ xfs_iflush_int(
 	 * Copy the dirty parts of the inode into the on-disk inode.  We always
 	 * copy out the core of the inode, because if the inode is dirty at all
 	 * the core must be.
+	 * - 此时xfs_inode是被xfsaild加了读锁的
 	 */
 	xfs_inode_to_disk(ip, dip, iip->ili_item.li_lsn);
 

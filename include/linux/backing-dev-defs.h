@@ -145,6 +145,7 @@ struct bdi_writeback {
 
 	/*
 	 * 本磁盘对应的脏inode链表
+	 * - 看起来这几个链表是当作队列来用，头部进，尾部出
 	 */
 	struct list_head b_dirty;	/* dirty inodes */
 	/*
@@ -183,14 +184,14 @@ struct bdi_writeback {
 
 	spinlock_t work_lock;		/* protects work_list & dwork scheduling */
 	/*
-	 * 回写任务列表，链表元素是wb_writeback_work->list
-	 * - 添加函数：wb_queue_work()
+	 * 回写任务列表，链表元素是 wb_writeback_work->list
+	 * - 添加函数： wb_queue_work()
 	 */
 	struct list_head work_list;
 	/*
 	 * 处理任务的函数
-	 * - dowrk执行的函数是wb_workfn()
-	 *   > 参见wb_init()
+	 * - dowrk执行的函数是 wb_workfn()
+	 *   > 参见 wb_init()
 	 */
 	struct delayed_work dwork;	/* work item used for writeback */
 
@@ -241,6 +242,10 @@ struct backing_dev_info {
 	 * 将backing_dev_info链入bdi_list全局链表
 	 */
 	struct list_head bdi_list;
+	/*
+	 * 初始值参见： blk_alloc_queue_node()
+	 * - 该值会传递给 file
+	 */
 	unsigned long ra_pages;	/* max readahead in PAGE_SIZE units */
 	unsigned long io_pages;	/* max allowed IO size */
 	congested_fn *congested_fn; /* Function pointer if device is md/dm */
@@ -268,9 +273,9 @@ struct backing_dev_info {
 	/*
 	 * 该backing_dev_info对应的bdi_writeback链表，链表元素是bdi_writeback->bdi_node
 	 * - 上面内嵌的wb是bdi的默认wb，这个链表上的wb是blkcg关联的wb；
-	 *   > 参见：wb_get_create() -> cgwb_create()
+	 *   > 参见： wb_get_create() -> cgwb_create()
 	 * - 本链表中包含了上面内嵌的bdi_writeback
-	 *   > 参见：cgwb_bdi_register()
+	 *   > 参见： cgwb_bdi_register()
 	 */
 	struct list_head wb_list; /* list of all wbs */
 #ifdef CONFIG_CGROUP_WRITEBACK
@@ -284,6 +289,9 @@ struct backing_dev_info {
 #else
 	struct bdi_writeback_congested *wb_congested;
 #endif
+	/*
+	 * 参见： DEFINE_WB_COMPLETION
+	 */
 	wait_queue_head_t wb_waitq;
 
 	struct device *dev;

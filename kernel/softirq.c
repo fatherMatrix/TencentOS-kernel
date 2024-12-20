@@ -341,7 +341,7 @@ restart:
 		kstat_incr_softirqs_this_cpu(vec_nr);
 
 		/*
-		 *
+		 * TASKLET_SOFTIRQ: tasklet_action()
 		 */
 		trace_softirq_entry(vec_nr);
 		h->action(h);

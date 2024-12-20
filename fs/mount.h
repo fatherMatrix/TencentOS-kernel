@@ -9,6 +9,10 @@ struct mnt_namespace {
 	atomic_t		count;
 	struct ns_common	ns;
 	struct mount *	root;
+	/*
+	 * 链表头
+	 * - 链表元素是 mount->mnt_list
+	 */
 	struct list_head	list;
 	struct user_namespace	*user_ns;
 	struct ucounts		*ucounts;
@@ -32,7 +36,8 @@ struct mountpoint {
 	struct hlist_node m_hash;
 	/*
 	 * 指向挂载点dentry实例，
-	 * 是根文件系统中的的目录项，不是挂载文件系统的根目录项
+	 * 是父文件系统中的的目录项，不是挂载文件系统的根目录项
+	 * - 参见： get_mountpoint()
 	 *
 	 * 那么这个字段和mount结构体中的mnt_mountpoint字段有什么
 	 * 区别？
@@ -40,13 +45,19 @@ struct mountpoint {
 	 */
 	struct dentry *m_dentry;
 	/*
-	 * 挂载点挂载操作的Mount实例，链表头
+	 * 挂载点挂载操作的mount实例，链表头
+	 * - 链表元素是 mount.mnt_mp_list
+	 * - 参见 mnt_set_mountpoint()
 	 */
 	struct hlist_head m_list;
 	int m_count;
 };
 
 struct mount {
+	/*
+	 * 加入mount_hashtable
+	 * - 参见： __attach_mnt()
+	 */
 	struct hlist_node mnt_hash;
 	struct mount *mnt_parent;
 	/* 
@@ -80,8 +91,15 @@ struct mount {
 	 */
 	struct list_head mnt_instance;	/* mount instance on sb->s_mounts */
 	const char *mnt_devname;	/* Name of device e.g. /dev/dsk/hda1 */
+	/*
+	 * 链表元素
+	 * - 链表头是 mnt_namespace->list
+	 */
 	struct list_head mnt_list;
 	struct list_head mnt_expire;	/* link in fs-specific expiry list */
+	/*
+	 * 同一个共享传播的对等体组通过该字段链接
+	 */
 	struct list_head mnt_share;	/* circular list of shared mounts */
 	struct list_head mnt_slave_list;/* list of slave mounts */
 	struct list_head mnt_slave;	/* slave list entry */
@@ -89,6 +107,9 @@ struct mount {
 	struct mnt_namespace *mnt_ns;	/* containing namespace */
 	struct mountpoint *mnt_mp;	/* where is it mounted */
 	union {
+		/*
+		 * 链表元素，链表头是 mountpoint->m_list
+		 */
 		struct hlist_node mnt_mp_list;	/* list mounts with the same mountpoint */
 		struct hlist_node mnt_umount;
 	};
@@ -98,6 +119,9 @@ struct mount {
 	__u32 mnt_fsnotify_mask;
 #endif
 	int mnt_id;			/* mount identifier */
+	/*
+	 * 共享传播的对等体组id
+	 */
 	int mnt_group_id;		/* peer group identifier */
 	int mnt_expiry_mark;		/* true if marked for expiry */
 	struct hlist_head mnt_pins;

@@ -217,7 +217,8 @@ typedef struct xfs_buf {
 	 *
 	 * 所以结合b_log_item和b_li_list字段，意思是会有多个xfs_log_item对应同一
 	 * 个xfs_buf？
-	 * - 每个xfs_log_item都要通过一个xfs_buf写入disk？这里链接的是这类？
+	 * - xfs_inode本身是通过xfs_buf从磁盘metadata space读上来的，也当前要通
+	 *   过该xfs_buf写下去
 	 */
 	struct list_head	b_li_list;	/* Log items list head */
 	struct xfs_trans	*b_transp;
@@ -240,6 +241,9 @@ typedef struct xfs_buf {
 	 * - 如果b_map_count为1，则b_maps = &__b_map；
 	 */
 	struct xfs_buf_map	__b_map;	/* inline compound buffer map */
+	/*
+	 * b_maps数组的元素个数
+	 */
 	int			b_map_count;
 	atomic_t		b_pin_count;	/* pin count */
 	/*

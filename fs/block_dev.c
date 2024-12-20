@@ -783,7 +783,7 @@ static struct inode *bdev_alloc_inode(struct super_block *sb)
 {
 	/*
 	 * 这个slab有ctor
-	 * - 参见bdev_cache_init()
+	 * - 参见 bdev_cache_init()
 	 */
 	struct bdev_inode *ei = kmem_cache_alloc(bdev_cachep, GFP_KERNEL);
 	if (!ei)
@@ -919,6 +919,10 @@ void bdev_unhash_inode(dev_t dev)
 	}
 }
 
+/*
+ * 找到某个 hd_struct 对应的 block_device
+ * - 参见 get_gendisk() 注释
+ */
 struct block_device *bdget(dev_t dev)
 {
 	struct block_device *bdev;
@@ -940,6 +944,7 @@ struct block_device *bdget(dev_t dev)
 	if (inode->i_state & I_NEW) {
 	/*
 	 * 有效block_device数据在哪里填充？
+	 * - blkdev_get() -> get_gendisk() ？
 	 */
 		bdev->bd_contains = NULL;
 		bdev->bd_super = NULL;
@@ -2339,6 +2344,9 @@ void iterate_bdevs(void (*func)(struct block_device *, void *), void *arg)
 		bdev = I_BDEV(inode);
 
 		mutex_lock(&bdev->bd_mutex);
+		/*
+		 * 如果bd_openers为0了？
+		 */
 		if (bdev->bd_openers)
 			func(bdev, arg);
 		mutex_unlock(&bdev->bd_mutex);

@@ -509,12 +509,13 @@ xfs_iget_cache_hit(
 	/*
 	 * vfs inode正在被torn down
 	 * - 走到这里的前提条件是ip->i_flags中不包含XFS_IRECLAIMABLE
+	 *   > 一旦包含了XFS_IRECLAIMABLE，会被上一个if条件拦截
 	 */
 		/* If the VFS inode is being torn down, pause and try again. */
 		if (!igrab(inode)) {
 		/*
 		 * 走到这里说明：
-		 * 1. 该xfs_inode已经被标记了I_FREEING | I_WILL_FREE
+		 * 1. 该xfs_inode已经被标记了    I_FREEING | I_WILL_FREE
 		 * 2. 该xfs_inode还没有被标记XFS_IRECLAIMABLE
 		 *
 		 * 返回值-EAGAIN的作用是等I_FREEING | I_WILL_FREE结束

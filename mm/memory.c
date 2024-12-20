@@ -3303,7 +3303,7 @@ static vm_fault_t __do_fault(struct vm_fault *vmf)
 	}
 
 	/*
-	 * xfs: xfs_file_vm_ops
+	 * xfs: xfs_file_vm_ops.xfs_filemap_fault()
 	 */
 	ret = vma->vm_ops->fault(vmf);
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY |
@@ -3761,7 +3761,9 @@ static vm_fault_t do_shared_fault(struct vm_fault *vmf)
 	vm_fault_t ret, tmp;
 
 	/*
-	 * 这里调用的__xfs_filemap_mkwrite
+	 * 这里调用了 __xfs_filemap_mkwrite()，但其意义有区别，不要跟mkwrite混淆
+	 * - 主要目的是当文件页不存在时，将其从磁盘上读到内存里，等待后续mkwrite
+	 *   的写；
 	 */
 	ret = __do_fault(vmf);
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY)))
@@ -3775,6 +3777,7 @@ static vm_fault_t do_shared_fault(struct vm_fault *vmf)
 		unlock_page(vmf->page);
 		/*
 		 * 设置page中的PageDirty
+		 * - 这里也会调用 __xfs_filemap_mkwrite()
 		 */
 		tmp = do_page_mkwrite(vmf);
 		if (unlikely(!tmp ||
@@ -3784,15 +3787,6 @@ static vm_fault_t do_shared_fault(struct vm_fault *vmf)
 		}
 	}
 
-	/*
-	 * 设置pte中的dirty标记、可写标记
-	 * - 进入到这里，说明本page是被mmap(fd)到用户空间，并被写导致的。此时我
-	 *   们将对应的pte设置为dirty标记、可写标记。后面继续对此页进行写操作就
-	 *   可以正常进行。
-	 *   > 当本page被回写时，会清除通过rmap清除所有pte的dirty标记、可写标记，
-	 *     此后，再次对这个page进行写操作又会触发page fault并回到这里。
-	 *     x 参见：write_cache_pages() -> clear_page_dirty_for_io() -> page_mkclean()
-	 */
 	ret |= finish_fault(vmf);
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE |
 					VM_FAULT_RETRY))) {
@@ -3821,6 +3815,7 @@ static vm_fault_t do_fault(struct vm_fault *vmf)
 
 	/*
 	 * The VMA was not fully populated on mmap() or missing VM_DONTEXPAND
+	 * - xfs: xfs_filemap_fault()
 	 */
 	if (!vma->vm_ops->fault) {
 		/*

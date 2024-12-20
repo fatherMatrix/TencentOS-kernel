@@ -863,8 +863,14 @@ void mnt_set_mountpoint(struct mount *mnt,
 
 static void __attach_mnt(struct mount *mnt, struct mount *parent)
 {
+	/*
+	 * 将mount结构体加入mount_hashtable中
+	 */
 	hlist_add_head_rcu(&mnt->mnt_hash,
 			   m_hash(&parent->mnt, mnt->mnt_mountpoint));
+	/*
+	 * 维护mount tree
+	 */
 	list_add_tail(&mnt->mnt_child, &parent->mnt_mounts);
 }
 
@@ -906,6 +912,9 @@ static void commit_tree(struct mount *mnt)
 
 	BUG_ON(parent == mnt);
 
+	/*
+	 * 感觉这三个链表操作就是将入参mount加入到父mount所在的mnt_namespace中
+	 */
 	list_add_tail(&head, &mnt->mnt_list);
 	list_for_each_entry(m, &head, mnt_list)
 		m->mnt_ns = n;
@@ -1348,6 +1357,9 @@ static int m_show(struct seq_file *m, void *v)
 {
 	struct proc_mounts *p = m->private;
 	struct mount *r = list_entry(v, struct mount, mnt_list);
+	/*
+	 * show_mountinfo()
+	 */
 	return p->show(m, &r->mnt);
 }
 
@@ -3388,6 +3400,9 @@ struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
 		unlock_mount_hash();
 	}
 	new_ns->root = new;
+	/*
+	 * 这里的用法比较恶心，但事实上list是表头，mnt_list是表元素
+	 */
 	list_add_tail(&new_ns->list, &new->mnt_list);
 
 	/*

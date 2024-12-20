@@ -224,6 +224,9 @@ ssize_t seq_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
 	}
 	/* we need at least one record in buffer */
 	m->from = 0;
+	/*
+	 * mountinfo: mounts_op
+	 */
 	p = m->op->start(m, &m->index);
 	while (1) {
 		err = PTR_ERR(p);

@@ -35,6 +35,10 @@ static int __sync_filesystem(struct super_block *sb, int wait)
 	else
 		writeback_inodes_sb(sb, WB_REASON_SYNC);
 
+	/*
+	 * 作用参见 __writeback_single_inode() 中对 filemap_fdatawait() 调用
+	 * 的注释
+	 */
 	if (sb->s_op->sync_fs)
 		sb->s_op->sync_fs(sb, wait);
 	return __sync_blockdev(sb->s_bdev, wait);
@@ -110,6 +114,9 @@ void ksys_sync(void)
 	int nowait = 0, wait = 1;
 
 	wakeup_flusher_threads(WB_REASON_SYNC);
+	/*
+	 * bd_type 会因为其 backing_dev_info 为 noop_backing_dev_info 而退出
+	 */
 	iterate_supers(sync_inodes_one_sb, NULL);
 	iterate_supers(sync_fs_one_sb, &nowait);
 	iterate_supers(sync_fs_one_sb, &wait);

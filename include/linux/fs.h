@@ -531,7 +531,7 @@ struct block_device {
 	/*
 	 * bdevfs inode
 	 * - 非devtmpfs inode
-	 * - 来源于bdev_inode->vfs_inode，参见bdget()
+	 * - 来源于bdev_inode->vfs_inode，参见 bdget()
 	 */
 	struct inode *		bd_inode;	/* will die */
 	/*
@@ -539,6 +539,8 @@ struct block_device {
 	 * - 如果block_device是一个包含磁盘分区的大磁盘，那么这个字段是NULL；
 	 * - 如果block_device是一个大磁盘，没有分区，那么这个字段自然是所包含文件
 	 *   系统的超级块；
+	 * - 如果压根没有格式化文件系统呢？
+	 *   > 看crash好像是NULL
 	 */
 	struct super_block *	bd_super;
 	struct mutex		bd_mutex;	/* open/close mutex */
@@ -580,6 +582,7 @@ struct block_device {
 	/* 
 	 * 指向对应的磁盘
 	 * - 所有分区指向同一个磁盘；
+	 * - 参见 get_gendisk() 上的注释
 	 */
 	struct gendisk *	bd_disk;
 	/*
@@ -1120,11 +1123,22 @@ struct fown_struct {
 struct file_ra_state {
 	pgoff_t start;			/* where readahead started */
 	unsigned int size;		/* # of readahead pages */
+	/*
+	 * 如果当前预读的“存货”只剩async_size时，会触发async readahead
+	 * - 这个值控制着async_readahead的时机
+	 */
 	unsigned int async_size;	/* do asynchronous readahead when
 					   there are only # of pages ahead */
 
+	/*
+	 * 初始值来自于 backing_dev_info->ra_pages
+	 * - 参见： file_ra_state_init()
+	 */
 	unsigned int ra_pages;		/* Maximum readahead window */
 	unsigned int mmap_miss;		/* Cache miss stat for mmap accesses */
+	/*
+	 * 上一次读的文件内偏移
+	 */
 	loff_t prev_pos;		/* Cache last read() position */
 };
 

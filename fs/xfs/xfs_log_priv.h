@@ -382,7 +382,7 @@ struct xfs_cil {
 	 */
 	xfs_lsn_t		xc_push_seq;
 	/*
-	 * 链表头，链表元素是xc_cil_ctx->committing
+	 * 链表头，链表元素是 xfs_cil_ctx->committing
 	 * - checkpoint context在被xlog_cil_push()到真正写入log buffer之前，会先
 	 *   挂到CIL的这个链表上；
 	 */

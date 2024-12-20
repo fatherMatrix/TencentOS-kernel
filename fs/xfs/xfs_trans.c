@@ -937,6 +937,9 @@ xfs_trans_committed_bulk(
 			continue;
 		}
 
+		/*
+		 * xfs_buf: xfs_buf_item_committed()
+		 */
 		if (lip->li_ops->iop_committed)
 			item_lsn = lip->li_ops->iop_committed(lip, commit_lsn);
 		else

@@ -563,6 +563,22 @@ struct transaction_chp_stats_s {
 	__u32			cs_dropped;
 };
 
+/*
+ * 在transaction_s中直接拷贝出来的，目的是使Source Insight可以识别到
+ */
+enum {
+	T_RUNNING,
+	T_LOCKED,
+	T_SWITCH,
+	T_FLUSH,
+	T_COMMIT,
+	T_COMMIT_DFLUSH,
+	T_COMMIT_JFLUSH,
+	T_COMMIT_CALLBACK,
+	T_FINISHED
+}			t_state;
+
+
 /* The transaction_t type is the guts of the journaling mechanism.  It
  * tracks a compound transaction through its various states:
  *

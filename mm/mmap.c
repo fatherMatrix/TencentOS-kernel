@@ -2982,6 +2982,7 @@ static int __vm_munmap(unsigned long start, size_t len, bool downgrade)
 
 	/*
 	 * 写锁锁定mm_struct->mmap_sem
+	 * - 缺页异常中好像是读锁定？
 	 */
 	if (down_write_killable(&mm->mmap_sem))
 		return -EINTR;

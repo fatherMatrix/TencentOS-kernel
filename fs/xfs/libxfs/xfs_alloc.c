@@ -2889,7 +2889,7 @@ xfs_alloc_read_agf(
 	 */
 	error = xfs_read_agf(mp, tp, agno,
 			/*
-			 * 没有传入XBF_ASYNC，说明是同步读
+			 * 没有传入 XBF_ASYNC，说明是同步读
 			 */
 			(flags & XFS_ALLOC_FLAG_TRYLOCK) ? XBF_TRYLOCK : 0,
 			bpp);

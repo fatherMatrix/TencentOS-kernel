@@ -289,6 +289,9 @@ static void __fput(struct file *file)
 		if (file->f_op->fasync)
 			file->f_op->fasync(-1, file, 0);
 	}
+	/*
+	 * bd_type: blkdev_close()
+	 */
 	if (file->f_op->release)
 		file->f_op->release(inode, file);
 	if (unlikely(S_ISCHR(inode->i_mode) && inode->i_cdev != NULL &&
@@ -378,7 +381,7 @@ void fput_many(struct file *file, unsigned int refs)
 void fput(struct file *file)
 {
 	/*
-	 * 最终调用到__fput
+	 * 最终调用到 __fput()
 	 */
 	fput_many(file, 1);
 }

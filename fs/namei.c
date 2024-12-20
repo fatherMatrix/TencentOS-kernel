@@ -1830,7 +1830,7 @@ static int lookup_fast(struct nameidata *nd,
 		unsigned seq;
 		bool negative;
 		/* 
-		 * 在dentry_hashtable中查找分量
+		 * 在 dentry_hashtable 中查找分量
 		 *
 		 * 在什么时候将dentry放入dentry_hashtable中的呢？
 		 * - lookup_slow

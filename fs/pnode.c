@@ -96,6 +96,9 @@ static int do_make_slave(struct mount *mnt)
 		 * slave 'mnt' to a peer mount that has the
 		 * same root dentry. If none is available then
 		 * slave it to anything that is available.
+		 *
+		 * 找到对等体组中的master
+		 * - master是什么？
 		 */
 		for (m = master = next_peer(mnt); m != mnt; m = next_peer(m)) {
 			if (m->mnt.mnt_root == mnt->mnt.mnt_root) {
@@ -107,6 +110,9 @@ static int do_make_slave(struct mount *mnt)
 		mnt->mnt_group_id = 0;
 		CLEAR_MNT_SHARED(mnt);
 	}
+	/*
+	 * 将自己和自己的slave也配置为master的slave
+	 */
 	list_for_each_entry(slave_mnt, &mnt->mnt_slave_list, mnt_slave)
 		slave_mnt->mnt_master = master;
 	list_move(&mnt->mnt_slave, &master->mnt_slave_list);
@@ -127,11 +133,19 @@ void change_mnt_propagation(struct mount *mnt, int type)
 	}
 	do_make_slave(mnt);
 	if (type != MS_SLAVE) {
+	/*
+	 * 两种可能：
+	 * - MS_PRIVATE
+	 * - MS_UNBINDABLE
+	 */
 		list_del_init(&mnt->mnt_slave);
 		mnt->mnt_master = NULL;
 		if (type == MS_UNBINDABLE)
 			mnt->mnt.mnt_flags |= MNT_UNBINDABLE;
 		else
+		/*
+		 * MS_PRIVATE
+		 */
 			mnt->mnt.mnt_flags &= ~MNT_UNBINDABLE;
 	}
 }

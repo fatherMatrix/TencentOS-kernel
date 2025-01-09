@@ -2702,13 +2702,18 @@ static void unmap_region(struct mm_struct *mm,
 	update_hiwater_rss(mm);
 	/*
 	 * 解除vma中页的映射
+	 * - 将需要释放的page放入mmu_gather中
 	 */
 	unmap_vmas(&tlb, vma, start, end);
 	/*
-	 * 删除不必要的页表？
+	 * 删除不必要的页表
+	 * - 将需要释放的页表本身所在页放入mmu_gather中
 	 */
 	free_pgtables(&tlb, vma, prev ? prev->vm_end : FIRST_USER_ADDRESS,
 				 next ? next->vm_start : USER_PGTABLES_CEILING);
+	/*
+	 * 释放mmu_gather中收集的页
+	 */
 	tlb_finish_mmu(&tlb, start, end);
 }
 

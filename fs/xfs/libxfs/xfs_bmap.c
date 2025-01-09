@@ -4693,6 +4693,10 @@ xfs_bmapi_write(
 	xfs_fileoff_t		bno,		/* starting file offs. mapped */
 	xfs_filblks_t		len,		/* length to map in file */
 	int			flags,		/* XFS_BMAPI_... */
+	/*
+	 * upstream中，这个参数大部分时候都被设置为0了 
+	 * - da781e64b28c xfs: don't set bmapi total block req where minleft is
+	 */
 	xfs_extlen_t		total,		/* total blocks needed */
 	struct xfs_bmbt_irec	*mval,		/* output: map values */
 	int			*nmap)		/* i/o: mval size/count */

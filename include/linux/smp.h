@@ -25,6 +25,8 @@ struct __call_single_data {
 	unsigned int flags;
 };
 
+/* 使source insight可以索引到这里 */
+typedef struct __call_single_data call_single_data_t;
 /* Use __aligned() to avoid to use 2 cache lines for 1 csd */
 typedef struct __call_single_data call_single_data_t
 	__aligned(sizeof(struct __call_single_data));

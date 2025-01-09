@@ -1393,6 +1393,11 @@ JBD2_FEATURE_INCOMPAT_FUNCS(csum2,		CSUM_V2)
 JBD2_FEATURE_INCOMPAT_FUNCS(csum3,		CSUM_V3)
 
 /*
+ * make source insight happy
+ */
+;
+
+/*
  * Journal flag definitions
  */
 #define JBD2_UNMOUNT	0x001	/* Journal thread is being destroyed */
@@ -1728,6 +1733,11 @@ static inline int jbd2_journal_has_csum_v2or3(journal_t *journal)
 static inline int jbd2_space_needed(journal_t *journal)
 {
 	int nblocks = journal->j_max_transaction_buffers;
+	/*
+	 * 这里在后面被挪出去了：
+	 * - 77444ac4f9537bc4211f928959d5231445e30c6e jbd2: Drop jbd2_space_needed()
+	 * - 9f356e5a4f12008fa0df8b6385fc0ab830416e72 jbd2: Account descriptor blocks into t_outstanding_credits
+	 */
 	return nblocks + (nblocks >> JBD2_CONTROL_BLOCKS_SHIFT);
 }
 

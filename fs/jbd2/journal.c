@@ -211,6 +211,7 @@ loop:
 	 * 如果两者不相等，则进行一次事务提交；
 	 *
 	 * 这两个之间有偏序关系吗？
+	 * - j_commit_request >= j_commit_sequence
 	 */
 	if (journal->j_commit_sequence != journal->j_commit_request) {
 		jbd_debug(1, "OK, requests differ\n");

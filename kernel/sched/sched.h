@@ -1843,6 +1843,9 @@ extern const u32		sched_prio_to_wmult[40];
 
 #define RETRY_TASK		((void *)-1UL)
 
+/*
+ * 参见 SCHED_NORMAL 处的笔记
+ */
 struct sched_class {
 	/*
 	 * 下一优先级的调度类

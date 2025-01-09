@@ -31,7 +31,7 @@ struct mnt_pcp {
 struct mountpoint {
 	/*
 	 * 散列链表节点成员，
-	 * 将mountpoint实例添加到全局散列表mountpoint_hashtable
+	 * 将mountpoint实例添加到全局散列表 mountpoint_hashtable
 	 */
 	struct hlist_node m_hash;
 	/*
@@ -55,7 +55,7 @@ struct mountpoint {
 
 struct mount {
 	/*
-	 * 加入mount_hashtable
+	 * 加入 mount_hashtable
 	 * - 参见： __attach_mnt()
 	 */
 	struct hlist_node mnt_hash;

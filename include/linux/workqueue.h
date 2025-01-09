@@ -113,7 +113,17 @@ struct work_struct {
 	 *   > 参见： get_work_pool()
 	 */
 	atomic_long_t data;
-	/* 链入工人池(worker_pool->worklist)和工人(worker->scheduled) */
+	/*
+	 * 3种情况：
+	 * - 下发任务，且pwq->nr_active < pwq->max_active时：
+	 *   > worker_pool->worklist
+	 *     o __queue_work() -> insert_work()
+	 * - 下发任务，且pwq->nr_active >= pwq->max_active时：
+	 *   > pwq->delayed_list
+	 *     o __queue_work() -> insert_work()
+	 * - 被调度后：
+	 *   > worker->scheduled
+	 */
 	struct list_head entry;
 	/* 执行的函数体 */
 	work_func_t func;

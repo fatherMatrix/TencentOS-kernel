@@ -16,11 +16,15 @@
 #include <asm/mcs_spinlock.h>
 
 /*
- * pvspinlock下，该结构体内嵌到pv_node中
+ * pvspinlock下，该结构体内嵌到 pv_node 中
  */
 struct mcs_spinlock {
 	struct mcs_spinlock *next;
 	int locked; /* 1 if lock acquired */
+	/*
+	 * 每个cpu上有1个 qnode 数组，其中有4个元素
+	 * - 第一个元素的mcs_spinlock.count记录当前使用了几个元素了
+	 */
 	int count;  /* nesting count, see qspinlock.c */
 };
 

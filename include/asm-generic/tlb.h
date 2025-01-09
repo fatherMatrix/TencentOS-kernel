@@ -239,7 +239,7 @@ struct mmu_gather {
 	/*
 	 * tkernel4: CONFIG_HAVE_RCU_TABLE_FREE=y
 	 * - 初始时为NULL
-	 *   > 参见：tlb_gather_mmu()
+	 *   > 参见： tlb_gather_mmu()
 	 */
 	struct mmu_table_batch	*batch;
 #endif

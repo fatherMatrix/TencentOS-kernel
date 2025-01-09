@@ -150,7 +150,7 @@ static inline void __raw_spin_lock(raw_spinlock_t *lock)
 	 */
 	spin_acquire(&lock->dep_map, 0, 0, _RET_IP_);
 	/*
-	 * 如果没有定义CONFIG_LOCK_STAT，这里直接调用do_raw_spin_lock
+	 * 如果没有定义CONFIG_LOCK_STAT，这里直接调用 do_raw_spin_lock
 	 */
 	LOCK_CONTENDED(lock, do_raw_spin_trylock, do_raw_spin_lock);
 }

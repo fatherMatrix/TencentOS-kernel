@@ -2764,6 +2764,9 @@ __xfs_btree_split(
 	xfs_btree_buf_to_ptr(cur, lbp, &lptr);
 
 	/* Allocate the new block. If we can't do it, we're toast. Give up. */
+	/*
+	 * bmbt: xfs_bmbt_alloc_block()
+	 */
 	error = cur->bc_ops->alloc_block(cur, &lptr, &rptr, stat);
 	if (error)
 		goto error0;

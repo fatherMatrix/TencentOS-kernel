@@ -66,9 +66,17 @@ static u64 event;
 static DEFINE_IDA(mnt_id_ida);
 static DEFINE_IDA(mnt_group_ida);
 
-static struct hlist_head *mount_hashtable __read_mostly;
-static struct hlist_head *mountpoint_hashtable __read_mostly;
-static struct kmem_cache *mnt_cache __read_mostly;
+/*
+ * 元素是 mount->mnt_hash
+ * - key是 {parent mount, mountpoint dentry}
+ */
+static struct hlist_head *mount_hashtable; // __read_mostly;
+/*
+ * 元素是 mountpoint->m_hash
+ * - key是 mountpoint dentry
+ */
+static struct hlist_head *mountpoint_hashtable; // __read_mostly;
+static struct kmem_cache *mnt_cache; // __read_mostly;
 static DECLARE_RWSEM(namespace_sem);
 static HLIST_HEAD(unmounted);	/* protected by namespace_sem */
 static LIST_HEAD(ex_mountpoints); /* protected by namespace_sem */

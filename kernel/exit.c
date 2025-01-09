@@ -850,6 +850,9 @@ void __noreturn do_exit(long code)
 	flush_ptrace_hw_breakpoint(tsk);
 
 	exit_tasks_rcu_start();
+	/*
+	 * 设置 EXIT_ZOMBIE ，此时成为僵尸进程
+	 */
 	exit_notify(tsk, group_dead);
 	proc_exit_connector(tsk);
 	mpol_put_task_policy(tsk);
@@ -882,7 +885,7 @@ void __noreturn do_exit(long code)
 
 	lockdep_free_task(tsk);
 	/*
-	 * 设置进程状态为TASK_DEAD，然后schedule出去；
+	 * 设置进程状态为 TASK_DEAD ，然后schedule出去；
 	 * - 但要注意，进程退出时是没办法把自己完全清洗干净的（task_struct，内
 	 *   核栈等）；进程退出后首先会变为僵尸进程，等待父进程调用wait()来收尸
 	 *   ? schedule
@@ -892,6 +895,7 @@ void __noreturn do_exit(long code)
 	 *     所以到底是父进程来回收？还是调度出去后自己回收？
 	 *
 	 * 僵尸进程在哪里设置的？
+	 * - 在上面的exit_notify()
 	 */
 	do_task_dead();
 }

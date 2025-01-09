@@ -277,7 +277,8 @@ xfs_iomap_write_direct(
 		 * - 如果是本地更新的话，为什么我们还需要保留disk data space的空
 		 *   间呢？
 		 *   > 首先，XFS_DIOSTRAT_SPACE_RES()中需要计算修改元数据最少需
-		 *     要保留多少空间（元数据对应的btree level）；
+		 *     要保留多少空间
+		 *     o 这里的元数据仅包含BMBT
 		 *   > 其次，这里可能真的不需要resaligned，可以判断一下是否需要
 		 *     进行保留。如果当前磁盘块已经存在且不为cow，则无需增加；
 		 * - 下面的xfs_trans_alloc()中的M_RES(mp)->tr_write中记录的是需

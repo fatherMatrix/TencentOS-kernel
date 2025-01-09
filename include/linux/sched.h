@@ -781,6 +781,10 @@ struct task_struct {
 	/*
 	 * 动态优先级，调度器依赖的优先级
 	 * - 有些情况下需要暂时提高进程的优先级
+	 * - 值越小，优先级越高
+	 * - 初次设置：
+	 *   > sched_fork() 中设置为父进程的normal_prio
+	 * - 来源是 __setscheduler() -> normal_prio()
 	 */
 	int				prio;
 	/*
@@ -794,11 +798,15 @@ struct task_struct {
 	/*
 	 * 基于static_prio和调度策略计算出的优先级
 	 * - 进程在创建时会继承父进程的normal_prio
-	 * - 对于普通进程，normal_prio等同于static_prio
-	 * - 对于实时进程，会根据rt_priority重新计算normal_prio
-	 *   > 详见effective_prio()
+	 * - 计算方式是 normal_prio()
+	 *   > 对于普通进程，normal_prio等同于static_prio
 	 */
 	int				normal_prio;
+	/*
+	 * 99 - 0，值越大，优先级越高
+	 * - 这个很特殊，跟其他prio是反的
+	 *   > 但转换到prio的过程中，做了负号处理，所以到prio后，值越小，优先级越高
+	 */
 	unsigned int			rt_priority;
 
 	/*

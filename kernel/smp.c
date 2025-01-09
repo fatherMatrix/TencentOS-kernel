@@ -191,6 +191,10 @@ static int generic_exec_single(int cpu, struct __call_single_data *csd,
 	 * to arch code to make it appear to obey cache coherency WRT
 	 * locking and barrier primitives. Generic code isn't really
 	 * equipped to do the right thing...
+	 *
+	 * 向目标cpu发送IPI
+	 * - 中断向量是 CALL_FUNCTION_SINGLE_VECTOR
+	 * - 中断处理函数是 smp_call_function_single_interrupt()
 	 */
 	if (llist_add(&csd->llist, &per_cpu(call_single_queue, cpu)))
 		if (!mask) arch_send_call_function_single_ipi(cpu);
@@ -286,6 +290,8 @@ static void flush_smp_call_function_queue(bool warn_cpu_offline)
  * @wait: If true, wait until function has completed on other CPUs.
  *
  * Returns 0 on success, else a negative status code.
+ *
+ * 对比 smp_call_function_many()
  */
 int smp_call_function_single(int cpu, smp_call_func_t func, void *info,
 			     int wait)
@@ -320,8 +326,20 @@ int smp_call_function_single(int cpu, smp_call_func_t func, void *info,
 	 */
 	WARN_ON_ONCE(!in_task());
 
+	/*
+	 * 默认使用在栈上的 call_single_data_t
+	 * - 上面已经配置了栈上变量的 CSD_FLAG_LOCK ，即已经上锁了
+	 */
 	csd = &csd_stack;
 	if (!wait) {
+	/*
+	 * 如果不做等待，则无法使用栈上变量（因为会被弹栈）
+	 * - 此时使用预定义的csd_data
+	 *   > 为什么不每次都使用预定义的csd_data呢？
+	 *     o 每个cpu只有一个percpu的csd_data，如果不论wait为什么，都无脑使用
+	 *       percpu的csd_data，那么上一个wait=false的single IPI会导致后面一个
+	 *       single IPI发送端等待。
+	 */
 		csd = this_cpu_ptr(&csd_data);
 		csd_lock(csd);
 	}
@@ -549,7 +567,12 @@ void smp_call_function_many(const struct cpumask *mask,
 			__cpumask_set_cpu(cpu, cfd->cpumask_ipi);
 	}
 
-	/* Send a message to all CPUs in the map */
+	/*
+	 * Send a message to all CPUs in the map
+	 * - 目标cpu集合会收到IPI
+	 *   > 中断向量是 CALL_FUNCTION_VECTOR
+	 *   > 中断处理函数是 smp_call_function_interrupt()
+	 */
 	arch_send_call_function_ipi_mask(cfd->cpumask_ipi);
 
 	if (wait) {

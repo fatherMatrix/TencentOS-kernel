@@ -89,6 +89,8 @@ static __always_inline void queued_spin_lock(struct qspinlock *lock)
 	 * 		return false;
 	 * 	}
 	 * }
+	 *
+	 * 否则，val中返回当前三元组的值。
 	 */
 	if (likely(atomic_try_cmpxchg_acquire(&lock->val, &val, _Q_LOCKED_VAL)))
 		return;
@@ -109,7 +111,7 @@ static __always_inline void queued_spin_unlock(struct qspinlock *lock)
 {
 	/*
 	 * unlock() needs release semantics:
-	 * - 击鼓传花在queued_spin_lock_slowpath()中已经做过了
+	 * - 使mcs队列头的排队者获取到锁
 	 */
 	smp_store_release(&lock->locked, 0);
 }

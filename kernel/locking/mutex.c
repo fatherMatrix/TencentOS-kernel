@@ -111,15 +111,28 @@ static inline struct task_struct *__mutex_trylock_or_owner(struct mutex *lock)
 	owner = atomic_long_read(&lock->owner);
 	for (;;) { /* must loop, can race against a flag */
 		unsigned long old, flags = __owner_flags(owner);
+		/*
+		 * task仅为owner中task部分
+		 */
 		unsigned long task = owner & ~MUTEX_FLAGS;
 
 		if (task) {
 			if (likely(task != curr))
 				break;
 
+			/*
+			 * 走到这里说明owner等于current，此时要观察owner字段的flag部分
+			 */
 			if (likely(!(flags & MUTEX_FLAG_PICKUP)))
+			/*
+			 * 如果没有MUTEX_FLAG_PICKUP，则break。
+			 * - 不允许在这里通过cmpxchg直接接管mutex的所有权
+			 */
 				break;
 
+			/*
+			 * 如果有MUTEX_FLAG_PICKUP，则尝试直接接管mutex的所有权
+			 */
 			flags &= ~MUTEX_FLAG_PICKUP;
 		} else {
 #ifdef CONFIG_DEBUG_MUTEXES
@@ -146,9 +159,13 @@ static inline struct task_struct *__mutex_trylock_or_owner(struct mutex *lock)
 
 /*
  * Actual trylock that will work on any unlocked state.
+ * - 成功获取到mutex则返回true
  */
 static inline bool __mutex_trylock(struct mutex *lock)
 {
+	/*
+	 * __mutex_trylock_or_owner()返回NULL表示成功获取到了mutex
+	 */
 	return !__mutex_trylock_or_owner(lock);
 }
 
@@ -178,6 +195,9 @@ static __always_inline bool __mutex_unlock_fast(struct mutex *lock)
 {
 	unsigned long curr = (unsigned long)current;
 
+	/*
+	 * owner字段中还可能被设置了其他标记位
+	 */
 	if (atomic_long_cmpxchg_release(&lock->owner, curr, 0UL) == curr)
 		return true;
 
@@ -669,6 +689,7 @@ mutex_optimistic_spin(struct mutex *lock, struct ww_acquire_ctx *ww_ctx,
 		/*
 		 * There's an owner, wait for it to either
 		 * release the lock or go to sleep.
+		 * - 返回false表示我们自己需要去睡眠了
 		 */
 		if (!mutex_spin_on_owner(lock, owner, ww_ctx, waiter))
 			goto fail_unlock;
@@ -709,7 +730,7 @@ fail:
 
 	return false;
 }
-#else
+#else /* CONFIG_MUTEX_SPIN_ON_OWNER 未开启 */
 static __always_inline bool
 mutex_optimistic_spin(struct mutex *lock, struct ww_acquire_ctx *ww_ctx,
 		      struct mutex_waiter *waiter)
@@ -932,6 +953,9 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 	struct ww_mutex *ww;
 	int ret;
 
+	/*
+	 * 正常进来时，ww_ctx = use_ww_ctx = 0
+	 */
 	if (!use_ww_ctx)
 		ww_ctx = NULL;
 
@@ -1050,6 +1074,8 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 		 * Here we order against unlock; we must either see it change
 		 * state back to RUNNING and fall through the next schedule(),
 		 * or we must see its unlock and acquire.
+		 * - 当将进程加入mutex的等待链表后，只有链表中的第一个task可以
+		 *   进行spin优化
 		 */
 		if (__mutex_trylock(lock) ||
 		    (first && mutex_optimistic_spin(lock, ww_ctx, &waiter)))
@@ -1246,9 +1272,16 @@ static noinline void __sched __mutex_unlock_slowpath(struct mutex *lock, unsigne
 		DEBUG_LOCKS_WARN_ON(owner & MUTEX_FLAG_PICKUP);
 #endif
 
+		/*
+		 * wait list上已经有排队的了，因此不能走cmpxchg这种快速路径
+		 * - 猜测这里的cmpxchg主要面对的是lock侧的spinner
+		 */
 		if (owner & MUTEX_FLAG_HANDOFF)
 			break;
 
+		/*
+		 * 清空owner中的task部分，只保留flags部分
+		 */
 		old = atomic_long_cmpxchg_release(&lock->owner, owner,
 						  __owner_flags(owner));
 		if (old == owner) {

@@ -122,6 +122,9 @@ static inline void smp_send_reschedule(int cpu)
 
 static inline void arch_send_call_function_single_ipi(int cpu)
 {
+	/*
+	 * native_send_call_func_single_ipi()
+	 */
 	smp_ops.send_call_func_single_ipi(cpu);
 }
 

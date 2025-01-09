@@ -301,6 +301,9 @@ static void pv_wait_node(struct mcs_spinlock *node, struct mcs_spinlock *prev)
 		for (wait_early = false, loop = SPIN_THRESHOLD; loop; loop--) {
 			if (READ_ONCE(node->locked))
 				return;
+			/*
+			 * 只要前一个vcpu还在线，则尝试继续自旋
+			 */
 			if (pv_wait_early(pp, loop)) {
 				wait_early = true;
 				break;
@@ -552,6 +555,9 @@ __visible void __pv_queued_spin_unlock(struct qspinlock *lock)
 	 * We must not unlock if SLOW, because in that case we must first
 	 * unhash. Otherwise it would be possible to have multiple @lock
 	 * entries, which would be BAD.
+	 * - 在上一个pv_node持锁后，会在 queued_spin_lock_slowpath() 的最后
+	 *   通过 pv_kick_node() 将next pv_node的lock->locked设置为
+	 *   _Q_SLOW_VAL ，表示后续只能经过pv_unhash后才能唤醒
 	 */
 	locked = cmpxchg_release(&lock->locked, _Q_LOCKED_VAL, 0);
 	if (likely(locked == _Q_LOCKED_VAL))

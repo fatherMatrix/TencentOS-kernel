@@ -500,7 +500,7 @@ struct xlog {
 	int			l_iclog_size;	/* size of log in bytes */
 	/*
 	 * 表示iclog buffer的数量，来源为mp->m_logbufs
-	 * - 参见xlog_get_iclog_buffer_size()
+	 * - 参见 xlog_get_iclog_buffer_size()
 	 */
 	int			l_iclog_bufs;	/* number of iclog buffers */
 	xfs_daddr_t		l_logBBstart;   /* start block of log */

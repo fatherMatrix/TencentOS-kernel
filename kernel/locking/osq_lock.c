@@ -11,6 +11,7 @@
  * called from interrupt context and we have preemption disabled while
  * spinning.
  */
+struct optimistic_spin_node osq_node;	/* 仅为了source insight可以定位到这里 */
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct optimistic_spin_node, osq_node);
 
 /*
@@ -105,9 +106,15 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 	 * the lock tail.
 	 */
 	old = atomic_xchg(&lock->tail, curr);
+	/*
+	 * 原来osq中没有其他cpu，则成功返回
+	 */
 	if (old == OSQ_UNLOCKED_VAL)
 		return true;
 
+	/*
+	 * 取出前cpu的osq_node地址
+	 */
 	prev = decode_cpu(old);
 	node->prev = prev;
 
@@ -145,6 +152,9 @@ bool osq_lock(struct optimistic_spin_queue *lock)
 
 		cpu_relax();
 	}
+	/*
+	 * 如果osq_node->locked为1了，则返回成功，表示成功获取osq_lock
+	 */
 	return true;
 
 unqueue:
@@ -183,6 +193,8 @@ unqueue:
 	 *
 	 * Similar to unlock(), wait for @node->next or move @lock from @node
 	 * back to @prev.
+	 *
+	 * 走到这里时，prev->next已经被原子地设置为NULL了
 	 */
 
 	next = osq_wait_next(lock, node, prev);

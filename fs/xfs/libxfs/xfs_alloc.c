@@ -3081,6 +3081,7 @@ xfs_alloc_vextent(
 			* block, we don't want to try AGs whose number is below
 			* sagno. Otherwise, we may end up with out-of-order
 			* locking of AGF, which might cause deadlock.
+			* - 死锁避免
 			*/
 			if (++(args->agno) == mp->m_sb.sb_agcount) {
 				if (args->tp->t_firstblock != NULLFSBLOCK)
@@ -3094,12 +3095,24 @@ xfs_alloc_vextent(
 			 */
 			if (args->agno == sagno) {
 				if (flags == 0) {
+				/*
+				 * 没有TRY_LOCK标记，说明第二次分配（无TRY_LOCK）失
+				 * 败了，因此返回NULLAGBLOCK即可
+				 */
 					args->agbno = NULLAGBLOCK;
 					trace_xfs_alloc_vextent_allfailed(args);
 					break;
 				}
 
+				/*
+				 * 走到这里，说明有TRY_LOCK，即这是第一次分配失败。
+				 * 此时我们可以切换到TRY_LOCK分配方式，进行第二次分
+				 * 配。
+				 */
 				flags = 0;
+				/*
+				 * 要注意这个type和args->type不同
+				 */
 				if (type == XFS_ALLOCTYPE_START_BNO) {
 					args->agbno = XFS_FSB_TO_AGBNO(mp,
 						args->fsbno);

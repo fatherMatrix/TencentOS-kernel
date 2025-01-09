@@ -223,6 +223,9 @@ void tlb_gather_mmu(struct mmu_gather *tlb, struct mm_struct *mm,
 	/* Is it from 0 to ~0? */
 	tlb->fullmm     = !(start | (end+1));
 
+/*
+ * 该选项未配置，代码会编译
+ */
 #ifndef CONFIG_HAVE_MMU_GATHER_NO_GATHER
 	tlb->need_flush_all = 0;
 	tlb->local.next = NULL;
@@ -235,9 +238,15 @@ void tlb_gather_mmu(struct mmu_gather *tlb, struct mm_struct *mm,
 	tlb->batch_count = 0;
 #endif
 
+/*
+ * 该选项配置了
+ */
 #ifdef CONFIG_HAVE_RCU_TABLE_FREE
 	tlb->batch = NULL;
 #endif
+/*
+ * 该选项未配置
+ */
 #ifdef CONFIG_HAVE_MMU_GATHER_PAGE_SIZE
 	tlb->page_size = 0;
 #endif

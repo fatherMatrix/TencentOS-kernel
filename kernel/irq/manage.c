@@ -2049,6 +2049,9 @@ int request_threaded_irq(unsigned int irq, irq_handler_t handler,
 	    WARN_ON(irq_settings_is_per_cpu_devid(desc)))
 		return -EINVAL;
 
+	/*
+	 * 如果没有指定handler，则至少要指定thread_fn
+	 */
 	if (!handler) {
 		if (!thread_fn)
 			return -EINVAL;
@@ -2067,7 +2070,7 @@ int request_threaded_irq(unsigned int irq, irq_handler_t handler,
 
 	/*
 	 * 和设备的休眠相关？
-	 * 需要抽时间仔细看看
+	 * - irq_chip上电
 	 */
 	retval = irq_chip_pm_get(&desc->irq_data);
 	if (retval < 0) {

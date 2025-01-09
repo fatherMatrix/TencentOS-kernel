@@ -81,6 +81,9 @@ enum {
 	WORKER_UNBOUND		= 1 << 7,	/* worker is unbound */
 	WORKER_REBOUND		= 1 << 8,	/* worker was rebound */
 
+	/*
+	 * WORKER_NOT_RUNNING 中包含了 WORKER_UNBOUND
+	 */
 	WORKER_NOT_RUNNING	= WORKER_PREP | WORKER_CPU_INTENSIVE |
 				  WORKER_UNBOUND | WORKER_REBOUND,
 
@@ -165,8 +168,9 @@ struct worker_pool {
 	unsigned long		watchdog_ts;	/* L: watchdog timestamp */
 
 	/*
-	 * pending状态的工作(work_struct)链表，连接到work_struct->entry
-	 * 已经调度的工作会移入worker的scheduled链表
+	 * 链表头，链表元素是 work_struct->entry
+	 * - pending状态的work_struct链表
+	 * - 已经调度的worker_struct会移入 worker->scheduled 链表
 	 */
 	struct list_head	worklist;	/* L: list of pending works */
 	/*
@@ -183,7 +187,16 @@ struct worker_pool {
 	 * - 链表元素是worker->entry
 	 */
 	struct list_head	idle_list;	/* X: list of idle workers */
+	/*
+	 * 工作函数： idle_worker_timeout()
+	 * - 用于定期缩减 worker_pool 中的 worker 数量
+	 *   > 参见： init_worker_pool()
+	 */
 	struct timer_list	idle_timer;	/* L: worker idle timeout */
+	/*
+	 * pool_mayday_timeout()
+	 * - 用于 send_mayday
+	 */
 	struct timer_list	mayday_timer;	/* L: SOS timer for workers */
 
 	/*
@@ -218,8 +231,16 @@ struct worker_pool {
 	 * cacheline.
 	 *
 	 * 用于管理worker线程的创建和销毁，表示正在运行中的worker数量
+	 * - 这个字段有 ____cacheline_aligned_in_smp 修饰，为了让source insight
+	 *   可以索引到，这里删除了；
+	 * - 增加的地方：
+	 *   > wq_worker_running()
+	 *   > ... ...
+	 * - 减小的地方：
+	 *   > wq_worker_sleeping()
+	 *   > ... ...
 	 */
-	atomic_t		nr_running ____cacheline_aligned_in_smp;
+	atomic_t		nr_running;
 
 	/*
 	 * Destruction of pool is RCU protected to allow dereferences
@@ -240,6 +261,8 @@ struct worker_pool {
  * - pool_workqueue和worker_pool是1:1的关系；相当于worker_pool的代理
  *   > 既然pool_workqueue和worker_pool是1:1的关系，那pool_workqueue存在的
  *     意义又是什么呢？
+ *     o worker_pool是全局共享的，一个pool_workqueue只能对应一个worker_pool，
+ *       但可能多个pool_workqueue对应同一个worker_pool。N:1 ?
  *
  * pool_workqueue分配内存时按256字节对齐，内存的低8位可以存放其他内容；
  */
@@ -313,6 +336,9 @@ struct workqueue_struct {
 	struct list_head	flusher_overflow; /* WQ: flush overflow list */
 
 	struct list_head	maydays;	/* MD: pwqs requesting rescue */
+	/*
+	 * 由 send_mayday() 来唤醒
+	 */
 	struct worker		*rescuer;	/* I: rescue worker */
 
 	int			nr_drainers;	/* WQ: drain in progress */
@@ -925,6 +951,10 @@ static void wake_up_worker(struct worker_pool *pool)
  	 */
 	struct worker *worker = first_idle_worker(pool);
 
+	/*
+	 * 工作：  worker_thread()
+	 * - 参见： create_worker()
+	 */
 	if (likely(worker))
 		wake_up_process(worker->task);
 }
@@ -941,6 +971,10 @@ void wq_worker_running(struct task_struct *task)
 
 	if (!worker->sleeping)
 		return;
+	/*
+	 * 所谓WQ_UNBOUND类型对worker_pool->nr_running无贡献，是因为宏定义
+	 * WORKER_NOT_RUNNING中包含了WQ_UNBOUND
+	 */
 	if (!(worker->flags & WORKER_NOT_RUNNING))
 		atomic_inc(&worker->pool->nr_running);
 	worker->sleeping = 0;
@@ -1595,6 +1629,13 @@ retry:
 	pwq->nr_in_flight[pwq->work_color]++;
 	work_flags = work_color_to_flags(pwq->work_color);
 
+	/*
+	 * - 如果pool_workqueue对应的worker_pool还能接受新的work_struct，则将
+	 *   其直接插入到worker_pool->worklist链表上，该链表上是待调度的work_struct；
+	 * - 如果不能接受新的work_struct了，则先将其插入pool_workqueue->delayed_works
+	 *   链表中；
+	 * - 参见 work_struct->entry 字段
+	 */
 	if (likely(pwq->nr_active < pwq->max_active)) {
 		trace_workqueue_activate_work(work);
 		pwq->nr_active++;
@@ -2155,6 +2196,7 @@ static void idle_worker_timeout(struct timer_list *t)
 	spin_unlock_irq(&pool->lock);
 }
 
+extern void send_mayday(struct work_struct *work);
 static void send_mayday(struct work_struct *work)
 {
 	struct pool_workqueue *pwq = get_work_pwq(work);
@@ -5172,6 +5214,10 @@ static void unbind_workers(int cpu)
 
 		/*
 		 * Sched callbacks are disabled now.  Zap nr_running.
+		 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+		 * - 参见 wq_worker_running() / wq_worker_sleeping() 及 WQ_NOT_RUNNING
+		 *   的定义和关系
+		 *
 		 * After this, nr_running stays zero and need_more_worker()
 		 * and keep_working() are always true as long as the
 		 * worklist is not empty.  This pool now behaves as an

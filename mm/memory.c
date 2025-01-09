@@ -1107,7 +1107,7 @@ again:
 			 *   > unmap_vmas()这类函数根本不需要RMAP，因为这里是从
 			 *     一个虚拟地址找到对应的物理地址，正向遍历页表即可。
 			 *     而RMAP解决的是从一个物理地址找到所有的虚拟地址。
-			 *     x 所以这里是对RMAP辅助数据结构的维护工作
+			 *     o 所以这里是对RMAP辅助数据结构的维护工作
 			 */
 			page_remove_rmap(page, false);
 			if (unlikely(page_mapcount(page) < 0))
@@ -1116,6 +1116,8 @@ again:
 			 * 将该页记录到mmu_gather结构中，当达到一定数量后批量释
 			 * 放；
 			 * - 批量释放什么？
+			 *   > 释放unmap的物理页本身
+			 *   > 或许还有页表本身
 			 * - 返回值为true表示batch中已经放满了，需要进行一次强制
 			 *   释放；
 			 */

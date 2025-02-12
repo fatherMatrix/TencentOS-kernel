@@ -346,6 +346,10 @@ static __always_inline void spin_lock_bh(spinlock_t *lock)
 	raw_spin_lock_bh(&lock->rlock);
 }
 
+/*
+ * 成功获取锁返回1；
+ * 未成功获取锁返回0；
+ */
 static __always_inline int spin_trylock(spinlock_t *lock)
 {
 	return raw_spin_trylock(&lock->rlock);

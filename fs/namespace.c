@@ -3953,12 +3953,15 @@ void __init mnt_init(void)
 		printk(KERN_WARNING "%s: kobj create error\n", __func__);
 	/*
 	 * 注册shmem_fs_type文件系统类型
-	 * - tmpfs就是shmemfs
+	 * - tmpfs就是shmemfs，shmemfs的对外展示的name是tmpfs
+	 * - shmemfs有两种底层实现
+	 *   > shmemfs, 当配置了CONFIG_SHMEM时
+	 *   > ramfs, 当未配置CONFIG_SHMEM时
 	 */
 	shmem_init();
 	/*
 	 * 注册rootfs_fs_type文件系统类型
-	 * - 但这个文件系统其实是使用shmem_fs_type或者tmpfs_fs_type中的一种，
+	 * - 但这个文件系统其实是使用tmpfs_fs_type或者ramfs_fs_type中的一种，
 	 *   所以init_rootfs不需要注册任何文件系统类型，只需要决定使用哪种文件
 	 *   系统类型即可
 	 */

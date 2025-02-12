@@ -551,6 +551,8 @@ struct cfs_rq {
 	u64			exec_clock;
 	/*
 	 * 用于跟踪整个cfs就绪队列中红黑树里最小的vruntime值
+	 * - 新进程或重新回到ready状态的进程，用vruntime=min_vruntime
+	 *   来初始化，放到最左边；这对防止进程饥饿非常关键；
 	 */
 	u64			min_vruntime;
 #ifndef CONFIG_64BIT

@@ -2169,6 +2169,10 @@ struct inode_operations {
 
 	int (*readlink) (struct dentry *, char __user *,int);
 
+	/*
+	 * 在调用该函数之前，vfs已经将对应的负状态dentry放入了dentry_hashtable中，此函数的作用
+	 * 是给该负状态dentry生成对应的inode
+	 */
 	int (*create) (struct inode *,struct dentry *, umode_t, bool);
 	int (*link) (struct dentry *,struct inode *,struct dentry *);
 	int (*unlink) (struct inode *,struct dentry *);
@@ -3425,6 +3429,10 @@ static inline void insert_inode_hash(struct inode *inode)
 extern void __remove_inode_hash(struct inode *);
 static inline void remove_inode_hash(struct inode *inode)
 {
+	/*
+	 * 这么说，xfs这种hlist_fake()的inode，即便调用了remove_inode_hash()，
+	 * inode_unhashed()判断出来依然是hashed状态？
+	 */
 	if (!inode_unhashed(inode) && !hlist_fake(&inode->i_hash))
 		__remove_inode_hash(inode);
 }

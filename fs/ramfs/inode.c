@@ -106,6 +106,9 @@ ramfs_mknod(struct inode *dir, struct dentry *dentry, umode_t mode, dev_t dev)
 	struct inode * inode = ramfs_get_inode(dir->i_sb, dir, mode, dev);
 	int error = -ENOSPC;
 
+	/*
+	 * 文件系统的vfs层在调用->create()之前，已经将负状态的dentry放入了dentry_hashtable
+	 */
 	if (inode) {
 		d_instantiate(dentry, inode);
 		dget(dentry);	/* Extra count - pin the dentry in core */

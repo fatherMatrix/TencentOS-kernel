@@ -109,6 +109,16 @@ struct scsi_host_template {
 	 * commands.
 	 *
 	 * STATUS: REQUIRED
+	 *
+	 * queuecommand函数用于将SCSI命令块排入低层设备驱动的队列。
+	 * - 第一个参数为指向SCSI命令描述符的指针；
+	 * - 第二个参数为指向完成回调函数的指针。
+	 * 在驱动程序完成处理命令之后，done回调函数被调用。
+	 * - 如果函数返回0，则主机适配器已经接受了该命令。
+	 * - done函数必须在驱动处理完命令之后被调用，也可以在queuecommand返
+	 *   回之前对这条命令调用done，但这时必须返回0。
+	 * - 主机适配器也可以拒绝这条命令，这种情况下，不应该改动这条命令，
+	 *   同时也不能调用done。
 	 */
 	int (* queuecommand)(struct Scsi_Host *, struct scsi_cmnd *);
 
@@ -535,8 +545,13 @@ struct Scsi_Host {
 	 * In the rare case of being in irq context you can use
 	 * their __ prefixed variants with the lock held. NEVER
 	 * access this list directly from a driver.
+	 *
+	 * 链表头，链表元素是 scsi_device->siblings
 	 */
 	struct list_head	__devices;
+	/*
+	 * 链表头，链表元素是 scsi_target->siblings
+	 */
 	struct list_head	__targets;
 	
 	struct list_head	starved_list;

@@ -67,14 +67,19 @@ struct dentry *simple_lookup(struct inode *dir, struct dentry *dentry, unsigned 
 	/*
 	 * 只有在dentry_hashtable中查不到目标dentry时才会调用对应inode的
 	 * inode->i_op->lookup方法。
-	 * 因为simplefs在添加inode节点时已经将对应dentry放入到了
-	 * dentry_hashtable中，所以不会走到这里。一旦走到这里，说明目标inode本
-	 * 身是不存在的。
 	 */
 	if (dentry->d_name.len > NAME_MAX)
 		return ERR_PTR(-ENAMETOOLONG);
 	if (!dentry->d_sb->s_d_op)
 		d_set_d_op(dentry, &simple_dentry_operations);
+	/*
+	 * 如果dentry已经对应inode了，那么一定会在dentry_hashtable中查找
+	 * 到，因此不会走到这里来；
+	 * 如果走到这里，说明dentry还未对应inode，此时以NULL作为参数调用
+	 * d_add()，将dentry放入dentry_hashtable中；
+	 * - 在lookup_slow()返回后，会调用d_is_negative()判断，对于负状态
+	 *   的dentry，则直接返回错误。
+	 */
 	d_add(dentry, NULL);
 	return NULL;
 }

@@ -1167,6 +1167,7 @@ void __init setup_arch(char **cmdline_p)
 	memblock_set_current_limit(ISA_END_ADDRESS);
 	/*
 	 * 把e820表中非保留的条目全部加到memblock里面去；
+	 * - x86上的memblock就是这么完成初始化的
 	 */
 	e820__memblock_setup();
 
@@ -1265,7 +1266,6 @@ void __init setup_arch(char **cmdline_p)
 
 	/*
 	 * 当前看到的只是配置了memblock的numa信息；
-	 * - 这个函数的名字起的真不好；
 	 */
 	initmem_init();
 	dma_contiguous_reserve(max_pfn_mapped << PAGE_SHIFT);
@@ -1282,7 +1282,8 @@ void __init setup_arch(char **cmdline_p)
 		early_xdbc_register_console();
 
 	/*
-	 * 对应native_pagetable_init
+	 * 对应 native_pagetable_init
+	 * - 负责创建page结构体
 	 */
 	x86_init.paging.pagetable_init();
 

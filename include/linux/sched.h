@@ -773,8 +773,8 @@ struct task_struct {
 #endif
 	/*
 	 * 用于设置进程的状态，支持的状态如下：
-	 * - TASK_ON_RQ_QUEUED：表示进程正在就绪队列中
-	 * - TASK_ON_RQ_MIGRATING：表示处于迁移过程中的进程，它不可能在就绪队列
+	 * - TASK_ON_RQ_QUEUED ：表示进程正在就绪队列中
+	 * - TASK_ON_RQ_MIGRATING ：表示处于迁移过程中的进程，它不可能在就绪队列
 	 */
 	int				on_rq;
 
@@ -2101,6 +2101,9 @@ static __always_inline bool need_resched(void)
 static inline unsigned int task_cpu(const struct task_struct *p)
 {
 #ifdef CONFIG_THREAD_INFO_IN_TASK
+/*
+ * tkernel4为y
+ */
 	return READ_ONCE(p->cpu);
 #else
 	return READ_ONCE(task_thread_info(p)->cpu);

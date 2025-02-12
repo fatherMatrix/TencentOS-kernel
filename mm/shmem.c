@@ -3921,6 +3921,9 @@ static struct file_system_type shmem_fs_type = {
 	.fs_flags	= FS_USERNS_MOUNT,
 };
 
+/*
+ * 配置了CONFIG_SHMEM时
+ */
 int __init shmem_init(void)
 {
 	int error;
@@ -4066,6 +4069,9 @@ static struct file_system_type shmem_fs_type = {
 	.fs_flags	= FS_USERNS_MOUNT,
 };
 
+/*
+ * 未配置CONFIG_SHMEM时
+ */
 int __init shmem_init(void)
 {
 	BUG_ON(register_filesystem(&shmem_fs_type) != 0);

@@ -450,6 +450,8 @@ struct xfs_cil {
  * transaction commits.  A separate, higher bound defines when CIL pushes are
  * enforced to ensure we stay within our maximum checkpoint size bounds.
  * threshold, yet give us plenty of space for aggregation on large logs.
+ *
+ * 108a42358a05 xfs: Lower CIL flush limit for large logs 对此有修改
  */
 #define XLOG_CIL_SPACE_LIMIT(log)	(log->l_logsize >> 3)
 

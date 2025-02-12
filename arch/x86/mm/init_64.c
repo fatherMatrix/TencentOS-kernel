@@ -885,6 +885,9 @@ void __init paging_init(void)
 	if (N_MEMORY != N_NORMAL_MEMORY)
 		node_clear_state(0, N_NORMAL_MEMORY);
 
+	/*
+	 * 初始化zone、分配并初始化page结构体
+	 */
 	zone_sizes_init();
 }
 

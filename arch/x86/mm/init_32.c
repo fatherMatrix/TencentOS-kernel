@@ -743,6 +743,9 @@ void __init paging_init(void)
 	 */
 	olpc_dt_build_devicetree();
 	sparse_memory_present_with_active_regions(MAX_NUMNODES);
+	/*
+	 * 内部会建立vmemmap映射
+	 */
 	sparse_init();
 	zone_sizes_init();
 }

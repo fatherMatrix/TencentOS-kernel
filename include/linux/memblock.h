@@ -74,6 +74,10 @@ struct memblock_type {
 	 */
 	unsigned long max;
 	phys_addr_t total_size;
+	/*
+	 * 本类memblock内存的region数组
+	 * - 初始化在？
+	 */
 	struct memblock_region *regions;
 	char *name;
 };
@@ -89,6 +93,9 @@ struct memblock_type {
 struct memblock {
 	bool bottom_up;  /* is bottom up direction? */
 	phys_addr_t current_limit;
+	/*
+	 * 整个memblock分为2~3类内存
+	 */
 	struct memblock_type memory;
 	struct memblock_type reserved;
 #ifdef CONFIG_HAVE_MEMBLOCK_PHYS_MAP

@@ -302,7 +302,8 @@ static void pv_wait_node(struct mcs_spinlock *node, struct mcs_spinlock *prev)
 			if (READ_ONCE(node->locked))
 				return;
 			/*
-			 * 只要前一个vcpu还在线，则尝试继续自旋
+			 * 只要前一个vcpu还在线，则pv_wait_early()返回false，
+			 * 尝试继续自旋
 			 */
 			if (pv_wait_early(pp, loop)) {
 				wait_early = true;

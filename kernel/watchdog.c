@@ -170,6 +170,12 @@ static void lockup_detector_update_enable(void)
 unsigned int __read_mostly softlockup_panic =
 			CONFIG_BOOTPARAM_SOFTLOCKUP_PANIC_VALUE;
 
+/*
+ * for source insight
+ */
+static bool softlockup_initialized;
+static u64 sample_period;
+
 static bool softlockup_initialized __read_mostly;
 static u64 __read_mostly sample_period;
 
@@ -182,6 +188,11 @@ static DEFINE_PER_CPU(unsigned long, soft_lockup_hrtimer_cnt);
 static DEFINE_PER_CPU(struct task_struct *, softlockup_task_ptr_saved);
 static DEFINE_PER_CPU(unsigned long, hrtimer_interrupts_saved);
 static unsigned long soft_lockup_nmi_warn;
+
+/*
+ * for source insight
+ */
+unsigned long watchdog_touch_ts;
 
 static int __init softlockup_panic_setup(char *str)
 {
@@ -553,6 +564,9 @@ static void softlockup_stop_all(void)
 	if (!softlockup_initialized)
 		return;
 
+	/*
+	 * 通过system_wq来去其他cpu上执行          softlockup_stop_fn()
+	 */
 	for_each_cpu(cpu, &watchdog_allowed_mask)
 		smp_call_on_cpu(cpu, softlockup_stop_fn, NULL, false);
 
@@ -588,6 +602,9 @@ int lockup_detector_offline_cpu(unsigned int cpu)
 	return 0;
 }
 
+/*
+ * 定义了CONFIG_SOFTLOCKUP_DETECTOR
+ */
 static void lockup_detector_reconfigure(void)
 {
 	cpus_read_lock();
@@ -634,6 +651,9 @@ static __init void lockup_detector_setup(void)
 }
 
 #else /* CONFIG_SOFTLOCKUP_DETECTOR */
+/*
+ * 未定义CONFIG_SOFTLOCKUP_DETECTOR
+ */
 static void lockup_detector_reconfigure(void)
 {
 	cpus_read_lock();

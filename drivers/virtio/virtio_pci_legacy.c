@@ -153,6 +153,10 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 	/* activate the queue */
 	iowrite32(q_pfn, vp_dev->ioaddr + VIRTIO_PCI_QUEUE_PFN);
 
+	/*
+	 * 设置 vp_notify() 使用的io地址
+	 * - 写这个地址会导致vmexit
+	 */
 	vq->priv = (void __force *)vp_dev->ioaddr + VIRTIO_PCI_QUEUE_NOTIFY;
 
 	if (msix_vec != VIRTIO_MSI_NO_VECTOR) {

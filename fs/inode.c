@@ -1814,6 +1814,8 @@ static void iput_final(struct inode *inode)
 	/*
 	 * 进到这里，说明两点：
 	 * - drop是0，即inode->i_nlink != 0，且inode本身是hashed状态
+	 *   > inode引用计数已经是0了，还能处于hashed状态？
+	 *     o 从inode_hashtable中摘下来是在后面的evict()中进行的
 	 * - super_block还带有SB_ACTIVE标志
 	 *
 	 * --------------------------------------------------------------------
@@ -1901,6 +1903,7 @@ retry:
 		 * 只有当inode->i_nlink不为0时，即没有被删除，需要刷回磁盘时进
 		 * 入下面的if。
 		 * - 如果文件都要被删除了，也就没有必要将inode回写了
+		 * - 为什么必须是I_DIRTY_TIME呢？如果只有I_DIRTY_PAGES呢？
 		 */
 		if (inode->i_nlink && (inode->i_state & I_DIRTY_TIME)) {
 			/*

@@ -35,6 +35,10 @@ struct virtqueue {
 	struct virtio_device *vdev;
 	unsigned int index;
 	unsigned int num_free;
+	/*
+	 * vp_notify() 使用的io地址
+	 * - 初始化在 setup_vq()
+	 */
 	void *priv;
 };
 

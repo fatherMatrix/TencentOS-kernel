@@ -42,7 +42,7 @@ static struct kmem_cache *lsm_file_cache;
 static struct kmem_cache *lsm_inode_cache;
 
 char *lsm_names;
-static struct lsm_blob_sizes blob_sizes __lsm_ro_after_init;
+static struct lsm_blob_sizes blob_sizes; // __lsm_ro_after_init;
 
 /* Boot-time LSM user choice */
 static __initdata const char *chosen_lsm_order;

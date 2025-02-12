@@ -114,6 +114,9 @@ static inline void update_idle_rq_clock_pelt(struct rq *rq)
 		rq->lost_idle_time += rq_clock_task(rq) - rq->clock_pelt;
 }
 
+/*
+ * CONFIG_SMP版本
+ */
 static inline u64 rq_clock_pelt(struct rq *rq)
 {
 	lockdep_assert_held(&rq->lock);

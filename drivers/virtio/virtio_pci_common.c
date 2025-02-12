@@ -40,8 +40,11 @@ void vp_synchronize_vectors(struct virtio_device *vdev)
 /* the notify function used when creating a virt queue */
 bool vp_notify(struct virtqueue *vq)
 {
-	/* we write the queue's selector into the notification register to
-	 * signal the other end */
+	/*
+	 * we write the queue's selector into the notification register to
+	 * signal the other end
+	 * - 写 virtqueue->priv 会导致vmexit
+	 */
 	iowrite16(vq->index, (void __iomem *)vq->priv);
 	return true;
 }

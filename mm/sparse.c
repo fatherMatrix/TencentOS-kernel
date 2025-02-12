@@ -257,12 +257,17 @@ void __init subsection_map_init(unsigned long pfn, unsigned long nr_pages)
 	}
 }
 
+/* for source insight */
+void memory_present(int nid, unsigned long start, unsigned long end);
 /* Record a memory area against a node. */
 void __init memory_present(int nid, unsigned long start, unsigned long end)
 {
 	unsigned long pfn;
 
 #ifdef CONFIG_SPARSEMEM_EXTREME
+/*
+ * tkernel4/tkernel5都开启了此选项
+ */
 	/*
 	 * 以防万一，给mem_section分配内存
 	 */
@@ -280,6 +285,7 @@ void __init memory_present(int nid, unsigned long start, unsigned long end)
 
 	/*
 	 * start变为其所属section的起始pfn
+	 * - 每个section中容纳的page数量固定
 	 */
 	start &= PAGE_SECTION_MASK;
 	/*

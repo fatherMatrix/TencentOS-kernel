@@ -434,6 +434,10 @@ static void d_lru_add(struct dentry *dentry)
 	this_cpu_inc(nr_dentry_unused);
 	if (d_is_negative(dentry))
 		this_cpu_inc(nr_dentry_negative);
+	/*
+	 * dcache中保留的dentry其lockref.count都是0，之所以要在dcache中保存，是因为需要在
+	 * shrink_dcache_sb()时找到所有lockref.count为0的dentry
+	 */
 	WARN_ON_ONCE(!list_lru_add(&dentry->d_sb->s_dentry_lru, &dentry->d_lru));
 }
 
@@ -739,6 +743,10 @@ static struct dentry *dentry_kill(struct dentry *dentry)
 	struct inode *inode = dentry->d_inode;
 	struct dentry *parent = NULL;
 
+	/*
+	 * spin_trylock()返回0表示未成功获取锁
+	 * - 当未成功获取锁时，跳转到slow_positive
+	 */
 	if (inode && unlikely(!spin_trylock(&inode->i_lock)))
 		goto slow_positive;
 
@@ -840,6 +848,8 @@ static inline bool fast_dput(struct dentry *dentry)
 	 *
 	 * 如果dentry->d_lockref > 1，则对其减1并返回1；
 	 * 如果dentry->d_lockref <= 1，则加锁并返回0；
+	 *
+	 * - xfs没有该标记
 	 */
 	if (unlikely(dentry->d_flags & DCACHE_OP_DELETE))
 		return lockref_put_or_lock(&dentry->d_lockref);
@@ -855,9 +865,9 @@ static inline bool fast_dput(struct dentry *dentry)
 	 * by somebody else, the fast path has failed. We will need to
 	 * get the lock, and then check the count again.
 	 *
-	 * lockref_put_return()小于0，说明dentry是被其他内核路径持锁了的；
+	 * lockref_put_return()小于0，说明dentry是被其他内核路径持锁了的，
 	 * 或者该dentry的reflock已经被其他内核路径减到0了，处于删除过程；
-	 * - 此处我们要区抢到这把锁才能操作；
+	 * - 这两种情况都需要我们抢到这把锁才能操作；
 	 *
 	 * 如果此时另外持锁的内核路径把该dentry删除了怎么办？
 	 * - fast_dput()函数本身被rcu临界区保护，该dentry该宽限期内不会被
@@ -1020,7 +1030,7 @@ void dput(struct dentry *dentry)
 		 * 立即删除该dentry
 		 * - 此时我们持有dentry->d_lock
 		 *
-		 * dentry_kill()返回的事dentry的parent dentry，我们要循环减小引
+		 * dentry_kill()返回的是dentry的parent dentry，我们要循环减小引
 		 * 用计数；
 		 */
 		dentry = dentry_kill(dentry);

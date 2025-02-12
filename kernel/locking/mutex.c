@@ -253,6 +253,9 @@ static void __mutex_handoff(struct mutex *lock, struct task_struct *task)
 		DEBUG_LOCKS_WARN_ON(owner & MUTEX_FLAG_PICKUP);
 #endif
 
+		/*
+		 * 直接将mutex的owner改为wait_list中的第一个进程
+		 */
 		new = (owner & MUTEX_FLAG_WAITERS);
 		new |= (unsigned long)task;
 		if (task)
@@ -1056,7 +1059,14 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 				goto err;
 		}
 
+		/*
+		 * 睡眠
+		 */
 		spin_unlock(&lock->wait_lock);
+		/*
+		 * 要注意，这里被唤醒不一定就说明获取到锁了
+		 * - UNINTERRUPTIBLE被唤醒才能说明获取到锁了
+		 */
 		schedule_preempt_disabled();
 
 		/*
@@ -1076,6 +1086,10 @@ __mutex_lock_common(struct mutex *lock, long state, unsigned int subclass,
 		 * or we must see its unlock and acquire.
 		 * - 当将进程加入mutex的等待链表后，只有链表中的第一个task可以
 		 *   进行spin优化
+		 *   > 因为mutex_unlock()中看见MUTEX_FLAG_HANDOFF后会直接将owner
+		 *     切换为第一个等待的task
+		 *   > 这里还是要抢，不一定就能强到，因为上面还可能有没有插入到
+		 *     wait_list而直接osq_lock后竞争的
 		 */
 		if (__mutex_trylock(lock) ||
 		    (first && mutex_optimistic_spin(lock, ww_ctx, &waiter)))
@@ -1097,6 +1111,9 @@ acquired:
 			__ww_mutex_check_waiters(lock, ww_ctx);
 	}
 
+	/*
+	 * 在wait_list上删除自己
+	 */
 	mutex_remove_waiter(lock, &waiter, current);
 	if (likely(list_empty(&lock->wait_list)))
 		__mutex_clear_flag(lock, MUTEX_FLAGS);

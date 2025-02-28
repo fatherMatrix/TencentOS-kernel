@@ -129,6 +129,8 @@ enum mq_rq_state {
  *
  * If you modify this structure, make sure to update blk_rq_init() and
  * especially blk_mq_rq_ctx_init() to take care of the added fields.
+ *
+ * 硬盘位置连续的bio链接到同一个request中
  */
 struct request {
 	struct request_queue *q;
@@ -152,7 +154,8 @@ struct request {
 	struct bio *biotail;
 
 	/*
-	 * 作为链表元素，将本request挂到软件队列上的blk_mq_ctx->rq_lists[type]
+	 * 作为链表元素，将本request挂到软件队列上的 blk_mq_ctx->rq_lists[type]
+	 * - blk_mq_add_to_requeue_list() 中好像是插入到了 request_queue->requeue_list
 	 */
 	struct list_head queuelist;
 
@@ -194,6 +197,11 @@ struct request {
 
 		struct {
 			unsigned int		seq;
+			/*
+			 * 作为链表元素将request加入blk_mq的各类flush队列
+			 * - blk_mq_hw_ctx->fq->flushqueue[x]
+			 * - blk_mq_hw_ctx->fq->flush_data_in_flight
+			 */
 			struct list_head	list;
 			rq_end_io_fn		*saved_end_io;
 		} flush;
@@ -589,6 +597,9 @@ struct request_queue {
 	 */
 	struct blk_flush_queue	*fq;
 
+	/*
+	 * 链表头，链表元素是 request->
+	 */
 	struct list_head	requeue_list;
 	spinlock_t		requeue_lock;
 	struct delayed_work	requeue_work;

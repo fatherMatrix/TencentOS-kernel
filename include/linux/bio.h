@@ -608,6 +608,9 @@ static inline unsigned bio_list_size(const struct bio_list *bl)
 	return sz;
 }
 
+/*
+ * 在tail处插入新的bio
+ */
 static inline void bio_list_add(struct bio_list *bl, struct bio *bio)
 {
 	bio->bi_next = NULL;
@@ -662,6 +665,9 @@ static inline struct bio *bio_list_peek(struct bio_list *bl)
 	return bl->head;
 }
 
+/*
+ * 从head处取一个bio下来
+ */
 static inline struct bio *bio_list_pop(struct bio_list *bl)
 {
 	struct bio *bio = bl->head;

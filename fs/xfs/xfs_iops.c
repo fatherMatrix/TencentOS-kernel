@@ -266,6 +266,9 @@ xfs_vn_lookup(
 		inode = NULL;
 	else
 		inode = ERR_PTR(error);
+	/*
+	 * 将dentry插入dentry_hashtable中
+	 */
 	return d_splice_alias(inode, dentry);
 }
 

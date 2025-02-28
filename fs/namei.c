@@ -1963,11 +1963,14 @@ again:
 	 * - 如果返回的dentry是由本d_alloc_parallel创建的，则中将新创建的dentry
 	 *   放入了inlookup_hashtable中
 	 * - 如果返回的dentry是由其他d_alloc_parallel创建的，则返回前等待dentry
-	 *   在inlookup_hashtable中摘除。值得注意的是，dentry在从
-	 *   inlookup_hashtable中摘除之前，会插入到dentry_hashtable中。也就是如
-	 *   此返回的dentry，已经成熟（但这里面包括负状态的dentry，即去磁盘上转
-	 *   了一圈，发现没有对应的inode，也算是成熟了，因为至少确定了此dentry
-	 *   就是不应该对应inode）
+	 *   在inlookup_hashtable中摘除。也就是如此返回的dentry，已经成熟（但这
+	 *   里面包括负状态的dentry，即去磁盘上转了一圈，发现没有对应的inode，
+	 *   也算是成熟了，因为至少确定了此dentry就是不应该对应inode）
+	 *   > 关于从inlookup_hashtable中删除 与 加入dentry_hashtable的前后顺序
+	 *     与 唤醒d_alloc_parallel()中d_wait_lookup()的顺序：
+	 *     o 当前版本中，唤醒可能在加入dentry_hashtable之前，d_alloc_parallel()
+	 *       中有重试；
+	 *     o 新版本中，.lookup()中不再做唤醒操作，由d_lookup_done()做唤醒
 	 */
 	dentry = d_alloc_parallel(dir, name, &wq);
 	if (IS_ERR(dentry))
@@ -1995,22 +1998,15 @@ again:
 		 * 调用具体文件系统的lookup方法来查找对应的inode节点
 		 *
 		 * 根据Documentation/filesystems/vfs.txt中的要求，此回调函数内
-		 * 1. 必须调用d_add()将inode与dentry建立联系
+		 * 1. 必须调用__d_add()将dentry插入dentry_hashtable
 		 * 2. 必须对inode->i_count加一
 		 * 3. 必须调用d_add将找到的inode和dentry建立联系。如果目标inode
 		 *    不存在，则插入一个NULL inode。
 		 *
-		 * ext4_lookup中通过调用d_splice_alias -> __d_add将dentry放到了
-		 * dentry_hashtable中
-		 *
-		 * xfs中是： xfs_vn_lookup()
-		 * ext4: ext4_lookup()
+		 * xfs： xfs_vn_lookup() -> d_splice_alias() -> __d_add()
+		 * ext4: ext4_lookup() -> d_splice_alias() -> __d_add()
 		 *
 		 * 会有多个内核路径同时走到这里，这个函数是可以并发的吗？
-		 * - 猜测：该函数内使用了bh cache和inode cache，这两个cache会保
-		 *   整真正的读盘操作只会由一个内核路径执行，其他的同目标的内核
-		 *   路径会在这两个cache中睡眠等待
-		 * 更正：
 		 * - 好像只会有一个内核路径进入到这里，就是真正创建了dentry
 		 *   的内核路径。
 		 * - 如果dentry是由其他内核路径创建的，那么在退出
@@ -2021,6 +2017,7 @@ again:
 		/*
 		 * 将处于inlookup_hashtable中的dentry摘下来，并唤醒前面在函数
 		 * d_alloc_parallel()中等待这一事实的其他内核路径；
+		 * - .lookup()中要负责通过__d_add()将dentry插入dentry_hashtable
 		 *
 		 * 但其实在->lookup中的d_splice_alias -> __d_add中就调用过一次
 		 * __d_lookup_done了呀？

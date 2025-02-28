@@ -434,6 +434,9 @@ repeat:
 		  handle, blocks,
 		  atomic_read(&transaction->t_outstanding_credits),
 		  jbd2_log_space_left(journal));
+	/*
+	 * 要保证 transaction_s->t_updates 加一后才放锁
+	 */
 	read_unlock(&journal->j_state_lock);
 	/*
 	 * 对称的点在jbd2__journal_stop()
@@ -524,6 +527,7 @@ handle_t *jbd2__journal_start(journal_t *journal, int nblocks, int rsv_blocks,
 			jbd2_free_handle(handle->h_rsv_handle);
 		jbd2_free_handle(handle);
 		return ERR_PTR(err);
+	}
 	
 	handle->h_type = type;
 	handle->h_line_no = line_no;
@@ -1948,6 +1952,8 @@ int jbd2_journal_stop(handle_t *handle)
 		 * This is non-blocking
 		 *
 		 * 开始日志的提交过程，但这是非阻塞的，需要在下面做等待
+		 * - 主要作用是更新 journal_s->j_commit_request ，该字段会影响
+		 *   kjournald()的工作
 		 */
 		jbd2_log_start_commit(journal, transaction->t_tid);
 

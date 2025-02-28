@@ -145,6 +145,9 @@ void blk_add_timer(struct request *req)
 		 * will be X + something.
 		 */
 		if (!timer_pending(&q->timeout) || (diff >= HZ / 2))
+			/*
+			 * timer过期后的回调是： blk_rq_timed_out_timer()
+			 */
 			mod_timer(&q->timeout, expiry);
 	}
 

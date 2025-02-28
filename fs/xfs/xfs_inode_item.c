@@ -786,6 +786,9 @@ xfs_iflush_done(
 		iip = INODE_ITEM(blip);
 		iip->ili_logged = 0;
 		iip->ili_last_fields = 0;
+		/*
+		 * 加锁位置在 xfs_iflush_cluster()
+		 */
 		xfs_ifunlock(iip->ili_inode);
 	}
 	list_del(&tmp);

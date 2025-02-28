@@ -31,6 +31,9 @@
  */
 static void journal_end_buffer_io_sync(struct buffer_head *bh, int uptodate)
 {
+	/*
+	 * 找到处于 BJ_Shadow 链表上的journal_head
+	 */
 	struct buffer_head *orig_bh = bh->b_private;
 
 	BUFFER_TRACE(bh, "");
@@ -380,6 +383,8 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 	tid_t first_tid;
 	int update_tail;
 	int csum_size = 0;
+	struct list_head io_bufs;
+	struct list_head log_bufs;
 	LIST_HEAD(io_bufs);
 	LIST_HEAD(log_bufs);
 
@@ -394,6 +399,9 @@ void jbd2_journal_commit_transaction(journal_t *journal)
 	/* Do we need to erase the effects of a prior jbd2_journal_flush? */
 	if (journal->j_flags & JBD2_FLUSHED) {
 		jbd_debug(3, "super block updated\n");
+		/*
+		 * 获取 journal_s->j_checkpoint_mutex
+		 */
 		mutex_lock_io(&journal->j_checkpoint_mutex);
 		/*
 		 * We hold j_checkpoint_mutex so tail cannot change under us.

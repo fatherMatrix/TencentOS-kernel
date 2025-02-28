@@ -2793,6 +2793,11 @@ static inline void end_dir_add(struct inode *dir, unsigned n)
 static void d_wait_lookup(struct dentry *dentry)
 {
 	if (d_in_lookup(dentry)) {
+		/*
+		 * 栈上变量，要求唤醒端要在持有dentry->d_lock时操作。
+		 * - 否则可能出现标记已取消，d_in_lookup()失败，这里弹栈，
+		 *   然后那边再wakeup的情况
+		 */
 		DECLARE_WAITQUEUE(wait, current);
 		add_wait_queue(dentry->d_wait, &wait);
 		do {
@@ -2816,6 +2821,8 @@ struct dentry *d_alloc_parallel(struct dentry *parent,
 	struct hlist_bl_node *node;
 	/* 
 	 * 哈希表中不存在目标dentry，所以这里必须创建一个了。
+	 * - 插入dentry_hashtable的动作是由 __d_add() 完成的
+	 *   > xfs_vn_lookup() -> d_splice_alias() -> __d_add()
 	 *
 	 * d_alloc中已经将新创建的dentry和parent dentry建立了父子联系
 	 * - 建立父子关系这个操作对于parent dentry来说是写操作，需要加锁互斥
@@ -2842,11 +2849,12 @@ retry:
 	 *
 	 * 如果查找到了，说明另外有人已经创建了这个dentry，将上边新分配的dentry
 	 * 释放掉，然后将别人创建的dentry返回。返回的dentry及其inode已经成熟
+	 * - 成熟包括去磁盘上找了一圈儿，发现没有inode，因此配置了个NULL
 	 *
 	 * 新创建的dentry放入到dentry_hashtable的动作是在d_add中做的，在将
 	 * dentry放入dentry_hashtable之前，dentry本身已经可用，这包括：
 	 * - 将dentry和已成熟的inode关联
-	 * - 将dentry从inlookup_hashtable中取下
+	 * - 将dentry从inlookup_hashtable中取下？
 	 */ 
 	dentry = __d_lookup_rcu(parent, name, &d_seq);
 	if (unlikely(dentry)) {
@@ -3023,6 +3031,10 @@ void __d_lookup_done(struct dentry *dentry)
 	 * 唤醒所有等待dentry从inlookup_hash中摘下来的进程
 	 */
 	wake_up_all(dentry->d_wait);
+	/*
+	 * 这个本来就是在__lookup_slow()的栈上变量，当dentry经过inlookup
+	 * 阶段之后就不再需要了
+	 */
 	dentry->d_wait = NULL;
 	/*
 	 * 对inlookup_hashtable中目标桶放自旋锁
@@ -3074,6 +3086,7 @@ static inline void __d_add(struct dentry *dentry, struct inode *inode)
 	}
 	/*
 	 * 将dentry放入到dentry_hashtable中
+	 * - 值得注意的是，这里dentry有可能是负状态的
 	 */
 	__d_rehash(dentry);
 	if (dir)

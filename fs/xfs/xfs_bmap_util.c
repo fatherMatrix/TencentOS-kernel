@@ -841,6 +841,7 @@ xfs_free_eofblocks(
 		 * on-disk file size and then the system crashes before the
 		 * contents of the file are flushed to disk then the files
 		 * may be full of holes (ie NULL files bug).
+		 * - 这个注释没有理解
 		 */
 		error = xfs_itruncate_extents_flags(&tp, ip, XFS_DATA_FORK,
 					XFS_ISIZE(ip), XFS_BMAPI_NODISCARD);

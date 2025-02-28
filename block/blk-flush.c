@@ -399,6 +399,9 @@ void blk_insert_flush(struct request *rq)
 	 */
 	if ((policy & REQ_FSEQ_DATA) &&
 	    !(policy & (REQ_FSEQ_PREFLUSH | REQ_FSEQ_POSTFLUSH))) {
+		/*
+		 * 直接插入 blk_mq_hw_ctx->dispatch 队列
+		 */
 		blk_mq_request_bypass_insert(rq, false, false);
 		return;
 	}
@@ -415,6 +418,10 @@ void blk_insert_flush(struct request *rq)
 	rq->end_io = mq_flush_data_end_io;
 
 	spin_lock_irq(&fq->mq_flush_lock);
+	/*
+	 * 插入 blk_mq_hw_ctx->fq 队列
+	 * - fq的类型是 blk_flush_queue ，其中包含多种flush队列
+	 */
 	blk_flush_complete_seq(rq, fq, REQ_FSEQ_ACTIONS & ~policy, 0);
 	spin_unlock_irq(&fq->mq_flush_lock);
 }

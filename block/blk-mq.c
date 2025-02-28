@@ -890,6 +890,9 @@ static void blk_mq_rq_timed_out(struct request *req, bool reserved)
 	if (req->q->mq_ops->timeout) {
 		enum blk_eh_timer_return ret;
 
+		/*
+		 * virtio_mq_ops->timeout = NULL
+		 */
 		ret = req->q->mq_ops->timeout(req, reserved);
 		if (ret == BLK_EH_DONE)
 			return;
@@ -2106,7 +2109,7 @@ static blk_qc_t blk_mq_make_request(struct request_queue *q, struct bio *bio)
 	plug = blk_mq_plug(q, bio);
 	if (unlikely(is_flush_fua)) {
 	/*
-	 * 如果是flush fua请求，则直接插入flush队列
+	 * 如果是flush fua请求，则直接插入 blk_mq_hw_ctx 中的flush队列
 	 */
 		/* bypass scheduler for flush rq */
 		blk_insert_flush(rq);
@@ -2179,6 +2182,10 @@ static blk_qc_t blk_mq_make_request(struct request_queue *q, struct bio *bio)
 		}
 	} else if ((q->nr_hw_queues > 1 && is_sync) ||
 			!data.hctx->dispatch_busy) {
+		/*
+		 * 直接调用驱动层填充的 request_queue->mq_ops->queue_rq()，将request发
+		 * 送给驱动层处理
+		 */
 		blk_mq_try_issue_directly(data.hctx, rq, &cookie);
 	} else {
 		blk_mq_sched_insert_request(rq, false, true, true);

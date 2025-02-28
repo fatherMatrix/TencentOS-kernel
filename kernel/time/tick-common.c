@@ -82,9 +82,9 @@ int tick_is_oneshot_available(void)
 
 /*
  * Periodic tick
- * - 传统Tick层的clock_event_device->evt_handler()
+ * - 传统Tick层的 clock_event_device->evt_handler()
  *   > 当启用高精度定时器后，传统Tick层被取消掉，转而使用Tick模拟层
- *   > 对比Tick模拟层：tick_sched_timer()
+ *   > 对比Tick模拟层： tick_sched_timer()
  */
 static void tick_periodic(int cpu)
 {

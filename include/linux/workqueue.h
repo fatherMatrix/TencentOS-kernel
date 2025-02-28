@@ -106,7 +106,7 @@ enum {
  */
 struct work_struct {
 	/*
-	 * 低8位用作标志位，WORK_STRUCT_PENDING/WORK_STRUCT_PWQ/...；
+	 * 低8位用作标志位， WORK_STRUCT_PENDING / WORK_STRUCT_PWQ /...；
 	 * 高位用于存放上一次运行worker_pool的ID号或pool_workqueue的指针；
 	 * - pool_workqueue结构体按256字节对齐，地址低8位为NULL
 	 * - 具体存放ID还是pool_workqueue的指针根据 WORK_STRUCT_PWQ 来判断

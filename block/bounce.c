@@ -301,6 +301,9 @@ static void __blk_queue_bounce(struct request_queue *q, struct bio **bio_orig,
 		if (page_to_pfn(from.bv_page) > q->limits.bounce_pfn)
 			bounce = true;
 	}
+	/*
+	 * 有可能遍历完一圈儿，发现没有需要bounce的
+	 */
 	if (!bounce)
 		return;
 

@@ -2404,6 +2404,8 @@ __acquires(&pool->lock)
 
 	/*
 	 * 将work_struct从worker_pool->worklist或worker->scheduled上取下来；
+	 * - 所以当看到work_struct->entry未加入任何链表时，可以说明这个
+	 *   work_struct正在执行或者已经执行完了
 	 */
 	list_del_init(&work->entry);
 

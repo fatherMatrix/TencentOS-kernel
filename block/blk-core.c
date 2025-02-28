@@ -510,6 +510,10 @@ static void blk_rq_timed_out_timer(struct timer_list *t)
 {
 	struct request_queue *q = from_timer(q, t, timeout);
 
+	/*
+	 * blk_timeout_work()
+	 * blk_mq_timeout_work()
+	 */
 	kblockd_schedule_work(&q->timeout_work);
 }
 
@@ -1108,10 +1112,14 @@ blk_qc_t generic_make_request(struct bio *bio)
  	 *
  	 * 之所以会出现递归，是因为在LVM或者soft raid中driver可能会再次submit
  	 * bio
- 	 */ 
+	 */
 	if (current->bio_list) {
 		/* 添加到尾部 */
 		bio_list_add(&current->bio_list[0], bio);
+		/*
+		 * 从这里就可以看出REQ_SYNC不是让submit_bio()同步等待的意思，
+		 * submit_bio()应该是全异步的
+		 */
 		goto out;
 	}
 
@@ -1145,9 +1153,10 @@ blk_qc_t generic_make_request(struct bio *bio)
 			bio_list_init(&bio_list_on_stack[0]);
 			/*
 			 * 通过blk_queue_make_request()设置：
-			 * - 正常io： blk_mq_make_request()
-			 * - zram:  zram_make_request()
-			 * - lvm:  dm_make_request()
+			 * - 正常io: blk_mq_make_request()
+			 * - zram: zram_make_request()
+			 * - lvm/dm: dm_make_request()
+			 * - md: md_make_request()
 			 */
 			ret = q->make_request_fn(q, bio);
 
@@ -1162,6 +1171,11 @@ blk_qc_t generic_make_request(struct bio *bio)
 				if (q == bio->bi_disk->queue)
 					bio_list_add(&same, bio);
 				else
+					/*
+					 * 如果bio->bi_disk->queue不是当前设备的request_queue，
+					 * 说明当前request_queue是device_mapper的上层，此时应该
+					 * 先处理device_mapper的下层
+					 */
 					bio_list_add(&lower, bio);
 			/* now assemble so we handle the lowest level first */
 			bio_list_merge(&bio_list_on_stack[0], &lower);

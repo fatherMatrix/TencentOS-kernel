@@ -155,6 +155,9 @@ struct blkcg_gq {
 	struct blkg_policy_data		*pd[BLKCG_MAX_POLS];
 
 	spinlock_t			async_bio_lock;
+	/*
+	 * __blkcg_punt_bio_submit()
+	 */
 	struct bio_list			async_bios;
 	struct work_struct		async_bio_work;
 

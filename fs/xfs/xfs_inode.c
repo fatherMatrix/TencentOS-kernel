@@ -3850,6 +3850,7 @@ xfs_iflush_cluster(
 		/*
 		 * 获取XFS_IFLOCK（the flush lock）位锁；
 		 * - 理论上，位锁性能是不如自旋锁的
+		 * - 解锁位置在 xfs_iflush_done()
 		 */
 		if (!xfs_iflock_nowait(cip)) {
 		/*

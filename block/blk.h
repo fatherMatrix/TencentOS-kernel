@@ -21,6 +21,9 @@ struct blk_flush_queue {
 	unsigned int		flush_running_idx:1;
 	blk_status_t 		rq_status;
 	unsigned long		flush_pending_since;
+	/*
+	 * 这两个链表的链表元素都是 request->flush.list
+	 */
 	struct list_head	flush_queue[2];
 	struct list_head	flush_data_in_flight;
 	struct request		*flush_rq;

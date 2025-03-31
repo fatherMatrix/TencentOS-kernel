@@ -96,6 +96,9 @@ static inline bool is_migrate_movable(int mt)
 	for (order = 0; order < MAX_ORDER; order++) \
 		for (type = 0; type < MIGRATE_TYPES; type++)
 
+/*
+ * 参见 build_all_zonelists()
+ */
 extern int page_group_by_mobility_disabled;
 
 #define NR_MIGRATETYPE_BITS (PB_migrate_end - PB_migrate + 1)
@@ -884,6 +887,7 @@ typedef struct pglist_data {
 	 * Fields commonly accessed by the page reclaim scanner
 	 * - 高版本中说如果开启了memcg，那么本字段不会被使用？
 	 *   > upstream commit 867e5e1de14b2b2bde324cdfeec3f3f83eb21424
+	 *   > mem_cgroup_lruvec()
 	 */
 	struct lruvec		lruvec;
 

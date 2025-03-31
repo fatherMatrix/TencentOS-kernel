@@ -100,7 +100,7 @@ static unsigned int d_hash_shift __read_mostly;
  * 哈希键默认是由parent_dentry指针和last_name计算出来的
  * - dentry_hashtable中的dentry有可能是negative状态的；
  */
-static struct hlist_bl_head *dentry_hashtable __read_mostly;
+static struct hlist_bl_head *dentry_hashtable; // __read_mostly;
 
 static inline struct hlist_bl_head *d_hash(unsigned int hash)
 {
@@ -392,9 +392,6 @@ static void dentry_unlink_inode(struct dentry * dentry)
 	 * 放掉inode的锁后再操作inode会不会不安全？
 	 * - 首先，不会出现内存越界，因为此时本dentry对inode的引用还是在
 	 *   的，inode不会被释放；
-	 * - 其次，i_nlink会不会从0变1？
-	 *   > i_nlink会是0吗？
-	 *     > 感觉i_nlink变为0是由条件的；要看unlink的代码了；
 	 */
 	if (!inode->i_nlink)
 		fsnotify_inoderemove(inode);
@@ -617,6 +614,11 @@ static void __dentry_kill(struct dentry *dentry)
 	 * if it was on the hash then remove it
 	 *
 	 * 从dentry_hashtable中摘除此dentry
+	 * - 在dentry_hashtable中摘除此dentry后才会dentry_unlink_inode()
+	 *   > 那么dentry_hashtable中的负状态dentry哪里来的？
+	 *     o 初次查询时，新建的dentry会直接插入到dentry_hashtable中，
+	 *       如果盘上没有inode对应，则会以负状态保留在dentry_hashtable
+	 *       中
 	 */
 	__d_drop(dentry);
 	/*
@@ -1047,6 +1049,11 @@ __must_hold(&dentry->d_lock)
 	} else {
 		if (dentry->d_flags & DCACHE_LRU_LIST)
 			d_lru_del(dentry);
+		/*
+		 * 每次child dentry都持有一个parent dentry的count计数，这里是
+		 * 考虑如果我们是最后一个child dentry的话，就把parent dentry
+		 * 也处理了
+		 */
 		if (!--dentry->d_lockref.count)
 			d_shrink_add(dentry, list);
 	}
@@ -1294,6 +1301,9 @@ void shrink_dentry_list(struct list_head *list)
 		rcu_read_unlock();
 		d_shrink_del(dentry);
 		parent = dentry->d_parent;
+		/*
+		 * parent dentry的lock是在上面shrink_lock_dentry()中进行的
+		 */
 		if (parent != dentry)
 			__dput_to_list(parent, list);
 		__dentry_kill(dentry);
@@ -1446,6 +1456,8 @@ enum d_walk_ret {
  * @enter:	callback when first entering the dentry
  *
  * The @enter() callbacks are called with d_lock held.
+ *
+ * 对parent为根的dentry tree的DFS
  */
 static void d_walk(struct dentry *parent, void *data,
 		   enum d_walk_ret (*enter)(void *, struct dentry *))
@@ -1461,6 +1473,10 @@ again:
 	this_parent = parent;
 	spin_lock(&this_parent->d_lock);
 
+	/*
+	 * - select_collect()
+	 * - select_collect2()
+	 */
 	ret = enter(data, this_parent);
 	switch (ret) {
 	case D_WALK_CONTINUE:
@@ -1473,6 +1489,9 @@ again:
 		break;
 	}
 repeat:
+	/*
+	 * 开始遍历子进程的
+	 */
 	next = this_parent->d_subdirs.next;
 resume:
 	while (next != &this_parent->d_subdirs) {
@@ -1500,7 +1519,13 @@ resume:
 			continue;
 		}
 
+		/*
+		 * 如果这个子目录不是空的，则深度优先这个子目录
+		 */
 		if (!list_empty(&dentry->d_subdirs)) {
+			/*
+			 * 进入子级之前，会放弃父级的锁
+			 */
 			spin_unlock(&this_parent->d_lock);
 			spin_release(&dentry->d_lock.dep_map, 1, _RET_IP_);
 			this_parent = dentry;
@@ -1549,6 +1574,10 @@ rename_retry:
 	BUG_ON(seq & 1);
 	if (!retry)
 		return;
+	/*
+	 * 此时上面的 read_seqbegin_or_lock() 会直接spin_lock()，从而阻止任
+	 * 何可能的 write_seqlock()
+	 */
 	seq = 1;
 	goto again;
 }
@@ -1665,10 +1694,23 @@ static enum d_walk_ret select_collect(void *_data, struct dentry *dentry)
 		goto out;
 
 	if (dentry->d_flags & DCACHE_SHRINK_LIST) {
+	/*
+	 * 该dentry处于别人的局部shrink链表上
+	 */
 		data->found++;
 	} else {
+	/*
+	 * 没有DCACHE_SHRINK_LIST说明没有被shrink相关路径加入到局部shrink list中
+	 */
 		if (dentry->d_flags & DCACHE_LRU_LIST)
 			d_lru_del(dentry);
+		/*
+		 * 我们这里要进行尝试进行shrink操作，上面可以无条件拿下来：
+		 * - 如果此时count确实为0，我们可以将其放到我们的局部shrink list
+		 *   中，后续进行shrink操作；
+		 * - 如果此时发现count不为0了，说明dentry从unused状态变更为了
+		 *   inused状态，那上面的d_lru_del()操作也没有做错。
+		 */
 		if (!dentry->d_lockref.count) {
 			d_shrink_add(dentry, &data->dispose);
 			data->found++;
@@ -1731,13 +1773,26 @@ void shrink_dcache_parent(struct dentry *parent)
 		d_walk(parent, &data, select_collect);
 
 		if (!list_empty(&data.dispose)) {
+			/*
+			 * 该函数出来时，dispose链表一定为空
+			 */
 			shrink_dentry_list(&data.dispose);
+			/*
+			 * select_collect()选到dentry之后，就不会走
+			 * select_collect2()了
+			 */
 			continue;
 		}
 
 		cond_resched();
 		if (!data.found)
 			break;
+		/*
+		 * 走到这里，found不为0，但dispose链表为空
+		 * - 这说明目标dentry都在其他内核路径的局部shrink链表上
+		 *   > 这里和select_collect()不同的地方在于如果处于其他内核路径
+		 *     的局部shrink链表上的话，可以强行锁定，以保证有进度
+		 */
 		data.victim = NULL;
 		d_walk(parent, &data, select_collect2);
 		if (data.victim) {

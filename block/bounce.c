@@ -376,10 +376,18 @@ void blk_queue_bounce(struct request_queue *q, struct bio **bio_orig)
 	 * don't waste time iterating over bio segments
 	 */
 	if (!(q->bounce_gfp & GFP_DMA)) {
+	/*
+	 * 非DMA场景
+	 * - 需要回弹缓冲区的原因是request_queue自己设置了pfn上限
+	 */
 		if (q->limits.bounce_pfn >= blk_max_pfn)
 			return;
 		pool = &page_pool;
 	} else {
+	/*
+	 * DMA场景
+	 * - 主要是ISA总线的DMA内存区域限制
+	 */
 		BUG_ON(!mempool_initialized(&isa_page_pool));
 		pool = &isa_page_pool;
 	}

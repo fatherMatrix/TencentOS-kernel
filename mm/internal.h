@@ -122,7 +122,7 @@ struct alloc_context {
 	 */
 	int migratetype;
 	/*
-	 * 首选的zone类型，high的意思是：可以去lower zone借用
+	 * 首选的zone类型，high的意思是：可以去lower zone借用（zone间高可借低）
 	 */
 	enum zone_type high_zoneidx;
 	bool spread_dirty_pages;

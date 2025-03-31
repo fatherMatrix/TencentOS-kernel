@@ -1702,10 +1702,17 @@ int kvm_arch_init(void *opaque)
 	in_hyp_mode = is_kernel_in_hyp_mode();
 
 	if (!in_hyp_mode && kvm_arch_requires_vhe()) {
+		/*
+		 * 主要是保证开启SVE时，VHE也一定开启了
+		 * - 这是架构要求
+		 */
 		kvm_pr_unimpl("CPU unsupported in non-VHE mode, not initializing\n");
 		return -ENODEV;
 	}
 
+	/*
+	 * 检查系统中每个cpu是否都支持虚拟化
+	 */
 	for_each_online_cpu(cpu) {
 		smp_call_function_single(cpu, check_kvm_target_cpu, &ret, 1);
 		if (ret < 0) {

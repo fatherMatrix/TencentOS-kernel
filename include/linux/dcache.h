@@ -125,6 +125,12 @@ struct dentry {
 
 	/* Ref lookup also touches following */
 	struct lockref d_lockref;	/* per-dentry lock and refcount */
+	/*
+	 * 为了使Source Insight可以检索到上面宏定义的d_lockref.d_lock
+	 * - 请注意，完全为了make Source Insight happy，并没有下面这个字段
+	 */
+	struct spin_lock d_lock;
+
 	/* 
 	 * dentry的操作方法 
 	 */

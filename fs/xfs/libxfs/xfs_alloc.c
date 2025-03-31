@@ -1187,6 +1187,10 @@ restart:
 	args->wasfromfl = 0;
 
 	/*
+	 * 走到这里说明在btree中（而不是在AGFL中）找到了
+	 */
+
+	/*
 	 * First algorithm.
 	 * If the requested extent is large wrt the freespaces available
 	 * in this a.g., then the cursor will be pointing to a btree entry
@@ -3085,8 +3089,17 @@ xfs_alloc_vextent(
 			*/
 			if (++(args->agno) == mp->m_sb.sb_agcount) {
 				if (args->tp->t_firstblock != NULLFSBLOCK)
+				/*
+				 * 如果已经分配过磁盘块了，那么后续分配时只能在更高
+				 * 的AG中分配，不能绕回。
+				 */
 					args->agno = sagno;
 				else
+				/*
+				 * 如果还没有分配过磁盘块，则说明肯定没有持有任何AG
+				 * 的AGF lock，因此可以放心地绕回到0号AG，不会有死锁
+				 * 问题
+				 */
 					args->agno = 0;
 			}
 			/*

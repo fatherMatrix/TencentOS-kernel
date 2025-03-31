@@ -3873,6 +3873,10 @@ retry:
 			if (alloc_flags & ALLOC_NO_WATERMARKS)
 				goto try_this_zone;
 
+			/*
+			 * node_reclaim_mode受/proc/sys/vm/zone_reclaim_mode的控制
+			 * - devcloud默认为0
+			 */
 			if (node_reclaim_mode == 0 ||
 			    !zone_allows_reclaim(ac->preferred_zoneref->zone, zone))
 				continue;
@@ -6150,6 +6154,11 @@ void __ref build_all_zonelists(pg_data_t *pgdat)
 	 * more accurate, but expensive to check per-zone. This check is
 	 * made on memory-hotadd so a system can start with mobility
 	 * disabled and enable it later
+	 *
+	 * migration type盗用的基本单位是page_block，如果内存总量没办法给
+	 * 每个migration type都分配一个page_block，则禁止掉可移动性分类。
+	 * - 如果禁用掉可移动性分类后，则所有内存都是 MIGRATE_UNMOVABLE
+	 *   > 参见： gfpflags_to_migratetype()
 	 */
 	if (vm_total_pages < (pageblock_nr_pages * MIGRATE_TYPES))
 		page_group_by_mobility_disabled = 1;

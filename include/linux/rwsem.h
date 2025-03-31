@@ -34,9 +34,13 @@
  */
 struct rw_semaphore {
 	/*
-	 * - RWSEM_UNLOCKED_VALUE
+	 * count的结构见下面这几个宏定义处上面的大段注释：
 	 * - RWSEM_WRITER_LOCKED
+	 * - RWSEM_READER_BIAS
 	 * - ... ...
+	 *
+	 * 特殊值：
+	 * - RWSEM_UNLOCKED_VALUE
 	 */
 	atomic_long_t count;
 	/*

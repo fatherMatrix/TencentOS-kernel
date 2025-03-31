@@ -68,7 +68,10 @@
  * 页回收的参数传递
  */
 struct scan_control {
-	/* How many pages shrink_list() should reclaim */
+	/*
+	 * How many pages shrink_list() should reclaim
+	 * - 需要回收的页面数量
+	 */
 	unsigned long nr_to_reclaim;
 
 	/*
@@ -105,10 +108,20 @@ struct scan_control {
 	/* One of the zones is ready for compaction */
 	unsigned int compaction_ready:1;
 
-	/* Allocation order */
+	/*
+	 * Allocation order
+	 * - 触发内存回收的内存分配使用的order
+	 */
 	s8 order;
 
-	/* Scan (total_size >> priority) pages at once */
+	/*
+	 * Scan (total_size >> priority) pages at once
+	 * - 这个参数主要会影响内存回收的四个位置：
+	 *   > 一次扫描的页框数量
+	 *   > 在shrink_lruvec()中回收到足够页框后是否继续回收
+	 *   > 内存回收时的回写
+	 *   > 是否取消对zone进行回收判断而直接开始回收
+	 */
 	s8 priority;
 
 	/* The highest zone to isolate pages for reclaim from */
@@ -906,6 +919,9 @@ static pageout_t pageout(struct page *page, struct address_space *mapping,
 		SetPageReclaim(page);
 		if (!current_is_kswapd())
 			sli_memlat_stat_start(&start);
+		/*
+		 * - swap_aops.swap_writepage()
+		 */
 		res = mapping->a_ops->writepage(page, &wbc);
 		if (!current_is_kswapd())
 			sli_memlat_stat_end(global_reclaim(sc) ?
@@ -2817,6 +2833,15 @@ static bool pgdat_memcg_congested(pg_data_t *pgdat, struct mem_cgroup *memcg)
 		(memcg && memcg_congested(pgdat, memcg));
 }
 
+/*
+ * 网上说，内存回收针对三类对象：
+ * - slab
+ * - lru链表中的页，即进程空间中使用的内存页
+ *   > anon page
+ *   > file page
+ *   > shmem page
+ * - buffer_head
+ */
 static bool shrink_node(pg_data_t *pgdat, struct scan_control *sc)
 {
 	struct reclaim_state *reclaim_state = current->reclaim_state;
@@ -2881,7 +2906,7 @@ static bool shrink_node(pg_data_t *pgdat, struct scan_control *sc)
 			reclaimed = sc->nr_reclaimed;
 			scanned = sc->nr_scanned;
 			/*
-			 * 收缩memcg
+			 * 收缩lru
 			 */
 			shrink_node_memcg(pgdat, memcg, sc, &lru_pages);
 			node_lru_pages += lru_pages;
@@ -3022,8 +3047,11 @@ static inline bool compaction_ready(struct zone *zone, struct scan_control *sc)
 
 /*
  * This is the direct reclaim path, for page-allocating processes.  We only
+ *             ^^^^^^^^^^^^^^                                       ^^^^^^^
  * try to reclaim pages from zones which will satisfy the caller's allocation
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * request.
+ * ^^^^^^^^
  *
  * If a zone is deemed to be full of pinned pages then just give it a light
  * scan then give up on it.
@@ -3048,6 +3076,9 @@ static void shrink_zones(struct zonelist *zonelist, struct scan_control *sc)
 		sc->reclaim_idx = gfp_zone(sc->gfp_mask);
 	}
 
+	/*
+	 * 循环zonelist中的zone，找到zone后，开始对该zone所属的node进行shrink
+	 */
 	for_each_zone_zonelist_nodemask(zone, z, zonelist,
 					sc->reclaim_idx, sc->nodemask) {
 		/*
@@ -3166,9 +3197,15 @@ retry:
 		 */
 		shrink_zones(zonelist, sc);
 
+		/*
+		 * 已经回收的页数 大于 要回收页数，结束
+		 */
 		if (sc->nr_reclaimed >= sc->nr_to_reclaim)
 			break;
 
+		/*
+		 * 有zone准备好了做内存规整
+		 */
 		if (sc->compaction_ready)
 			break;
 

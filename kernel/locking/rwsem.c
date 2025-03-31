@@ -41,6 +41,7 @@
  * When the rwsem is either owned by an anonymous writer, or it is
  * reader-owned, but a spinning writer has timed out, both nonspinnable
  * bits will be set to disable optimistic spinning by readers and writers.
+ * - 禁止spin的条件 ^
  * In the later case, the last unlocking reader should then check the
  * writer nonspinnable bit and clear it only to give writers preference
  * to acquire the lock via optimistic spinning, but not readers. Similar
@@ -281,11 +282,25 @@ static inline void rwsem_set_nonspinnable(struct rw_semaphore *sem)
 					  owner | RWSEM_NONSPINNABLE));
 }
 
+/*
+ * 返回值含义：
+ * - 返回0，锁定失败
+ * - 返回非0，锁定成功
+ */
 static inline bool rwsem_read_trylock(struct rw_semaphore *sem)
 {
 	long cnt = atomic_long_add_return_acquire(RWSEM_READER_BIAS, &sem->count);
+	/*
+	 * 当reader的数量过多（以至于都溢出了）的时候，需要禁止乐观自旋
+	 * - 开启乐观自旋的地方在？
+	 */
 	if (WARN_ON_ONCE(cnt < 0))
 		rwsem_set_nonspinnable(sem);
+	/*
+	 * cnt & RWSEM_READ_FAILED_MASK的值：
+	 * - 为0，表示当前没有writer、没有handoff等等，可以获取reader lock
+	 * - 不为0，表示有writer、或者有handoff等等
+	 */
 	return !(cnt & RWSEM_READ_FAILED_MASK);
 }
 
@@ -1373,10 +1388,17 @@ inline void __down_read(struct rw_semaphore *sem)
 static inline int __down_read_interruptible(struct rw_semaphore *sem)
 {
 	if (!rwsem_read_trylock(sem)) {
+	/*
+	 * rwsem_read_trylock()返回0，锁定失败
+	 * - 应注意，此时rwsem_read_trylock()中是对count增加了RWSEM_READER_BIAS的
+	 */
 		if (IS_ERR(rwsem_down_read_slowpath(sem, TASK_INTERRUPTIBLE)))
 			return -EINTR;
 		DEBUG_RWSEMS_WARN_ON(!is_rwsem_reader_owned(sem), sem);
 	} else {
+	/*
+	 * rwsem_read_trylock()返回非0，锁定成功
+	 */
 		rwsem_set_reader_owned(sem);
 	}
 	return 0;
@@ -1595,7 +1617,7 @@ void __sched down_write(struct rw_semaphore *sem)
 	 */ 
 	rwsem_acquire(&sem->dep_map, 0, 0, _RET_IP_);
 	/*
-	 * 没有配置CONFIG_LOCK_STAT时，这个条件编译为__down_write(sem)
+	 * 没有配置CONFIG_LOCK_STAT时，这个条件编译为 __down_write(sem)
 	 */
 	LOCK_CONTENDED(sem, __down_write_trylock, __down_write);
 }

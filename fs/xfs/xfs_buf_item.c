@@ -1011,6 +1011,9 @@ xfs_buf_item_relse(
  * already, set the buffer's b_iodone() routine to be
  * xfs_buf_iodone_callbacks() and link the log item into the list of
  * items rooted at b_li_list.
+ * - 有些object（比如xfs_inode）是依托于xfs_buf来做IO操作的，那么需要将这类
+ *   object的xfs_log_item attach到xfs_buf中
+ *   > 这种场景要区别与 xfs_trans_dirty_buf() 中配置xfs_buf->b_iodone
  */
 void
 xfs_buf_attach_iodone(
@@ -1240,6 +1243,9 @@ xfs_buf_iodone_callbacks(
 	bp->b_retries = 0;
 	bp->b_first_retry_time = 0;
 
+	/*
+	 * 其中会释放掉 xfs_buf->b_log_item
+	 */
 	xfs_buf_do_callbacks(bp);
 	bp->b_log_item = NULL;
 	list_del_init(&bp->b_li_list);

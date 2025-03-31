@@ -686,6 +686,8 @@ static void hctx_lock(struct blk_mq_hw_ctx *hctx, int *srcu_idx)
  * Description:
  *	Ends all I/O on a request. It does not handle partial completions.
  *	The actual completion happens out-of-order, through a IPI handler.
+ *
+ * 这个函数是在中断上下文中执行的
  **/
 bool blk_mq_complete_request(struct request *rq)
 {
@@ -1900,6 +1902,7 @@ static blk_status_t __blk_mq_issue_directly(struct blk_mq_hw_ctx *hctx,
 	 *
 	 * 调用设备驱动填充的queue_rq()接口，将request放到设备驱动管理范畴里；
 	 * - nvme: nvme_queue_rq()
+	 * - scsi: scsi_queue_rq()
 	 */
 	ret = q->mq_ops->queue_rq(hctx, &bd);
 	switch (ret) {
@@ -2053,7 +2056,7 @@ static blk_qc_t blk_mq_make_request(struct request_queue *q, struct bio *bio)
 
 	/*
 	 * DMA的回弹缓冲区
-	 * - 有空要好好看一下，比如iommu的dma remapping用了吗？怎么用的？
+	 * - v5.4中没有看到借用IOMMU的能力
 	 */
 	blk_queue_bounce(q, &bio);
 	/*

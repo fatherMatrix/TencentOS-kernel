@@ -2214,6 +2214,9 @@ int write_cache_pages(struct address_space *mapping,
 		if (wbc->range_start == 0 && wbc->range_end == LLONG_MAX)
 			range_whole = 1;
 	}
+	/*
+	 * 什么场景下没有WB_SYNC_ALL标记呢？
+	 */
 	if (wbc->sync_mode == WB_SYNC_ALL || wbc->tagged_writepages)
 		tag = PAGECACHE_TAG_TOWRITE;
 	else
@@ -2247,10 +2250,10 @@ int write_cache_pages(struct address_space *mapping,
 			 * 设置PG_locked
 			 * - 放锁在哪里？
 			 *   > 下面的writeback中标记上PG_writeback之后就unlock_page()，
-			 *     后续路径在PageWriteback()上等待
-			 *     o 这里不对，iomap_page_mkwrite() -> wait_for_stable_page()
-			 *       并不总是会被调用
-			 *       = 难道，写pagecache和刷pagecache真的是可以并发的？
+			 *     写路径后续可能在PageWriteback()上等待
+			 *     o 之所以是可能？
+			 *       x iomap_page_mkwrite() -> wait_for_stable_page()并不总
+			 *         是会被调用。写pagecache和刷pagecache竟然是可以并发的
 			 */
 			lock_page(page);
 
@@ -2306,6 +2309,8 @@ continue_unlock:
 			 *                 vmf->vma->vm_ops->page_mkwrite()
 			 *                   ... xfs: xfs_filemap_page_mkwrite()
 			 *                     ... wait_for_stable_page()
+			 *     o 如果硬盘没要求，则不等待，允许回写和写入并发
+			 *       x 其实允许回写和写入并发反倒是常见情况
 			 *
 			 * 返回值是该page结构体原来是否有PageDirty
 			 * - 如果原来没有PageDirty，则无需writeback，continue

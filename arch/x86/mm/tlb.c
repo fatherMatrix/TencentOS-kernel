@@ -122,6 +122,10 @@ static void choose_new_asid(struct mm_struct *next, u64 next_tlb_gen,
  * 什么是local tlb entry？
  * - local tlb entry：不在进程间共享的tlb，主要用于用户态地址空间
  *   > 对应到x86就是非global page
+ *
+ * cr3切换时的数据缓存问题呢？
+ * - 数据缓存由ESXI硬件协议来保证多核间的一致性
+ * - store buffer中的数据要先flush到cache中才能靠ESXI来保证一致性吧？
  */
 static void load_new_mm_cr3(pgd_t *pgdir, u16 new_asid, bool need_flush)
 {

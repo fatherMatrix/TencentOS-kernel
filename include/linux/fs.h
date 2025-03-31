@@ -801,6 +801,9 @@ struct inode {
 	struct timespec64	i_atime;
 	struct timespec64	i_mtime;
 	struct timespec64	i_ctime;
+	/*
+	 * 这个加锁顺序要先于 dentry->d_lock
+	 */
 	spinlock_t		i_lock;	/* i_blocks, i_bytes, maybe i_size */
 	unsigned short          i_bytes;
 	/*
@@ -825,7 +828,7 @@ struct inode {
 	struct rw_semaphore	i_rwsem;
 
 	/*
-	 * 该字段含义详见__mark_inode_dirty()注释最后一段
+	 * 该字段含义详见 __mark_inode_dirty() 注释最后一段
 	 */
 	unsigned long		dirtied_when;	/* jiffies of first dirtying */
 	unsigned long		dirtied_time_when;
@@ -867,7 +870,7 @@ struct inode {
 	struct list_head	i_wb_list;	/* backing dev writeback list */
 	union {
 		/*
-		 * 所有引用该inode的dentry将形成一个链表，对应dentry->d_alias
+		 * 所有引用该inode的dentry将形成一个链表，对应 dentry->d_alias
 		 *
 		 * 这些dentry是硬链接吗？
 		 */
@@ -1813,8 +1816,15 @@ struct super_block {
 	 *
 	 * dentry->lockref减小到0的dentry链表；
 	 * - 链表元素是dentry->d_lru
-	 * - 参见 dput() -> retain_dentry() -> d_lru_add()
-	 * - 经crash验证，其中的dentry确实lockref都为0，但保留有对应的inode
+	 * - 当dentry进入unused状态时，希望缓存起来以供后续使用，但我们需要管理
+	 *   起来以便内存紧张时定位到他们并将其回收
+	 * - 仅仅是期望，如果中途变更为inused状态了，还需要依靠shrink过程发现并将
+	 *   其顺手摘下，这里存在一个小的时间窗口
+	 *   > dput() -> retain_dentry() -> d_lru_add()
+	 *   > dentry_kill() ~> d_lru_del()
+	 *   > prune_dcache_sb() -> dentry_lru_isolate() -> d_lru_isolate() 将重
+	 *     新变为使用中状态的dentry从lru上摘下来
+	 *   > select_collect() / select_collect2() -> d_lru_del()
 	 */
 	struct list_lru		s_dentry_lru;
 	/*

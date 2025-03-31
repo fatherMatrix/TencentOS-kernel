@@ -7,11 +7,21 @@
  * Lower value means higher priority, analogically to reclaim priority.
  */
 enum compact_priority {
+	/*
+	 * 完全同步模式，允许阻塞，允许回写
+	 */
 	COMPACT_PRIO_SYNC_FULL,
 	MIN_COMPACT_PRIORITY = COMPACT_PRIO_SYNC_FULL,
+	/*
+	 * 轻量级同步模式，允许阻塞，不允许回写
+	 */
 	COMPACT_PRIO_SYNC_LIGHT,
 	MIN_COMPACT_COSTLY_PRIORITY = COMPACT_PRIO_SYNC_LIGHT,
 	DEF_COMPACT_PRIORITY = COMPACT_PRIO_SYNC_LIGHT,
+	/*
+	 * 异步模式，不允许阻塞
+	 * - 内存规整过程还是在分配路径上执行的，只不过杜绝了规整过程中的阻塞
+	 */
 	COMPACT_PRIO_ASYNC,
 	INIT_COMPACT_PRIORITY = COMPACT_PRIO_ASYNC
 };

@@ -22,8 +22,7 @@ static inline void flush_kernel_dcache_page(struct page *page)
 {
 }
 /*
- * IO子系统只认内核逻辑地址，这里要确保经过内核虚拟地址的修改对IO子系统可见
- * - 可见的含义是在内存中可见了
+ * IO子系统是通过物理内存页传输数据的（不是通过cpu缓存），这里要确保cache别名不对vmap后写的区域产生影响
  */
 static inline void flush_kernel_vmap_range(void *vaddr, int size)
 {

@@ -710,7 +710,7 @@ void free_pipe_info(struct pipe_inode_info *pipe)
 	kfree(pipe);
 }
 
-static struct vfsmount *pipe_mnt __read_mostly;
+static struct vfsmount *pipe_mnt; // __read_mostly;
 
 /*
  * pipefs_dname() is called from d_path().
@@ -773,6 +773,9 @@ int create_pipe_files(struct file **res, int flags)
 	if (!inode)
 		return -ENFILE;
 
+	/*
+	 * 创建写端
+	 */
 	f = alloc_file_pseudo(inode, pipe_mnt, "",
 				O_WRONLY | (flags & (O_NONBLOCK | O_DIRECT)),
 				&pipefifo_fops);
@@ -784,6 +787,9 @@ int create_pipe_files(struct file **res, int flags)
 
 	f->private_data = inode->i_pipe;
 
+	/*
+	 * 创建读端
+	 */
 	res[0] = alloc_file_clone(f, O_RDONLY | (flags & O_NONBLOCK),
 				  &pipefifo_fops);
 	if (IS_ERR(res[0])) {

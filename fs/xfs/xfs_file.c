@@ -232,6 +232,22 @@ xfs_file_buffered_aio_read(
 
 	trace_xfs_file_buffered_read(ip, iov_iter_count(to), iocb->ki_pos);
 
+	/*
+	 * 这里这个锁，ext4并没有，属于xfs支持非撕裂读写特有的保护
+	 * - 参见社区被拒绝的patch：
+	 *   > https://lore.kernel.org/linux-xfs/20241226061602.2222985-1-chizhiling@163.com/
+	 * - 简介：
+	 *   > Using an rwsem to protect file data ensures that we can always obtain a
+	 *     completed modification. But due to the lock, we need to wait for the
+	 *     write process to release the rwsem before we can read it, even if we are
+	 *     reading a different region of the file. This could take a lot of time
+	 *     when many processes need to write and read this file.
+	 *
+	 *     On the other hand, The ext4 filesystem and others do not hold the lock
+	 *     during buffered reading, which make the ext4 have better performance in
+	 *     that case. Therefore, I think it will be fine if we remove the lock in
+	 *     xfs, as most applications can handle this situation.
+	 */
 	if (iocb->ki_flags & IOCB_NOWAIT) {
 		if (!xfs_ilock_nowait(ip, XFS_IOLOCK_SHARED))
 			return -EAGAIN;

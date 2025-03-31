@@ -208,6 +208,8 @@ typedef struct xfs_buf {
 	 * xfs_buf所属的xfs_buf_log_item
 	 * - xfs_buf_log_item->bli_buf即指向本结构体；
 	 * - 如果不需要log的xfs_buf，这个就没有xfs_buf_log_item
+	 * - 初始化： xfs_buf_item_init()
+	 * - 反初始化： xfs_buf_item_relse()
 	 */
 	struct xfs_buf_log_item	*b_log_item;
 	/*

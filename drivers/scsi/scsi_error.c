@@ -69,6 +69,9 @@ void scsi_eh_wakeup(struct Scsi_Host *shost)
 
 	if (scsi_host_busy(shost) == shost->host_failed) {
 		trace_scsi_eh_wakeup(shost);
+		/*
+		 * scsi_error_handler()
+		 */
 		wake_up_process(shost->ehandler);
 		SCSI_LOG_ERROR_RECOVERY(5, shost_printk(KERN_INFO, shost,
 			"Waking error handler thread\n"));
@@ -254,6 +257,9 @@ void scsi_eh_scmd_add(struct scsi_cmnd *scmd)
 	WARN_ON_ONCE(!shost->ehandler);
 
 	spin_lock_irqsave(shost->host_lock, flags);
+	/*
+	 * 将host状态设置为SHOST_RECOVERY
+	 */
 	if (scsi_host_set_state(shost, SHOST_RECOVERY)) {
 		ret = scsi_host_set_state(shost, SHOST_CANCEL_RECOVERY);
 		WARN_ON_ONCE(ret);
@@ -2219,6 +2225,9 @@ int scsi_error_handler(void *data)
 			continue;
 		}
 
+		/*
+		 * - sas_scsi_recover_host()
+		 */
 		if (shost->transportt->eh_strategy_handler)
 			shost->transportt->eh_strategy_handler(shost);
 		else

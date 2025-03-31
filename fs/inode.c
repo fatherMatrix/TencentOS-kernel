@@ -54,12 +54,12 @@
  *   inode_hash_lock
  */
 
-static unsigned int i_hash_mask __read_mostly;
-static unsigned int i_hash_shift __read_mostly;
+static unsigned int i_hash_mask; // __read_mostly;
+static unsigned int i_hash_shift; // __read_mostly;
 /*
  * 哈希键为superblock和inode_no
  */
-static struct hlist_head *inode_hashtable __read_mostly;
+static struct hlist_head *inode_hashtable; // __read_mostly;
 static __cacheline_aligned_in_smp DEFINE_SPINLOCK(inode_hash_lock);
 
 /*
@@ -730,6 +730,9 @@ static void dispose_list(struct list_head *head)
 		struct inode *inode;
 
 		inode = list_first_entry(head, struct inode, i_lru);
+		/*
+		 * 在icache中摘下
+		 */
 		list_del_init(&inode->i_lru);
 
 		/*
@@ -1816,6 +1819,9 @@ static void iput_final(struct inode *inode)
 	 * - drop是0，即inode->i_nlink != 0，且inode本身是hashed状态
 	 *   > inode引用计数已经是0了，还能处于hashed状态？
 	 *     o 从inode_hashtable中摘下来是在后面的evict()中进行的
+	 *       x 可evict()在更下面，那如何最终释放呢？
+	 *         + prune_icache_sb() 中调用evict()不经过iput_final()，因此不会被
+	 *           这里拦截
 	 * - super_block还带有SB_ACTIVE标志
 	 *
 	 * --------------------------------------------------------------------

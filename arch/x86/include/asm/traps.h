@@ -27,6 +27,19 @@ asmlinkage void segment_not_present(void);
 asmlinkage void stack_segment(void);
 asmlinkage void general_protection(void);
 asmlinkage void page_fault(void);
+/*
+ * 诸多定义：
+ * - arch/x86/entry/entry_64.S: idtentry async_page_fault        do_async_page_fault     has_error_code=1  read_cr2=1
+ * - ... ...
+ *
+ * 在使用影子页表的时代，缺页异常会导致cpu从guest态退出到host态。
+ * - 使用EPT之后，会存在两张页表：
+ *   > 子机页表缺页，则直接在子机中处理
+ *   > 母机页表却也，则触发vmexit后在母机处理
+ *     o 这就是说，冷机器的guest缺页很可能会有两次异常
+ *       + 第一次在子机中处理，填充子机页表
+ *       + 第二次在母机中处理，填充EPT页表；由于母机不知道子机会如何填充子机页表，所以这里没机会做合并处理
+ */
 asmlinkage void async_page_fault(void);
 asmlinkage void spurious_interrupt_bug(void);
 asmlinkage void coprocessor_error(void);

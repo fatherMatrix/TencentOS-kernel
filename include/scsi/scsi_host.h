@@ -561,7 +561,13 @@ struct Scsi_Host {
 
 	struct mutex		scan_mutex;/* serialize scanning activity */
 
+	/*
+	 * 错误命令链表头，链表元素是 scsi_cmnd.eh_entry
+	 */
 	struct list_head	eh_cmd_q;
+	/*
+	 * scsi_error_handler()
+	 */
 	struct task_struct    * ehandler;  /* Error recovery thread. */
 	struct completion     * eh_action; /* Wait for specific actions on the
 					      host. */

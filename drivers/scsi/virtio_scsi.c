@@ -165,6 +165,9 @@ static void virtscsi_complete_cmd(struct virtio_scsi *vscsi, void *buf)
 			set_driver_byte(sc, DRIVER_SENSE);
 	}
 
+	/*
+	 * - scsi_mq_done()
+	 */
 	sc->scsi_done(sc);
 }
 
@@ -181,6 +184,9 @@ static void virtscsi_vq_done(struct virtio_scsi *vscsi,
 	do {
 		virtqueue_disable_cb(vq);
 		while ((buf = virtqueue_get_buf(vq, &len)) != NULL)
+			/*
+			 * - virtscsi_complete_cmd()
+			 */
 			fn(vscsi, buf);
 
 		if (unlikely(virtqueue_is_broken(vq)))

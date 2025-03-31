@@ -278,6 +278,9 @@ char *d_path(const struct path *path, char *buf, int buflen)
 	 */
 	if (path->dentry->d_op && path->dentry->d_op->d_dname &&
 	    (!IS_ROOT(path->dentry) || path->dentry != path->mnt->mnt_root))
+		/*
+		 * pipefs: pipefs_dname()
+		 */
 		return path->dentry->d_op->d_dname(path->dentry, buf, buflen);
 
 	rcu_read_lock();

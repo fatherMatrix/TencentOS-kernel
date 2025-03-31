@@ -184,6 +184,10 @@ int sas_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *cmd)
 	if (!task)
 		return SCSI_MLQUEUE_HOST_BUSY;
 
+	/*
+	 * - hisi_sas_queue_command()
+	 * - ... ...
+	 */
 	res = i->dft->lldd_execute_task(task, GFP_ATOMIC);
 	if (res)
 		goto out_free_task;
@@ -724,6 +728,10 @@ void sas_scsi_recover_host(struct Scsi_Host *shost)
 {
 	struct sas_ha_struct *ha = SHOST_TO_SAS_HA(shost);
 	LIST_HEAD(eh_work_q);
+	/*
+	 * For Source Insight
+	 */
+	struct list_head eh_work_q;
 	int tries = 0;
 	bool retry;
 

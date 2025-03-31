@@ -65,10 +65,19 @@ struct scsi_pointer {
 /* for scmd->state */
 #define SCMD_STATE_COMPLETE	0
 
+/*
+ * 一条scsi命令
+ */
 struct scsi_cmnd {
 	struct scsi_request req;
 	struct scsi_device *device;
+	/*
+	 * 作为链表元素链接到空闲链表，或者SCSI设备的命令链表
+	 */
 	struct list_head list;  /* scsi_cmnd participates in queue lists */
+	/*
+	 * 当命令发生错误时，作为链表元素将本身挂入 Scsi_Host.eh_cmd_q
+	 */
 	struct list_head eh_entry; /* entry for the host eh_cmd_q */
 	struct delayed_work abort_work;
 

@@ -151,9 +151,20 @@ static void inject_undef64(struct kvm_vcpu *vcpu)
 	unsigned long cpsr = *vcpu_cpsr(vcpu);
 	u32 esr = (ESR_ELx_EC_UNKNOWN << ESR_ELx_EC_SHIFT);
 
+	/*
+	 * 返回到EL1后，我们希望guest执行的是同步异常，所以我们把vcpu的pc
+	 * 设置为了同步异常的处理函数地址；然后我们希望EL1的同步异常处理
+	 * 完毕后调用ERET返回到进入EL2时的位置（注意此时vcpu的pc保存的就是
+	 * 这个位置），所以我们把vcpu的elr寄存器设置为该地址。此时：
+	 * - EL2中调用一次ERET，返回到EL1的同步异常处理；
+	 * - EL1中的同步异常处理执行完之后，再调用ERET返回到被打断的指令
+	 */
 	vcpu_write_elr_el1(vcpu, *vcpu_pc(vcpu));
 	*vcpu_pc(vcpu) = get_except_vector(vcpu, except_type_sync);
 
+	/*
+	 * 将当前vcpu的pstate保存到vcpu数据结构中
+	 */
 	*vcpu_cpsr(vcpu) = get_except64_pstate(vcpu);
 	vcpu_write_spsr(vcpu, cpsr);
 

@@ -1785,6 +1785,7 @@ struct block_device_operations {
 	void (*release) (struct gendisk *, fmode_t);
 	/*
 	 * 和bdi系统以及submit_bio()的关系？
+	 * - zram系统使用了该接口
 	 */
 	int (*rw_page)(struct block_device *, sector_t, struct page *, unsigned int);
 	int (*ioctl) (struct block_device *, fmode_t, unsigned, unsigned long);

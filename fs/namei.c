@@ -3108,6 +3108,12 @@ static int path_parentat(struct nameidata *nd, unsigned flags,
 	return err;
 }
 
+/*
+ * 返回要删除文件的父目录的name
+ *
+ * path中保存已经解析完成的文件路径，在这里就是待删除文件的父目录
+ * last中保存未解析的文件路径，在这里就是要删除的文件
+ */
 static struct filename *filename_parentat(int dfd, struct filename *name,
 				unsigned int flags, struct path *parent,
 				struct qstr *last, int *type)
@@ -4914,6 +4920,9 @@ retry:
 exit3:
 	dput(dentry);
 exit2:
+	/*
+	 * 释放父目录
+	 */
 	inode_unlock(path.dentry->d_inode);
 	mnt_drop_write(path.mnt);
 exit1:

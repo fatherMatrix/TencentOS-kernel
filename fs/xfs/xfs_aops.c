@@ -998,7 +998,9 @@ xfs_writepage_map(
 		 * 上4K的block，只会循环一次。
 		 * - 对于这种只循环一次的情况，并不会每次在下面的
 		 *   xfs_submit_ioend()中进行提交，这样会导致下发很多离散的io
-		 *   > 只有当前page与xfs_writepage_ctx->xfs_ioend中现有的
+		 *   > 提交与否要看xfs_add_to_ioend()中使用产生了新的ioend并将老
+		 *     的放入了submit_list链表
+		 *   > 只有当前page与xfs_writepage_ctx->xfs_ioend中现有的满足：
 		 */
 		xfs_add_to_ioend(inode, file_offset, page, iop, wpc, wbc,
 				 &submit_list);

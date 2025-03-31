@@ -420,7 +420,24 @@ static inline bool gfpflags_normal_context(const gfp_t gfp_flags)
 #endif
 
 /*
- * 内核使用宏GFP_ZONE_TABLE定义了分配标志(GFP_xxx)到区域类型(ZONE_yyy)的映射表；
+ * 内核使用宏GFP_ZONE_TABLE定义了分配标志(GFP_xxx)到区域类型(ZONE_yyy)的映射表:
+ * +-------------------------------+------------------+
+ * | 0                             | ZONE_NORMAL      |
+ * +-------------------------------+------------------+
+ * | __GFP_DMA                     | OPT_ZONE_DMA     |
+ * +-------------------------------+------------------+
+ * | __GFP_HIGHMEM                 | OPT_ZONE_HIGHMEM |
+ * +-------------------------------+------------------+
+ * | __GFP_DMA32                   | OPT_ZONE_DMA32   |
+ * +-------------------------------+------------------+
+ * | __GFP_MOVABLE                 | ZONE_NORMAL      |
+ * +-------------------------------+------------------+
+ * | __GFP_MOVABLE | __GFP_DMA     | OPT_ZONE_DMA     |
+ * +-------------------------------+------------------+
+ * | __GFP_MOVABLE | __GFP_HIGHMEM | ZONE_MOVABLE     |
+ * +-------------------------------+------------------+
+ * | __GFP_MOVABLE | __GFP_DMA32   | OPT_ZONE_DMA32   |
+ * +-------------------------------+------------------+
  */
 #define GFP_ZONE_TABLE ( \
 	(ZONE_NORMAL << 0 * GFP_ZONES_SHIFT)				       \

@@ -350,6 +350,7 @@ void deactivate_locked_super(struct super_block *s)
 		unregister_shrinker(&s->s_shrink);
 		/*
 		 * xfs: kill_block_super()
+		 * pipefs: kill_anon_super()
 		 */
 		fs->kill_sb(s);
 

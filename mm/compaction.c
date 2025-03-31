@@ -2064,6 +2064,9 @@ static enum compact_result __compaction_suitable(struct zone *zone, int order,
 {
 	unsigned long watermark;
 
+	/*
+	 * 通过 /proc/sys/vm/compact_memory 强行触发
+	 */
 	if (is_via_compact_memory(order))
 		return COMPACT_CONTINUE;
 
@@ -2116,7 +2119,9 @@ enum compact_result compaction_suitable(struct zone *zone, int order,
 	 * index of -1000 would imply allocations might succeed depending on
 	 * watermarks, but we already failed the high-order watermark check
 	 * index towards 0 implies failure is due to lack of memory
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * index towards 1000 implies failure is due to fragmentation
+	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 *
 	 * Only compact if a failure would be due to fragmentation. Also
 	 * ignore fragindex for non-costly orders where the alternative to

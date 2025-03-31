@@ -2399,6 +2399,9 @@ out:
  *
  * We place the on-disk inode on a list in the AGI.  It will be pulled from this
  * list when the inode is freed.
+ *
+ * 这里只是将要unlink的xfs_inode放到AGI中的链表中，该链表在磁盘上也存在。
+ * - 真正的数据删除在这个 iput_final() 中
  */
 STATIC int
 xfs_iunlink(

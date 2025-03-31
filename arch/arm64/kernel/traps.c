@@ -280,6 +280,11 @@ void arm64_skip_faulting_instruction(struct pt_regs *regs, unsigned long size)
 		user_fastforward_single_step(current);
 }
 
+/*
+ * For Source Insight
+ */
+struct list_head undef_hook;
+struct raw_spin_lock undef_lock;
 static LIST_HEAD(undef_hook);
 static DEFINE_RAW_SPINLOCK(undef_lock);
 

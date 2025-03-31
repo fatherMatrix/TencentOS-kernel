@@ -53,6 +53,10 @@ static int __init parse_no_stealacc(char *arg)
 
 early_param("no-steal-acc", parse_no_stealacc);
 
+/*
+ * For Source Insight
+ */
+struct kvm_vcpu_pv_apf_data apf_reason;
 static DEFINE_PER_CPU_DECRYPTED(struct kvm_vcpu_pv_apf_data, apf_reason) __aligned(64);
 DEFINE_PER_CPU_DECRYPTED(struct kvm_steal_time, steal_time) __aligned(64) __visible;
 static int has_steal_clock = 0;
@@ -253,8 +257,16 @@ do_async_page_fault(struct pt_regs *regs, unsigned long error_code, unsigned lon
 
 	switch (kvm_read_and_reset_pf_reason()) {
 	default:
+		/*
+		 * 子机页表异常直接在这里处理了
+		 */
 		do_page_fault(regs, error_code, address);
 		break;
+	/*
+	 * 母机页表异常会导致EPT violation / EPT misconfig，会产生vmexit
+	 * - 此时母机上会先于这里对apf做处理，并在vmentry前注入一个缺页异常，
+	 *   导致进入guest态后先来到了这里
+	 */
 	case KVM_PV_REASON_PAGE_NOT_PRESENT:
 		/* page is swapped out by the host. */
 		prev_state = exception_enter();
@@ -324,6 +336,10 @@ static void kvm_guest_cpu_init(void)
 		if (kvm_para_has_feature(KVM_FEATURE_ASYNC_PF_VMEXIT))
 			pa |= KVM_ASYNC_PF_DELIVERY_AS_PF_VMEXIT;
 
+		/*
+		 * 这个MSR不是硬件的，guest这边退出到host态后，kvm会发现这一点，
+		 * 然后进行针对性的模拟
+		 */
 		wrmsrl(MSR_KVM_ASYNC_PF_EN, pa);
 		__this_cpu_write(apf_reason.enabled, 1);
 		printk(KERN_INFO"KVM setup async PF for cpu %d\n",

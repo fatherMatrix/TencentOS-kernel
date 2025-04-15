@@ -847,7 +847,10 @@ struct inode {
 	struct list_head	i_io_list;	/* backing dev IO list */
 #ifdef CONFIG_CGROUP_WRITEBACK
 	/*
-	 * inode所在设备对应的bdi，用于inode的回写
+	 * inode所在设备对应的bdi_writeback，用于inode的回写
+	 * - backing_dev_info 中存在多个bdi_writeback，每个 mem_cgroup 对应一个；该
+	 *   inode要回写的page必然会对应一个mem_cgroup，这里的i_wb就是该mem_cgroup
+	 *   对应的bdi_writeback
 	 */
 	struct bdi_writeback	*i_wb;		/* the associated cgroup wb */
 
@@ -1706,7 +1709,7 @@ struct super_block {
 #endif
 	struct hlist_bl_head	s_roots;	/* alternate root dentries for NFS */
 	/*
-	 * 链表头，链表元素是mount->mnt_instance
+	 * 链表头，链表元素是 mount->mnt_instance
 	 * - 一个文件系统（super_block）可以被多次挂载，每次挂载，都会向本链表
 	 *   添加一个元素；
 	 */

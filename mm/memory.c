@@ -3232,6 +3232,9 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	 */
 	vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd, vmf->address,
 			&vmf->ptl);
+	/*
+	 * 如果不为空，说明其他内核路径抢先处理这个缺页，我们要放弃处理
+	 */
 	if (!pte_none(*vmf->pte))
 		goto release;
 

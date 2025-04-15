@@ -104,8 +104,8 @@ enum clock_event_state {
  * @owner:		module reference
  *
  * 时钟时间设备（定时设备），时间到了后会向cpu发送中断
- * - 参见clocksource的注释；
- * - 系统中所有的clock_event_device都挂在了全局链表clockevent_devices中
+ * - 参见 clocksource 的注释；
+ * - 系统中所有的clock_event_device都挂在了全局链表 clockevent_devices 中
  *   > 注册：clockevents_config_and_register()
  */
 struct clock_event_device {

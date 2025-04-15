@@ -4691,7 +4691,9 @@ retry_cpuset:
 		goto nopage;
 
 	/*
-	 * 唤醒页回收线程
+	 * ===============================
+	 * = 唤醒页回收线程
+	 * ===============================
 	 */
 	if (alloc_flags & ALLOC_KSWAPD)
 		wake_all_kswapds(order, gfp_mask, ac);
@@ -4719,7 +4721,9 @@ retry_cpuset:
 			   (order > 0 && ac->migratetype != MIGRATE_MOVABLE))
 			&& !gfp_pfmemalloc_allowed(gfp_mask)) {
 		/*
-		 * 执行异步内存规整
+		 * ===============================
+		 * = 执行异步内存规整
+		 * ===============================
 		 */
 		page = __alloc_pages_direct_compact(gfp_mask, order,
 						alloc_flags, ac,
@@ -4812,7 +4816,9 @@ retry:
 
 	/* Try direct reclaim and then allocating */
 	/*
-	 * 进行直接内存回收
+	 * ===============================
+	 * = 进行直接内存回收
+	 * ===============================
 	 */
 	page = __alloc_pages_direct_reclaim(gfp_mask, order, alloc_flags, ac,
 							&did_some_progress);
@@ -4821,7 +4827,9 @@ retry:
 
 	/* Try direct compaction and then allocating */
 	/*
-	 * 进行直接内存规整
+	 * ===============================
+	 * = 进行直接内存规整
+	 * ===============================
 	 */
 	page = __alloc_pages_direct_compact(gfp_mask, order, alloc_flags, ac,
 					compact_priority, &compact_result);

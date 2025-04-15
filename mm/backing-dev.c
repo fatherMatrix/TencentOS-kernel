@@ -607,6 +607,7 @@ static int cgwb_create(struct backing_dev_info *bdi,
 			/*
 			 * 这里可以分析一下下面这三行是不是该提前到list_add()
 			 * 的上面；
+			 * - 不用吧，加着锁呢
 			 */
 			blkcg_cgwb_get(blkcg);
 			css_get(memcg_css);

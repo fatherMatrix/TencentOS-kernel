@@ -233,6 +233,9 @@ static int kernfs_fill_super(struct super_block *sb, struct kernfs_fs_context *k
 
 	/* get root inode, initialize and unlock it */
 	mutex_lock(&kernfs_mutex);
+	/*
+	 * 其中会配置inode的inode_operations和file_operations
+	 */
 	inode = kernfs_get_inode(sb, info->root->kn);
 	mutex_unlock(&kernfs_mutex);
 	if (!inode) {

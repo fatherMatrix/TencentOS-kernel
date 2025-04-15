@@ -851,7 +851,10 @@ bool __init apic_needs_pit(void)
 	if (!boot_cpu_has(X86_FEATURE_ARAT))
 		return true;
 
-	/* Deadline timer is based on TSC so no further PIT action required */
+	/*
+	 * Deadline timer is based on TSC so no further PIT action required
+	 * - 如果存在tsc_deadline_timer feature，则不需要pit
+	 */
 	if (boot_cpu_has(X86_FEATURE_TSC_DEADLINE_TIMER))
 		return false;
 
@@ -1988,7 +1991,8 @@ void __init enable_IR_x2apic(void)
 	}
 
 	/*
-	 * 开启x2apic需要先开启irq remapping？
+	 * 开启x2apic需要先开启irq remapping
+	 * - Intel sdm v3中有相关描述，参见 x2APIC -> Routing of Device Interrupts in x2APIC Mode
 	 * - 意味着要先开启iommu
 	 */
 	ir_stat = irq_remapping_prepare();
@@ -2004,6 +2008,7 @@ void __init enable_IR_x2apic(void)
 	local_irq_save(flags);
 	/*
 	 * 对应mask_8259A
+	 * - mask_8259A()
 	 */
 	legacy_pic->mask_all();
 	mask_ioapic_entries();

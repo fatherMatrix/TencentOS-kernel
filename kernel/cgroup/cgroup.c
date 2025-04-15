@@ -147,6 +147,10 @@ static struct static_key_true *cgroup_subsys_enabled_key[] = {
 };
 #undef SUBSYS
 
+/*
+ * 将所有 ss # _on_dfl_key 放入数组 cgroup_subsys_on_dfl_key 中；
+ * - 使用点在 rebind_subsystems()
+ */
 #define SUBSYS(_x) [_x ## _cgrp_id] = &_x ## _cgrp_subsys_on_dfl_key,
 static struct static_key_true *cgroup_subsys_on_dfl_key[] = {
 #include <linux/cgroup_subsys.h>
@@ -1770,6 +1774,9 @@ int rebind_subsystems(struct cgroup_root *dst_root, u16 ss_mask)
 
 		/* default hierarchy doesn't enable controllers by default */
 		dst_root->subsys_mask |= 1 << ssid;
+		/*
+		 * 这里负责设置 cgroup_subsys_on_dfl() 宏的返回值
+		 */
 		if (dst_root == &cgrp_dfl_root) {
 			static_branch_enable(cgroup_subsys_on_dfl_key[ssid]);
 		} else {
@@ -2030,6 +2037,9 @@ int cgroup_setup_root(struct cgroup_root *root, u16 ss_mask)
 	if (ret)
 		goto cancel_ref;
 
+	/*
+	 * 配置文件系统相关的接口
+	 */
 	kf_sops = root == &cgrp_dfl_root ?
 		&cgroup_kf_syscall_ops : &cgroup1_kf_syscall_ops;
 
@@ -2100,6 +2110,9 @@ int cgroup_do_get_tree(struct fs_context *fc)
 	struct cgroup_fs_context *ctx = cgroup_fc2context(fc);
 	int ret;
 
+	/*
+	 * cgroup_fs_context 结构体是在 cgroup_init_fs_context() 中分配好的
+	 */
 	ctx->kfc.root = ctx->root->kf_root;
 	if (fc->fs_type == &cgroup2_fs_type)
 		ctx->kfc.magic = CGROUP2_SUPER_MAGIC;

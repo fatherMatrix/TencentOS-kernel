@@ -143,6 +143,8 @@ int vfs_parse_fs_param(struct fs_context *fc, struct fs_parameter *param)
 
 	/*
 	 * 传统模式下：legacy_parse_param()
+	 * cgroup v1: cgroup1_parse_param()
+	 * cgroup v2: cgroup_parse_param()
 	 */
 	if (fc->ops->parse_param) {
 		ret = fc->ops->parse_param(fc, param);

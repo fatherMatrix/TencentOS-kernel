@@ -105,6 +105,9 @@ struct bdi_writeback_congested {
 					 * on bdi unregistration. For memcg-wb
 					 * internal use only! */
 	int blkcg_id;			/* ID of the associated blkcg */
+	/*
+	 * 作为树节点加入 backing_dev_info 的 cgwb_congestion_tree
+	 */
 	struct rb_node rb_node;		/* on bdi->cgwb_congestion_tree */
 #endif
 };
@@ -208,7 +211,7 @@ struct bdi_writeback {
 	struct cgroup_subsys_state *memcg_css; /* the associated memcg */
 	struct cgroup_subsys_state *blkcg_css; /* and blkcg */
 	/*
-	 * 接入memcg->cgwb_list
+	 * 接入 mem_cgroup->cgwb_list
 	 */
 	struct list_head memcg_node;	/* anchored at memcg->cgwb_list */
 	/*
@@ -280,9 +283,16 @@ struct backing_dev_info {
 	struct list_head wb_list; /* list of all wbs */
 #ifdef CONFIG_CGROUP_WRITEBACK
 	/*
-	 * bdi_writeback的树，每个memcg对应一个，索引是cgroup_subsys_state->id
+	 * bdi_writeback的树
+	 * - 每个memcg对应一个页节点
+	 * - 索引是memory cgroup_subsys_state->id
+	 * - 关联： inode->i_wb
 	 */
 	struct radix_tree_root cgwb_tree; /* radix tree of active cgroup wbs */
+	/*
+	 * bdi_writeback_congested 的树
+	 * - 索引是blkcg cgroup_subsys_state->id
+	 */
 	struct rb_root cgwb_congested_tree; /* their congested states */
 	struct mutex cgwb_release_mutex;  /* protect shutdown of wb structs */
 	struct rw_semaphore wb_switch_rwsem; /* no cgwb switch while syncing */

@@ -1410,7 +1410,9 @@ struct task_struct {
 	 */
 	int				nr_dirtied;
 	/*
-	 * 当前task的脏页阈值
+	 * 当前task的脏页阈值，进程达到多少脏页时，进程需要执行
+	 * balance_dirty_pages()进行脏页平衡
+	 * - 单位为page，初始值设置在 copy_process()
 	 */
 	int				nr_dirtied_pause;
 	/*
@@ -1564,6 +1566,7 @@ struct task_struct {
 	 * Do not put anything below here!
 	 */
 };
+struct task_struct *current; // For Source Insight to parse current->xxx 's xxx
 
 static inline struct pid *task_pid(struct task_struct *task)
 {

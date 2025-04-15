@@ -1592,6 +1592,10 @@ static struct ctl_table vm_table[] = {
 		.extra2		= &one_hundred,
 	},
 	{
+		/*
+		 * 用于控制 vm_pagecache_limit_pages / vm_pagecache_limit_reclaim_ratio
+		 * - 参见： 
+		 */
 		.procname	= "pagecache_limit_ratio",
 		.data		= &vm_pagecache_limit_ratio,
 		.maxlen		= sizeof(vm_pagecache_limit_ratio),

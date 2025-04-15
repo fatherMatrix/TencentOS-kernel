@@ -125,7 +125,10 @@ EXPORT_SYMBOL(laptop_mode);
 
 struct wb_domain global_wb_domain;
 
-/* consolidated parameters for balance_dirty_pages() and its subroutines */
+/*
+ * consolidated parameters for balance_dirty_pages() and its subroutines
+ * - 组织传参，仅此而已
+ */
 struct dirty_throttle_control {
 #ifdef CONFIG_CGROUP_WRITEBACK
 	struct wb_domain	*dom;
@@ -140,6 +143,10 @@ struct dirty_throttle_control {
 	unsigned long		bg_thresh;	/* dirty background threshold */
 
 	unsigned long		wb_dirty;	/* per-wb counterparts */
+	/*
+	 * 与 BDI_CAP_STRICTLIMIT 相关
+	 * - 参见： wb_dirty_limits()
+	 */
 	unsigned long		wb_thresh;
 	unsigned long		wb_bg_thresh;
 
@@ -1595,6 +1602,9 @@ static void balance_dirty_pages(struct bdi_writeback *wb,
 		 */
 		nr_reclaimable = global_node_page_state(NR_FILE_DIRTY) +
 					global_node_page_state(NR_UNSTABLE_NFS);
+		/*
+		 * free页和文件页
+		 */
 		gdtc->avail = global_dirtyable_memory();
 		gdtc->dirty = nr_reclaimable + global_node_page_state(NR_WRITEBACK);
 
@@ -1667,6 +1677,9 @@ static void balance_dirty_pages(struct bdi_writeback *wb,
 			break;
 		}
 
+		/*
+		 * 触发后台回写
+		 */
 		if (unlikely(!writeback_in_progress(wb)))
 			wb_start_background_writeback(wb);
 
@@ -1682,6 +1695,9 @@ static void balance_dirty_pages(struct bdi_writeback *wb,
 		dirty_exceeded = (gdtc->wb_dirty > gdtc->wb_thresh) &&
 			((gdtc->dirty > gdtc->thresh) || strictlimit);
 
+		/*
+		 * 计算pos_ratio，该值介于0~2之间，与gdtc->nr_ditry负相关
+		 */
 		wb_position_ratio(gdtc);
 		sdtc = gdtc;
 
@@ -1782,6 +1798,9 @@ pause:
 					  start_time);
 		__set_current_state(TASK_KILLABLE);
 		wb->dirty_sleep = now;
+		/*
+		 * 调度出去睡眠，此时不能无法继续进行对pagecache的写入操作
+		 */
 		io_schedule_timeout(pause);
 
 		current->dirty_paused_when = now + pause;
@@ -1835,8 +1854,10 @@ pause:
 
 /*
  * 当前cpu的脏页计数
+ * - 在标记page脏页时执行 account_page_dirtied() ，令bdp_ratelimits加1
  */
 static DEFINE_PER_CPU(int, bdp_ratelimits);
+static int bdp_ratelimits; // For Source Insight
 
 /*
  * Normal tasks are throttled by
@@ -1853,9 +1874,10 @@ static DEFINE_PER_CPU(int, bdp_ratelimits);
  * count and eventually get throttled.
  *
  * 进程退出时将残留的脏页数累加到此变量中
- * - 进程推出前，脏页不应该全部写回吗？
+ * - 进程退出前，脏页不应该全部写回吗？
  */
 DEFINE_PER_CPU(int, dirty_throttle_leaks) = 0;
+int dirty_throttle_leaks; // For Source Insight
 
 /**
  * balance_dirty_pages_ratelimited - balance dirty memory state
@@ -1887,11 +1909,14 @@ void balance_dirty_pages_ratelimited(struct address_space *mapping)
 		wb = &bdi->wb;
 
 	/*
-	 * 初始值为32，单位为page，即初始值为128KB
+	 * 初始值为32，单位为page
+	 * - x86上为128KB
+	 * - arm上为
 	 */
 	ratelimit = current->nr_dirtied_pause;
 	/*
-	 * 如果设置了该值，则将回收门限缩小为32KB
+	 * 如果已经执行balance_dirty_pages()进行脏页平衡，重新计算ratelimit，
+	 * 会很小(8)，这样很容易执行下边的balance_dirty_pages()
 	 */
 	if (wb->dirty_exceeded)
 		ratelimit = min(ratelimit, 32 >> (PAGE_SHIFT - 10));
@@ -1905,13 +1930,25 @@ void balance_dirty_pages_ratelimited(struct address_space *mapping)
 	 *
 	 * 如果当前进程的脏页计数超过阈值，或者cpu的脏页计数（bdp_ratelimits)超
 	 * 过阈值，则启动回写；
-	 * - *p = 0的作用是本次回写操作后重新计数
+	 * - *p = 0的作用是本次回写操作后重新计数，因为后面要进行脏页平衡了
+	 *   > 脏页平衡后重新开始计数即可，这个计数不需要绝对精确，只是为了避免
+	 *     注释中的特殊情况
 	 */
 	p =  this_cpu_ptr(&bdp_ratelimits);
 	if (unlikely(current->nr_dirtied >= ratelimit))
+	/*
+	 * 当前进程脏页高于进程脏页阈值了，需要进行脏页平衡
+	 */
 		*p = 0;
 	else if (unlikely(*p >= ratelimit_pages)) {
+	/*
+	 * 当前cpu脏页高于cpu脏页阈值了，需要进行脏页平衡
+	 */
 		*p = 0;
+		/*
+		 * 这使得不论current->nr_dirtied目前是多少，都会触发后面的
+		 * balance_dirty_pages()
+		 */
 		ratelimit = 0;
 	}
 	/*
@@ -1923,6 +1960,11 @@ void balance_dirty_pages_ratelimited(struct address_space *mapping)
 	 */
 	p = this_cpu_ptr(&dirty_throttle_leaks);
 	if (*p > 0 && current->nr_dirtied < ratelimit) {
+	/*
+	 * 将dirty_throttle_leaks转移到current->nr_dirtied中，以期其可以超过
+	 * ratelimit，从而触发后面的balance_dirty_pages()
+	 * - min()操作是为了防止上下溢出
+	 */
 		unsigned long nr_pages_dirtied;
 		nr_pages_dirtied = min(*p, ratelimit - current->nr_dirtied);
 		*p -= nr_pages_dirtied;
@@ -2530,6 +2572,9 @@ void account_page_dirtied(struct page *page, struct address_space *mapping)
 		inc_wb_stat(wb, WB_RECLAIMABLE);
 		inc_wb_stat(wb, WB_DIRTIED);
 		task_io_account_write(PAGE_SIZE);
+		/*
+		 * task级、cpu级脏页计数加一
+		 */
 		current->nr_dirtied++;
 		this_cpu_inc(bdp_ratelimits);
 

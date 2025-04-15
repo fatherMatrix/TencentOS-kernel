@@ -69,6 +69,10 @@ struct blkcg {
 
 	struct list_head		all_blkcgs_node;
 #ifdef CONFIG_CGROUP_WRITEBACK
+	/*
+	 * 链表头
+	 * - 链表元素是 bdi_writeback->blkcg_node
+	 */
 	struct list_head		cgwb_list;
 	refcount_t			cgwb_refcnt;
 #endif

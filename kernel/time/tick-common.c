@@ -27,6 +27,7 @@
  * - Tick设备的percpu变量
  */
 DEFINE_PER_CPU(struct tick_device, tick_cpu_device);
+struct tick_device tick_cpu_device; // For Source Insight
 /*
  * Tick next event: keeps track of the tick time
  */

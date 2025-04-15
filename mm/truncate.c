@@ -568,8 +568,11 @@ EXPORT_SYMBOL(truncate_inode_pages_final);
  * remove all the pages of one inode, you must call truncate_inode_pages.
  *
  * invalidate_mapping_pages() will not block on IO activity. It will not
+ *                                                           ^^^^^^^^^^^
  * invalidate pages which are dirty, locked, under writeback or mapped into
+ * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
  * pagetables.
+ * ^^^^^^^^^^^
  *
  * Return: the number of the pages that were invalidated
  */

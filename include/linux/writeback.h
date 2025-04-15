@@ -135,6 +135,8 @@ wbc_blkcg_css(struct writeback_control *wbc)
  * domain, global_wb_domain, that every wb in the system is a member of.
  * This allows measuring the relative bandwidth of each wb to distribute
  * dirtyable memory accordingly.
+ * 一个全局的： global_wb_domain
+ * 多个per-memcg的： mem_cgroup->cgwb_domain
  */
 struct wb_domain {
 	spinlock_t lock;

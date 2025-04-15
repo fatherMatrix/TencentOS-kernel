@@ -84,10 +84,12 @@ struct mount {
 	 */
 	struct list_head mnt_mounts;	/* list of children, anchored here */
 	struct list_head mnt_child;	/* and going through their mnt_child */
-	/* 
-	 * 一个文件系统（超级块）可以同时被多次挂载到不同的挂载点，每一次挂载
-	 * 都会产生一个mount结构体。同一个超级块被多次挂载产生的多个mount结构
-	 * 体通过mnt_instance字段链入sb->s_mounts链表头
+	/*
+	 * 链表元素
+	 * - 链表头是 super_block->s_mounts
+	 * - 一个文件系统（超级块）可以同时被多次挂载到不同的挂载点，每一次挂载
+	 *   都会产生一个mount结构体。同一个超级块被多次挂载产生的多个mount结构
+	 *   体通过mnt_instance字段链入sb->s_mounts链表头
 	 */
 	struct list_head mnt_instance;	/* mount instance on sb->s_mounts */
 	const char *mnt_devname;	/* Name of device e.g. /dev/dsk/hda1 */

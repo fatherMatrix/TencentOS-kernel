@@ -595,7 +595,7 @@ struct perf_event {
 	 *   modifications require ctx->lock
 	 *   RCU safe iterations.
 	 *
-	 * 作为链表元素链入perf_event_context->event_list；
+	 * 作为链表元素链入 perf_event_context->event_list；
 	 */
 	struct list_head		event_entry;
 

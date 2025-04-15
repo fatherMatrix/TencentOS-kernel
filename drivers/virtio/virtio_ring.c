@@ -278,7 +278,7 @@ static void *vring_alloc_queue(struct virtio_device *vdev, size_t size,
 {
 	if (vring_use_dma_api(vdev)) {
 		/*
-		 * 如果前后端协商了VIRTIO_F_IOMMU_PLATFORM，则走这里
+		 * 如果前后端协商了 VIRTIO_F_IOMMU_PLATFORM ，则走这里
 		 */
 		return dma_alloc_coherent(vdev->dev.parent, size,
 					  dma_handle, flag);

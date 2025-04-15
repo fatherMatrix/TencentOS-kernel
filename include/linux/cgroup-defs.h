@@ -132,16 +132,29 @@ struct cgroup_file {
  * directly without synchronization.
  */
 struct cgroup_subsys_state {
-	/* PI: the cgroup that this css is attached to */
+	/*
+	 * PI: the cgroup that this css is attached to
+	 * - 一个cgroup中包含多类资源控制器，比如cpu、memory、blkcg等。
+	 *   而一个cgroup_subsys_state表示其中一类（作为基类，i.e.
+	 *   memory_cgroup）
+	 *   > 可以将cgroup对应为cgroupfs中的一个目录
+	 *   > cgroup_subsys_state对应为cgroupfs中一个目录下的一类控制器
+	 * - 这里指向本控制器所属的cgroup
+	 */
 	struct cgroup *cgroup;
 
-	/* PI: the cgroup subsystem that this css is attached to */
+	/*
+	 * PI: the cgroup subsystem that this css is attached to
+	 */
 	struct cgroup_subsys *ss;
 
 	/* reference count - access via css_[try]get() and css_put() */
 	struct percpu_ref refcnt;
 
-	/* siblings list anchored at the parent's ->children */
+	/*
+	 * siblings list anchored at the parent's ->children
+	 * - 两者构建树状拓扑
+	 */
 	struct list_head sibling;
 	struct list_head children;
 

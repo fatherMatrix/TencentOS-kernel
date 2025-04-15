@@ -133,6 +133,10 @@ struct mem_cgroup_per_node {
 
 	struct memcg_shrinker_map __rcu	*shrinker_map;
 
+	/*
+	 * 作为元素插入 mem_cgroup_tree_per_node
+	 * > 参见： __mem_cgroup_insert_exceeded()
+	 */
 	struct rb_node		tree_node;	/* RB tree node */
 	unsigned long		usage_in_excess;/* Set to the value by which */
 						/* the soft limit is exceeded*/
@@ -245,6 +249,8 @@ struct mem_cgroup {
 
 	/*
 	 * Should the accounting and control be hierarchical, per subtree?
+	 * upstream commit bef8620cd8e0a117c1a0719604052e424eb418f9，废弃了非hierarchy
+	 * 模式，这个字段也被删除了
 	 */
 	bool use_hierarchy;
 	bool meminfo_recursive;
@@ -334,7 +340,14 @@ struct mem_cgroup {
 #endif
 
 #ifdef CONFIG_CGROUP_WRITEBACK
+	/*
+	 * 链表头
+	 * - 链表元素是 bdi_writeback.memcg_node
+	 */
 	struct list_head cgwb_list;
+	/*
+	 * per-memcg的wb_domain
+	 */
 	struct wb_domain cgwb_domain;
 	struct memcg_cgwb_frn cgwb_frn[MEMCG_CGWB_FRN_CNT];
 #endif
@@ -1453,6 +1466,10 @@ static inline void mem_cgroup_track_foreign_dirty(struct page *page,
 	if (mem_cgroup_disabled())
 		return;
 
+	/*
+	 * 该page所在的mem_cgroup所对应的bdi_writeback在       __inode_attach_wb()
+	 * -> cmpxchg()竞争中失败了 
+	 */
 	if (unlikely(&page->mem_cgroup->css != wb->memcg_css))
 		mem_cgroup_track_foreign_dirty_slowpath(page, wb);
 }

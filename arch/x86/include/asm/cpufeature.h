@@ -36,6 +36,7 @@ enum cpuid_leafs
 /*
  * 定义在arch/x86/kernel/cpu/capflags.c
  * - 该文件是编译时自动生成的
+ *   > arch/x86/kernel/cpu/mkcapflags.sh
  */
 extern const char * const x86_cap_flags[NCAPINTS*32];
 extern const char * const x86_power_flags[32];

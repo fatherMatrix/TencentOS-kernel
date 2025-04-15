@@ -98,6 +98,7 @@ void __init hpet_time_init(void)
 
 		/*
 		 * 如果hpet和pit都失败了，不就没有时钟时间源了吗？
+		 * - 还有local apic timer呀
 		 */
 	}
 
@@ -137,7 +138,7 @@ static __init void x86_late_time_init(void)
 
 	/* Setup the legacy timers
 	 *
-	 * 对应hpet_time_init
+	 * 对应 hpet_time_init
 	 */
 	x86_init.timers.timer_init();
 

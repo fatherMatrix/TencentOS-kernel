@@ -17,9 +17,12 @@
 
 #include "kernfs-internal.h"
 
+struct mutex kernfs_mutex; // For Source Insight
 DEFINE_MUTEX(kernfs_mutex);
+static spinlock_t kernfs_rename_lock; // For Source Insight
 static DEFINE_SPINLOCK(kernfs_rename_lock);	/* kn->parent and ->name */
 static char kernfs_pr_cont_buf[PATH_MAX];	/* protected by rename_lock */
+static spinlock_t kernfs_idr_lock; // For Source Insight
 static DEFINE_SPINLOCK(kernfs_idr_lock);	/* root->ino_idr */
 
 #define rb_to_kn(X) rb_entry((X), struct kernfs_node, rb)
@@ -778,6 +781,9 @@ int kernfs_add_one(struct kernfs_node *kn)
 		 has_ns ? "required" : "invalid", parent->name, kn->name))
 		goto out_unlock;
 
+	/*
+	 * 如果插入的不是dir，则直接退出
+	 */
 	if (kernfs_type(parent) != KERNFS_DIR)
 		goto out_unlock;
 
@@ -790,6 +796,10 @@ int kernfs_add_one(struct kernfs_node *kn)
 
 	kn->hash = kernfs_name_hash(kn->name, kn->ns);
 
+	/*
+	 * 插入的是dir，需要将kernfs_node挂入parent kernfs_node.dir.children
+	 * 红黑树中
+	 */
 	ret = kernfs_link_sibling(kn);
 	if (ret)
 		goto out_unlock;

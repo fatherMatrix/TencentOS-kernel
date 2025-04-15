@@ -386,9 +386,15 @@ unsigned long lruvec_lru_size(struct lruvec *lruvec, enum lru_list lru, int zone
 	int zid;
 
 	if (!mem_cgroup_disabled()) {
+	/*
+	 * 开启mem_cgroup的情况
+	 */
 		for (zid = 0; zid < MAX_NR_ZONES; zid++)
 			lru_size += mem_cgroup_get_zone_lru_size(lruvec, lru, zid);
 	} else
+	/*
+	 * 未开启mem_cgroup的情况
+	 */
 		lru_size = node_page_state(lruvec_pgdat(lruvec), NR_LRU_BASE + lru);
 
 	for (zid = zone_idx + 1; zid < MAX_NR_ZONES; zid++) {
@@ -3120,6 +3126,8 @@ static void shrink_zones(struct zonelist *zonelist, struct scan_control *sc)
 			 * and returns the number of reclaimed pages and
 			 * scanned pages. This works for global memory pressure
 			 * and balancing, not for a memcg's limit.
+			 *
+			 * 首先考虑回收超过memcg soft limit的page
 			 */
 			nr_soft_scanned = 0;
 			nr_soft_reclaimed = mem_cgroup_soft_limit_reclaim(zone->zone_pgdat,

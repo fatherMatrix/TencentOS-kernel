@@ -92,6 +92,10 @@ extern struct css_set init_css_set;
 /**
  * cgroup_subsys_on_dfl - fast test on whether a subsys is on default hierarchy
  * @ss: subsystem in question
+ *
+ * 其值的变更参见：
+ * - cgroup_subsys_on_dfl_key
+ * - cgroup_setup_root() -> rebind_subsystems()
  */
 #define cgroup_subsys_on_dfl(ss)						\
 	static_branch_likely(&ss ## _on_dfl_key)

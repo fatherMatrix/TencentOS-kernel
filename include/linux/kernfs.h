@@ -199,6 +199,9 @@ struct kernfs_root {
 	struct idr		ino_idr;
 	u32			last_ino;
 	u32			next_generation;
+	/*
+	 * 本棵树底下的文件系统操作
+	 */
 	struct kernfs_syscall_ops *syscall_ops;
 
 	/* list of kernfs_super_info of this root, protected by kernfs_mutex */

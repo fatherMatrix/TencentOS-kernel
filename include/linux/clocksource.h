@@ -84,14 +84,18 @@ struct module;
  *   > 注册：clocksource_register_hz() / clocksource_register_khz()
  *
  * 观察：
- * # cat /sys/devices/system/clockevents/clockevent0/current_device
+ * # cat /sys/devices/system/clockevents/clockevent0/current_device - sysfs_show_current_tick_dev()
  * lapic-deadline
  *
  * # cat /sys/devices/system/clockevents/broadcast/current_device
  * hpet
  *
- * # cat /sys/devices/system/clocksource/clocksource0/available_clocksource
+ * # cat /sys/devices/system/clocksource/clocksource0/available_clocksource - available_clocksource_show()
  * tsc hpet acpi_pm
+ * tsc kvm-clock acpi_pm
+ *
+ * # cat /sys/devices/system/clocksource/clocksource0/current_clocksource - current_clocksource_show()
+ * tsc
  */
 struct clocksource {
 	u64 (*read)(struct clocksource *cs);

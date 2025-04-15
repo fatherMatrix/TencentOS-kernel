@@ -94,9 +94,9 @@ int kvm_set_irq(struct kvm *kvm, int irq_source_id, u32 irq, int level,
 	while (i--) {
 		int r;
 		/*
-		 * 对于PIC，该set函数为kvm_set_pic_irq；
-		 * 对于IOAPIC，该set函数为kvm_set_ioapic_irq;
-		 * 对于MSI，该set函数为kvm_set_msi;
+		 * 对于PIC，该set函数为 kvm_set_pic_irq；
+		 * 对于IOAPIC，该set函数为 kvm_set_ioapic_irq;
+		 * 对于MSI，该set函数为 kvm_set_msi;
 		 */
 		r = irq_set[i].set(&irq_set[i], kvm, irq_source_id, level,
 				   line_status);

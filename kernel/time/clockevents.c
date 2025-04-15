@@ -18,7 +18,9 @@
 
 /* The registered clock event devices */
 static LIST_HEAD(clockevent_devices);
+static struct list_head clockevent_devices; // For Source Insight
 static LIST_HEAD(clockevents_released);
+static struct list_head clockevents_released; // For Source Insight
 /* Protection for the above */
 static DEFINE_RAW_SPINLOCK(clockevents_lock);
 /* Protection for unbind operations */
@@ -522,7 +524,7 @@ void clockevents_config_and_register(struct clock_event_device *dev,
 	 */
 	clockevents_config(dev, freq);
 	/*
-	 * 将设备注册到clockevent_devices链表中
+	 * 将设备注册到 clockevent_devices 链表中
 	 * - 如果需要，替换当前设备
 	 */
 	clockevents_register_device(dev);

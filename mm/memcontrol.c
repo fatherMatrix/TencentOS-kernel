@@ -118,6 +118,9 @@ static const char *const mem_cgroup_lru_names[] = {
  */
 
 struct mem_cgroup_tree_per_node {
+	/*
+	 * 元素是： mem_cgroup_per_node.tree_node
+	 */
 	struct rb_root rb_root;
 	struct rb_node *rb_rightmost;
 	spinlock_t lock;
@@ -841,6 +844,17 @@ static unsigned long memcg_events_local(struct mem_cgroup *memcg, int event)
 	return x;
 }
 
+/*
+ * 内存记账的四个时机：
+ * - 第一次访问匿名页时分配物理页
+ *   > handle_pte_fault() -> do_anonymous_page()
+ * - 访问文件页时分配物理页
+ *   > add_to_page_cache_lru()
+ * - 执行cow时分配物理页
+ *   > handle_pte_fault() -> do_wp_page() -> wp_page_copy()
+ * - 从swap中换入页时分配物理页
+ *   > handle_pte_fault() -> do_swap_page()
+ */
 static void mem_cgroup_charge_statistics(struct mem_cgroup *memcg,
 					 struct page *page,
 					 bool compound, int nr_pages)
@@ -850,13 +864,23 @@ static void mem_cgroup_charge_statistics(struct mem_cgroup *memcg,
 	 * counted as CACHE even if it's on ANON LRU.
 	 */
 	if (PageAnon(page))
+		/*
+		 * 匿名页
+		 * - 不包括shmemfs/tmpfps
+		 */
 		__mod_memcg_state(memcg, MEMCG_RSS, nr_pages);
 	else {
+		/*
+		 * 文件页
+		 */
 		__mod_memcg_state(memcg, MEMCG_CACHE, nr_pages);
 		if (PageSwapBacked(page))
 			__mod_memcg_state(memcg, NR_SHMEM, nr_pages);
 	}
 
+	/*
+	 * 巨型页
+	 */
 	if (compound) {
 		VM_BUG_ON_PAGE(!PageTransHuge(page), page);
 		__mod_memcg_state(memcg, MEMCG_RSS_HUGE, nr_pages);
@@ -1050,6 +1074,9 @@ struct mem_cgroup *mem_cgroup_iter(struct mem_cgroup *root,
 	if (!root)
 		root = root_mem_cgroup;
 
+	/*
+	 * 没有reclaim说明是full walk，直接使用prev作为此次walk的起始点即可
+	 */
 	if (prev && !reclaim)
 		pos = prev;
 
@@ -1065,6 +1092,11 @@ struct mem_cgroup *mem_cgroup_iter(struct mem_cgroup *root,
 		struct mem_cgroup_per_node *mz;
 
 		mz = mem_cgroup_nodeinfo(root, reclaim->pgdat->node_id);
+		/*
+		 * 这里不用考虑并发吗？其他遍历路径不会使用相同的iter吗？
+		 * - 感觉reclaim存在的意义是允许多个并发路径同时遍历这棵树，从
+		 *   而加速同一件工作
+		 */
 		iter = &mz->iter[reclaim->priority];
 
 		if (prev && reclaim->generation != iter->generation)
@@ -1081,6 +1113,11 @@ struct mem_cgroup *mem_cgroup_iter(struct mem_cgroup *root,
 			 * is called from a work queue, and by busy-waiting we
 			 * might block it. So we clear iter->position right
 			 * away.
+			 *
+			 * 走到这里，说明该css马上要被删除了
+			 * - 但一个css被删除，为什么会影响到整棵树的遍历操作呢？
+			 * - 将iter->position设置为NULL，会导致css_next_descendant_pre()
+			 *   返回root->css
 			 */
 			(void)cmpxchg(&iter->position, pos, NULL);
 		}
@@ -1131,8 +1168,14 @@ struct mem_cgroup *mem_cgroup_iter(struct mem_cgroup *root,
 			css_put(&pos->css);
 
 		if (!memcg)
+		/*
+		 * 表示一次遍历完成
+		 */
 			iter->generation++;
 		else if (!prev)
+		/*
+		 * 表示一次遍历开始
+		 */
 			reclaim->generation = iter->generation;
 	}
 
@@ -2236,6 +2279,7 @@ struct memcg_stock_pcp {
 	unsigned long flags;
 #define FLUSHING_CACHED_CHARGE	0
 };
+struct memcg_stock_pcp memcg_stock; // For Source Insight
 static DEFINE_PER_CPU(struct memcg_stock_pcp, memcg_stock);
 static DEFINE_MUTEX(percpu_charge_mutex);
 
@@ -3280,6 +3324,10 @@ unsigned long mem_cgroup_soft_limit_reclaim(pg_data_t *pgdat, int order,
 	if (order > 0)
 		return 0;
 
+	/*
+	 * 每个node有一个mem_cgroup_tree_per_node，上面存放的是超过soft limit的
+	 * mem_cgroup
+	 */
 	mctz = soft_limit_tree_node(pgdat->node_id);
 
 	/*
@@ -3317,6 +3365,9 @@ unsigned long mem_cgroup_soft_limit_reclaim(pg_data_t *pgdat, int order,
 		 */
 		next_mz = NULL;
 		if (!reclaimed)
+			/*
+			 * 此处是处于 mctz->lock 临界区内的
+			 */
 			next_mz = __mem_cgroup_largest_soft_limit_node(mctz);
 
 		excess = soft_limit_excess(mz->memcg);
@@ -3659,11 +3710,19 @@ static unsigned long mem_cgroup_usage(struct mem_cgroup *memcg, bool swap)
 	unsigned long val;
 
 	if (mem_cgroup_is_root(memcg)) {
+	/*
+	 * 对于root mem_cgroup，memory.limit_in_bytes的含义有所不同，是直接返回当前
+	 * CACHE + RSS的值
+	 * - 因为root mem_cgroup本身就不允许设置memory.limit_in_bytes
+	 */
 		val = memcg_page_state(memcg, MEMCG_CACHE) +
 			memcg_page_state(memcg, MEMCG_RSS);
 		if (swap)
 			val += memcg_page_state(memcg, MEMCG_SWAP);
 	} else {
+	/*
+	 * 对于non-root mem_cgroup，memory.limit_in_bytes才反应最大限制
+	 */
 		if (!swap)
 			val = page_counter_read(&memcg->memory);
 		else
@@ -5420,18 +5479,28 @@ static struct cftype mem_cgroup_legacy_files[] = {
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
+		/*
+		 * 这是个监控指标，用于记录历史最大的内存用量
+		 */
 		.name = "max_usage_in_bytes",
 		.private = MEMFILE_PRIVATE(_MEM, RES_MAX_USAGE),
 		.write = mem_cgroup_reset,
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
+		/*
+		 * 硬件限制，不得超过
+		 */
 		.name = "limit_in_bytes",
 		.private = MEMFILE_PRIVATE(_MEM, RES_LIMIT),
 		.write = mem_cgroup_write,
 		.read_u64 = mem_cgroup_read_u64,
 	},
 	{
+		/*
+		 * 软性限制，可以超过
+		 * - 页回收算法会优先在超过软性限制的mem_cgroup中回收内存
+		 */
 		.name = "soft_limit_in_bytes",
 		.private = MEMFILE_PRIVATE(_MEM, RES_SOFT_LIMIT),
 		.write = mem_cgroup_write,
@@ -7836,6 +7905,9 @@ long mem_cgroup_get_nr_swap_pages(struct mem_cgroup *memcg)
 {
 	long nr_swap_pages = get_nr_swap_pages();
 
+	/*
+	 * cgroup v1没有memory.swap.*配置文件，因此直接返回nr_swap_pages
+	 */
 	if (!do_swap_account || !cgroup_subsys_on_dfl(memory_cgrp_subsys))
 		return nr_swap_pages;
 	for (; memcg != root_mem_cgroup; memcg = parent_mem_cgroup(memcg))

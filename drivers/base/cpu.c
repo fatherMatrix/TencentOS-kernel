@@ -23,6 +23,7 @@
 
 #include "base.h"
 
+struct device *cpu_sys_devices; // For Source Insight
 static DEFINE_PER_CPU(struct device *, cpu_sys_devices);
 
 static int cpu_subsys_match(struct device *dev, struct device_driver *drv)
@@ -397,6 +398,10 @@ int register_cpu(struct cpu *cpu, int num)
 
 struct device *get_cpu_device(unsigned cpu)
 {
+	/*
+	 * 只有经历过 register_cpu() 后，该静态percpu变量
+	 * 才会被赋值
+	 */
 	if (cpu < nr_cpu_ids && cpu_possible(cpu))
 		return per_cpu(cpu_sys_devices, cpu);
 	else

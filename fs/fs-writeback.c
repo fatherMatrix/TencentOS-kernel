@@ -2597,7 +2597,7 @@ void __mark_inode_dirty(struct inode *inode, int flags)
 		 *       mark_inode_dirty_sync()前没有dirty标志，那么本次调用就
 		 *       有义务触发相关writeback操作；
 		 *       - 诶，回写操作不是应该由事务机制完成吗？
-		 *         > 有可能回写操作中包含了数据，xfs的事务机制只关系元数
+		 *         > 有可能回写操作中包含了数据，xfs的事务机制只关心元数
 		 *           据
 		 */
 		if (!was_dirty) {

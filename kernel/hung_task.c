@@ -109,6 +109,10 @@ static void check_hung_task(struct task_struct *t, unsigned long timeout)
 		t->last_switch_time = jiffies;
 		return;
 	}
+	/*
+	 * last_switch_time + timeout * HZ 表示到这个jiffies才算hungtask，如果
+	 * 其在当前jiffies之后，则说明还未产生hungtask
+	 */
 	if (time_is_after_jiffies(t->last_switch_time + timeout * HZ))
 		return;
 
@@ -282,8 +286,14 @@ static int watchdog(void *dummy)
 		if (interval == 0)
 			interval = timeout;
 		interval = min_t(unsigned long, interval, timeout);
+		/*
+		 * 下一次的扫描还要过多少个jiffies
+		 */
 		t = hung_timeout_jiffies(hung_last_checked, interval);
 		if (t <= 0) {
+		/*
+		 * 说明已经到了扫描时间，或者已经过了扫描时间
+		 */
 			if (!atomic_xchg(&reset_hung_task, 0) &&
 			    !hung_detector_suspended)
 				check_hung_uninterruptible_tasks(timeout);

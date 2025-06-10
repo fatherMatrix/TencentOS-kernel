@@ -243,6 +243,9 @@ static int kobject_add_internal(struct kobject *kobj)
 		return -EINVAL;
 	}
 
+	/*
+	 * 增加父节点引用计数
+	 */
 	parent = kobject_get(kobj->parent);
 
 	/* join kset if set, use it as parent if we do not already have one */

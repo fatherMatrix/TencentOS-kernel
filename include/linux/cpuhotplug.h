@@ -213,6 +213,10 @@ static inline int cpuhp_setup_state(enum cpuhp_state state,
 				    int (*startup)(unsigned int cpu),
 				    int (*teardown)(unsigned int cpu))
 {
+	/*
+	 * 内部首先把这个回调保存起来，当下次走到对应状态时调用；
+	 * 然后会检查之前是否有已经越过目标状态的情况，是的话，会补充调用一次；
+	 */
 	return __cpuhp_setup_state(state, name, true, startup, teardown, false);
 }
 

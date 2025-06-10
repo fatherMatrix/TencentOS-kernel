@@ -425,7 +425,7 @@ int __init security_init(void)
 	 * Append the names of the early LSM modules now that kmalloc() is
 	 * available
 	 *
-	 * security_early_init()中注册lsm模块时，kmalloc还不可用。此时kmalloc已
+	 * security_early_init() 中注册lsm模块时，kmalloc还不可用。此时kmalloc已
 	 * 可用，所以把security_early_init()中留下的尾巴处理好
 	 * - 尾巴就是使用kmalloc()分配ordered_lsms数组的内存，并将所有要挂载的
 	 *   lsm模块都放到该数组里；

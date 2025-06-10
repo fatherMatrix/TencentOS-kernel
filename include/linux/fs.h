@@ -837,7 +837,10 @@ struct inode {
 	 * 链接到全局索引节点哈希表inode_hashtable，用于inode的快速查找
 	 * - 哈希键通过superblock和索引节点号计算
 	 * - xfs没有使用这个字段，这个字段自己连接自己。xfs中inode内嵌在
-	 *   xfs_inode中，且xfs_inode插入了xfs_mount中per-ag的哈希表中；
+	 *   xfs_inode中，且xfs_inode插入了 xfs_mount 中per-ag的哈希表中；
+	 *   > 参见： inode_fake_hash
+	 *   > 影响： iput_final() 中的drop策略 - 只要还有nlink则永远不drop，在
+	 *     shrink_slabs()中回收
 	 * - ext4使用了此字段
 	 */
 	struct hlist_node	i_hash;
@@ -1191,7 +1194,10 @@ struct file {
 #ifdef CONFIG_SECURITY
 	void			*f_security;
 #endif
-	/* needed for tty driver, and maybe others */
+	/*
+	 * needed for tty driver, and maybe others
+	 * - seq_open() 中会设置为 seq_file
+	 */
 	void			*private_data;
 
 #ifdef CONFIG_EPOLL
@@ -1833,6 +1839,7 @@ struct super_block {
 	/*
 	 * i_count == 0且干净的inode链表
 	 * - iput_final()后的inode会通过inode_add_lru()添加到这里；
+	 *   > xfs的inode除外，参见： inode->i_hash 处注释
 	 * - 这也是一个缓存；
 	 */
 	struct list_lru		s_inode_lru;
@@ -2299,6 +2306,9 @@ struct super_operations {
 	struct dquot **(*get_dquots)(struct inode *);
 #endif
 	int (*bdev_try_to_free_page)(struct super_block*, struct page*, gfp_t);
+	/*
+	 * xfs设置了这个，因为其inode不通过 super_block->s_inode_lru 管理
+	 */
 	long (*nr_cached_objects)(struct super_block *,
 				  struct shrink_control *);
 	long (*free_cached_objects)(struct super_block *,
@@ -3390,6 +3400,9 @@ extern int inode_needs_sync(struct inode *inode);
 extern int generic_delete_inode(struct inode *inode);
 static inline int generic_drop_inode(struct inode *inode)
 {
+	/*
+	 * xfs的inode永远是hashed， 参见 inode->i_hash 注释
+	 */
 	return !inode->i_nlink || inode_unhashed(inode);
 }
 

@@ -329,6 +329,9 @@ struct mem_cgroup {
         /* Index in the kmem_cache->memcg_params.memcg_caches array */
 	int kmemcg_id;
 	enum memcg_kmem_state kmem_state;
+	/*
+	 * 链表元素是： memcg_cache_params->kmem_caches_node
+	 */
 	struct list_head kmem_caches;
 #endif
 

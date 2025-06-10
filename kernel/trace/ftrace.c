@@ -6232,6 +6232,14 @@ void __init ftrace_init(void)
 	if (ret)
 		goto failed;
 
+	/*
+	 * 链接脚本中做了如下处理：
+	 * #define MCOUNT_REC()	. = ALIGN(8);			\
+	 *              __start_mcount_loc = .;			\
+	 *		KEEP(*(__mcount_loc))			\
+	 *		KEEP(*(__patchable_function_entries))	\
+	 *		__stop_mcount_loc = .;
+	 */
 	count = __stop_mcount_loc - __start_mcount_loc;
 	if (!count) {
 		pr_info("ftrace: No functions to be traced?\n");

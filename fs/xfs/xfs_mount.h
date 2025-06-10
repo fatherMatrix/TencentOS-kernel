@@ -479,6 +479,12 @@ typedef struct xfs_perag {
 	spinlock_t	pag_ici_lock;	/* incore inode cache lock */
 	struct radix_tree_root pag_ici_root;	/* incore inode cache root */
 	int		pag_ici_reclaimable;	/* reclaimable inodes */
+	/*
+	 * 添加upstream commit: 69b491c214d7fd4d4df972ae5377be99ca3753db
+	 * - xfs: serialise inode reclaim within an AG
+	 * 删除upstream commit: 0e8e2c6343dd74a4f55f8507a9fae9064d456436
+	 * - xfs: allow multiple reclaimers per AG
+	 */
 	struct mutex	pag_ici_reclaim_lock;	/* serialisation point */
 	unsigned long	pag_ici_reclaim_cursor;	/* reclaim restart point */
 

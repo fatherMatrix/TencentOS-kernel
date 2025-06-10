@@ -421,6 +421,9 @@ typedef u64 acpi_physical_address;
 typedef u32 acpi_status;	/* All ACPI Exceptions */
 typedef u32 acpi_name;		/* 4-byte ACPI name */
 typedef char *acpi_string;	/* Null terminated ASCII string */
+/*
+ * 指向 struct acpi_namespace_node 的指针
+ */
 typedef void *acpi_handle;	/* Actually a ptr to a NS Node */
 
 /* Time constants for timer calculations */

@@ -26,6 +26,9 @@ struct seq_file {
 	const struct seq_operations *op;
 	int poll_event;
 	const struct file *file;
+	/*
+	 * kernfs_fop_open() 中会将其设置为 kernfs_open_file
+	 */
 	void *private;
 };
 

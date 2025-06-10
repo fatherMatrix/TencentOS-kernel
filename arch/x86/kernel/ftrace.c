@@ -84,6 +84,9 @@ ftrace_text_replace(unsigned char op, unsigned long ip, unsigned long addr)
 static unsigned char *
 ftrace_call_replace(unsigned long ip, unsigned long addr)
 {
+	/*
+	 * 0xe8是相对跳转的opcode
+	 */
 	return ftrace_text_replace(0xe8, ip, addr);
 }
 
@@ -155,7 +158,14 @@ int ftrace_make_nop(struct module *mod,
 	unsigned const char *new, *old;
 	unsigned long ip = rec->ip;
 
+	/*
+	 * 计算出当前未进行nop替换时的指令应该是什么，用于替换时的验
+	 * 证
+	 */
 	old = ftrace_call_replace(ip, addr);
+	/*
+	 * 得到使用哪种nop指令
+	 */
 	new = ftrace_nop_replace();
 
 	/*
@@ -165,6 +175,8 @@ int ftrace_make_nop(struct module *mod,
 	 * or before the code will ever be executed (module load).
 	 * We do not want to use the breakpoint version in this case,
 	 * just modify the code directly.
+	 * - 这里不需要使用int3来做原子替换，因此这个时候是绝对不会
+	 *   调用正在被替换的函数的
 	 */
 	if (addr == MCOUNT_ADDR)
 		return ftrace_modify_code_direct(rec->ip, old, new);

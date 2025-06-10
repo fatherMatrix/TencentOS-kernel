@@ -1376,6 +1376,7 @@ xfs_buf_ioend(
 	 * 调用xfs_buf关联的b_iodone回调函数
 	 * - 看到有地方将其设置为了 xfs_buf_iodone_callbacks()，但内部似乎又
 	 *   递归调用了xfs_buf_ioend()；哦，递归前的将b_iodone字段清空了；
+	 * - 另一个是设置为了 xlog_recover_iodone ，只有这两个
 	 */
 	if (bp->b_iodone)
 		(*(bp->b_iodone))(bp);
@@ -1768,6 +1769,9 @@ __xfs_buf_submit(
 	atomic_set(&bp->b_io_remaining, 1);
 	if (bp->b_flags & XBF_ASYNC)
 		xfs_buf_ioacct_inc(bp);
+	/*
+	 * 提交 submit_bio
+	 */
 	_xfs_buf_ioapply(bp);
 
 	/*

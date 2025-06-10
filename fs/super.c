@@ -80,9 +80,19 @@ static unsigned long super_cache_scan(struct shrinker *shrink,
 	if (!trylock_super(sb))
 		return SHRINK_STOP;
 
+	/*
+	 * 这么多文件系统中，仅xfs配置了该字段
+	 * - xfs_fs_nr_cached_objects()
+	 * - 因为xfs的inode不会链接进 super_block->s_inode_lru 中，而是由
+	 *   xfs_mount 自行管理
+	 *   > 参见： inode->i_hash 注释
+	 */
 	if (sb->s_op->nr_cached_objects)
 		fs_objects = sb->s_op->nr_cached_objects(sb, sc);
 
+	/*
+	 * 非xfs文件系统，iput_final后未使用的inode都在这个链表中缓存
+	 */
 	inodes = list_lru_shrink_count(&sb->s_inode_lru, sc);
 	dentries = list_lru_shrink_count(&sb->s_dentry_lru, sc);
 	total_objects = dentries + inodes + fs_objects + 1;
@@ -144,6 +154,10 @@ static unsigned long super_cache_count(struct shrinker *shrink,
 		return 0;
 	smp_rmb();
 
+	/*
+	 * - xfs_fs_nr_cached_objects()
+	 * - ... ...
+	 */
 	if (sb->s_op && sb->s_op->nr_cached_objects)
 		total_objects = sb->s_op->nr_cached_objects(sb, sc);
 

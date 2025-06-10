@@ -114,6 +114,11 @@ static ssize_t sysfs_kf_read(struct kernfs_open_file *of, char *buf,
 	 */
 	if (WARN_ON_ONCE(buf != of->prealloc_buf))
 		return 0;
+	/*
+	 * prealloc情况下，show方法只会被调用一次
+	 * - 非prealloc情况下，走 kernfs_fop_read -> seq_read[ kernfs_seq_ops ]
+	 *   的话， ktype.syscall_op.show会多次调用
+	 */
 	len = ops->show(kobj, of->kn->priv, buf);
 	if (len < 0)
 		return len;
@@ -254,6 +259,10 @@ int sysfs_add_file_mode_ns(struct kernfs_node *parent,
 
 	if (!is_bin) {
 		struct kobject *kobj = parent->priv;
+		/*
+		 * 父parent的sysfs_ops是在哪里设置的呢？
+		 * - ext4_init_sysfs() -> kobject_init_and_add()
+		 */
 		const struct sysfs_ops *sysfs_ops = kobj->ktype->sysfs_ops;
 
 		/* every kobject with an attribute needs a ktype assigned */

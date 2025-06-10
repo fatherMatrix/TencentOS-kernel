@@ -1794,8 +1794,9 @@ static int exec_binprm(struct linux_binprm *bprm)
 	rcu_read_unlock();
 
 	/*
-	 * 这里不仅仅是search，还包括了执行；
+	 * 这里不仅仅是search可执行文件类型对应的handler，还包括了执行；
 	 * - 如果执行了，是不是就不返回了？
+	 *   > 新进程的话，还是要返回到用户态的吧？
 	 */
 	ret = search_binary_handler(bprm);
 	if (ret >= 0) {
@@ -1924,7 +1925,7 @@ static int __do_execve_file(int fd, struct filename *filename,
 	}
 
 	/*
-	 * 用于设置新进程的授权，并将可执行文件的内容读到缓冲区中；
+	 * 用于设置新进程的cred，并将可执行文件的内容读到缓冲区中；
 	 */
 	retval = prepare_binprm(bprm);
 	if (retval < 0)

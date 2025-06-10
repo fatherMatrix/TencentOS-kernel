@@ -3066,6 +3066,9 @@ struct kmem_cache *memcg_kmem_get_cache(struct kmem_cache *cachep)
 	 * creation of a new kmem_cache.
 	 */
 	if (unlikely(!memcg_cachep))
+	/*
+	 * 分配per-memcg的kmem_cache
+	 */
 		memcg_schedule_kmem_cache_create(memcg, cachep);
 	else if (percpu_ref_tryget(&memcg_cachep->memcg_params.refcnt))
 		cachep = memcg_cachep;

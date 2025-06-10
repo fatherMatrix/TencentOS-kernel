@@ -2765,7 +2765,10 @@ static int ext4_writepages(struct address_space *mapping,
 		goto out_writepages;
 
 	/*
-	 * 对于journal mode，已经把数据做了日志，这里可以直接写数据区；
+	 * 对于journal mode，已经把数据做了日志，这里可以直接写数据区；  XXXXXXXXXX
+	 * - 什么地方做的日志？                                                   XXXXXXXXXX
+	 *   o 显然这里的注释是错误的，不是已经做了日志所以可以写数据区，而是后面在
+	 *     kjournald中会做，所以这里不需要做！
 	 */
 	if (ext4_should_journal_data(inode)) {
 		ret = generic_writepages(mapping, wbc);

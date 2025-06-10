@@ -3911,6 +3911,10 @@ static void __init init_mount_tree(void)
 	root.dentry = mnt->mnt_root;
 	mnt->mnt_flags |= MNT_LOCKED;
 
+	/*
+	 * 思考一下，什么叫做创建了"/"目录？
+	 * - 将0号进程的根目录设置为"/"即可
+	 */
 	set_fs_pwd(current->fs, &root);
 	set_fs_root(current->fs, &root);
 }

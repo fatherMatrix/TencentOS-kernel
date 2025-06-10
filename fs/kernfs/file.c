@@ -112,6 +112,11 @@ static void *kernfs_seq_start(struct seq_file *sf, loff_t *ppos)
 	if (!kernfs_get_active(of->kn))
 		return ERR_PTR(-ENODEV);
 
+	/*
+	 * 这玩意儿设置的时候，没看到有seq_start字段呀？
+	 * - sysfs_add_file_mode_ns() 中确实没有设置 seq_start
+	 * - cgroupfs 直接通过 __kernfs_create_file() 自定义了ops
+	 */
 	ops = kernfs_ops(of->kn);
 	if (ops->seq_start) {
 		void *next = ops->seq_start(sf, ppos);
@@ -555,6 +560,12 @@ static int kernfs_get_open_node(struct kernfs_node *kn,
 
 	on = kn->attr.open;
 	if (on) {
+	/*
+	 * 看样子每次打开都会生成一个 kernfs_open_file ，并将其
+	 * 挂入 kernfs.attr.kernfs_open_node.files的链表中
+	 * - .release = kernfs_fop_release 中会将其摘下并释放其
+	 *   分配的内存
+	 */
 		atomic_inc(&on->refcnt);
 		list_add_tail(&of->list, &on->files);
 	}
@@ -706,6 +717,9 @@ static int kernfs_fop_open(struct inode *inode, struct file *file)
 	if (error)
 		goto err_free;
 
+	/*
+	 * seq_open() 中会对 private_data 进行设置
+	 */
 	of->seq_file = file->private_data;
 	of->seq_file->private = of;
 

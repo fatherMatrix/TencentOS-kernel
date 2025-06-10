@@ -72,7 +72,10 @@ struct kprobe {
 	/*count the number of times this probe was temporarily disarmed */
 	unsigned long nmissed;
 
-	/* location of the probe point */
+	/*
+	 * location of the probe point
+	 * - 探测地址
+	 */
 	kprobe_opcode_t *addr;
 
 	/* Allow user to indicate symbol name of the probe point 

@@ -1283,6 +1283,9 @@ restart:
 	}
 
 	if (!error) {
+		/*
+		 * 这里是阻塞等待回写的
+		 */
 		error = xfs_bwrite(bp);
 		xfs_buf_relse(bp);
 	}

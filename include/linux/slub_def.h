@@ -130,6 +130,7 @@ struct kmem_cache {
 	const char *name;	/* Name (only for display!) */
 	/*
 	 * 链表头是？
+	 * - 全局链表 slab_caches
 	 */
 	struct list_head list;	/* List of slab caches */
 #ifdef CONFIG_SYSFS

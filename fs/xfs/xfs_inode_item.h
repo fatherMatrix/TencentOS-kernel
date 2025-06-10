@@ -20,7 +20,7 @@ typedef struct xfs_inode_log_item {
 	struct xfs_log_item	ili_item;	   /* common portion */
 	struct xfs_inode	*ili_inode;	   /* inode ptr */
 	/*
-	 * 来源是xfs_log_item->li_lsn
+	 * 来源是 xfs_log_item->li_lsn
 	 */
 	xfs_lsn_t		ili_flush_lsn;	   /* lsn at last flush */
 	xfs_lsn_t		ili_last_lsn;	   /* lsn at last transaction */

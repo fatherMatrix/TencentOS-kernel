@@ -402,6 +402,7 @@ static void wb_exit(struct bdi_writeback *wb)
  * protected.
  */
 static DEFINE_SPINLOCK(cgwb_lock);
+static spinlock_t cgwb_lock; // For Source Insight
 static struct workqueue_struct *cgwb_release_wq;
 
 /**
@@ -557,6 +558,9 @@ static int cgwb_create(struct backing_dev_info *bdi,
 	spin_lock_irqsave(&cgwb_lock, flags);
 	wb = radix_tree_lookup(&bdi->cgwb_tree, memcg_css->id);
 	if (wb && wb->blkcg_css != blkcg_css) {
+		/*
+		 * 这里就这么确定只剩下了init ref？
+		 */
 		cgwb_kill(wb);
 		wb = NULL;
 	}
@@ -657,6 +661,10 @@ out_put:
  * both the memcg and blkcg associated with it and verifies the blkcg on
  * each lookup.  On mismatch, the existing wb is discarded and a new one is
  * created.
+ *
+ * wb_find_current() 的slowpath版本
+ * - 要注意两者查找的集合是不一样的，slowpath版本中由于 cgroup_get_e_css() 的存在，
+ *   搜索的集合要大一些
  */
 struct bdi_writeback *wb_get_lookup(struct backing_dev_info *bdi,
 				    struct cgroup_subsys_state *memcg_css)

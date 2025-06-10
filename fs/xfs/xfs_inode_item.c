@@ -491,6 +491,39 @@ xfs_inode_item_error(
 	xfs_set_li_failed(lip, bp);
 }
 
+/*
+ * upstream中后面应该是有优化：
+ * - https://lwn.net/Articles/824130/：
+ *   > Inode flushing requires that we first lock an inode, then check it,
+ *   > then lock the underlying buffer, flush the inode to the buffer and
+ *   > finally add the inode to the buffer to be unlocked on IO completion.
+ *   > We then walk all the other cached inodes in the buffer range and
+ *   > optimistically lock and flush them to the buffer without blocking.
+ *   >
+ *   > This cluster write effectively repeats the same code we do with the
+ *   > initial inode, except now it has to special case that initial inode
+ *   > that is already locked. Hence we have multiple copies of very
+ *   > similar code, and it is a result of inode cluster flushing being
+ *   > based on a specific inode rather than grabbing the buffer and
+ *   > flushing all available inodes to it.
+ *   >
+ *   > The problem with this at the moment is that we we can't look up the
+ *   > buffer until we have guaranteed that an inode is held exclusively
+ *   > and it's not going away while we get the buffer through an imap
+ *   > lookup. Hence we are kinda stuck locking an inode before we can look
+ *   > up the buffer.
+ *   >
+ *   > This is also a result of inodes being detached from the cluster
+ *   > buffer except when IO is being done. This has the further problem
+ *   > that the cluster buffer can be reclaimed from memory and then the
+ *   > inode can be dirtied. At this point cleaning the inode requires a
+ *   > read-modify-write cycle on the cluster buffer. If we then are put
+ *   > under memory pressure, cleaning that dirty inode to reclaim it
+ *   > requires allocating memory for the cluster buffer and this leads to
+ *   > all sorts of problems.
+ *   >
+ *   > ...
+ */
 STATIC uint
 xfs_inode_item_push(
 	struct xfs_log_item	*lip,
@@ -546,6 +579,8 @@ xfs_inode_item_push(
 	 * Someone else is already flushing the inode.  Nothing we can do
 	 * here but wait for the flush to finish and remove the item from
 	 * the AIL.
+	 *
+	 * 加锁 - XFS_IFLOCK
 	 */
 	if (!xfs_iflock_nowait(ip)) {
 		rval = XFS_ITEM_FLUSHING;
@@ -570,6 +605,16 @@ xfs_inode_item_push(
 
 	spin_lock(&lip->li_ailp->ail_lock);
 out_unlock:
+	/*
+	 * 按照前面对xfs事务机制的理解，在AIL traversal阶段，应该锁住log_item，使其
+	 * 不能再次被pin，以保证向metadata space写数据的过程中内容不变。但这里明显
+	 * 看到解锁了。
+	 * - 做到这一点对xfs_inode并不是这么直白。它也不是通过锁住XFS_ILOCK_XXX来避免
+	 *   xfs_inode再次被pin的。事实上，它不阻止xfs_inode再次被pin，而是将数据拷贝
+	 *   到了对应的xfs_buf，保证xfs_buf中的内容不会再被修改。
+	 * - 这里也不要误会xfs_iflock_xxx是来做防止再次pin的，它只是互斥两个flushing
+	 *   操作而已
+	 */
 	xfs_iunlock(ip, XFS_ILOCK_SHARED);
 	return rval;
 }

@@ -87,6 +87,10 @@ struct kobject {
 	 */
 	struct list_head	entry;
 	struct kobject		*parent;
+	/*
+	 * 应该是本kobject属于这个kset？
+	 * - 参见（结论来源）： mod_sysfs_init() 中将module.mkobj.kset设置为了module_kset
+	 */
 	struct kset		*kset;
 	struct kobj_type	*ktype;
 	/*
@@ -171,6 +175,15 @@ struct kobj_type {
 	 * 当kobject引用计数变为0时，此函数指针用于销毁kobject
 	 */
 	void (*release)(struct kobject *kobj);
+	/*
+	 * 通过 sysfs_add_file_mode_ns() 这类接口注册的attribute的show/store
+	 * 都是走的这里
+	 * - vfs file_operation / kernfs_file_fops    <- 不可变
+	 *   -> kernfs_ops / sysfs_file_kfops_rw ...  <- kernfs_create_file()可以控制
+	 *     -> kobj_type.sysfs_ops
+	 * - sysfs中设置kernfs_ops的位置在 sysfs_add_file_mode_ns()
+	 *   > 这个控制太强了
+	 */
 	const struct sysfs_ops *sysfs_ops;
 	struct attribute **default_attrs;	/* use default_groups instead */
 	const struct attribute_group **default_groups;

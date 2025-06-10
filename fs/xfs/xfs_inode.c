@@ -2856,6 +2856,9 @@ xfs_ifree_cluster(
 				xfs_trans_ail_copy_lsn(mp->m_ail,
 							&iip->ili_flush_lsn,
 							&iip->ili_item.li_lsn);
+				/*
+				 * 感觉其实还能更早做这个事儿
+				 */
 				xfs_iflags_set(iip->ili_inode, XFS_ISTALE);
 			}
 		}
@@ -2913,6 +2916,7 @@ retry:
 			 * in the list attached to the buffer and are not
 			 * already marked stale. If we can't lock it, back off
 			 * and retry.
+			 * - 当前的机制中，current free ip是被提前上了锁的
 			 */
 			if (ip != free_ip) {
 				if (!xfs_ilock_nowait(ip, XFS_ILOCK_EXCL)) {
@@ -3946,6 +3950,8 @@ cluster_corrupt_out:
  * Flush dirty inode metadata into the backing buffer.
  *
  * The caller must have the inode lock and the inode flush lock held.  The
+ *                      ^^^^^^^^^^^^^^     ^^^^^^^^^^^^^^^
+ *                      - 返回后释放            - IO完成后释放
  * inode lock will still be held upon return to the caller, and the inode
  * flush lock will be released after the inode has reached the disk.
  *
@@ -4009,6 +4015,8 @@ xfs_iflush(
 	 * If we get any other error, we effectively have a corruption situation
 	 * and we cannot flush the inode, so we treat it the same as failing
 	 * xfs_iflush_int().
+	 *
+	 * 返回时xfs_buf是处于锁定状态的哟
 	 */
 	error = xfs_imap_to_bp(mp, NULL, &ip->i_imap, &dip, &bp, XBF_TRYLOCK,
 			       0);

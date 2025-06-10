@@ -123,6 +123,12 @@ static int traverse(struct seq_file *m, loff_t offset)
 		if (seq_has_overflowed(m))
 			goto Eoverflow;
 		p = m->op->next(m, p, &m->index);
+		/*
+		 * seq_file->count 表示 seq_file->buf中已有数据的长度，但因为
+		 * 后面每次循环都会将seq_file->count设置为0，所以这里：
+		 * - pos代表当前遍历到的位置
+		 * - count表示每次新输出的长度
+		 */
 		if (pos + m->count > offset) {
 			m->from = offset - pos;
 			m->count -= m->from;
@@ -133,11 +139,20 @@ static int traverse(struct seq_file *m, loff_t offset)
 		if (pos == offset)
 			break;
 	}
+	/*
+	 * break之后，seq_file->buf就被保留了
+	 */
 	m->op->stop(m, p);
 	return error;
 
 Eoverflow:
 	m->op->stop(m, p);
+	/*
+	 * 一个buf不够用，所以还需要另一个buf，但这个buf中的内容根本不会再需要
+	 * 了，所以可以释放掉
+	 * - 这里有必要吗？直接把原来的count设置为0不就又可以用了吗？
+	 *   > 哦，新分配的buf是原来buf的2倍
+	 */
 	kvfree(m->buf);
 	m->count = 0;
 	m->buf = seq_buf_alloc(m->size <<= 1);
@@ -226,6 +241,7 @@ ssize_t seq_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
 	m->from = 0;
 	/*
 	 * mountinfo: mounts_op
+	 * kernfs: kernfs_seq_ops
 	 */
 	p = m->op->start(m, &m->index);
 	while (1) {

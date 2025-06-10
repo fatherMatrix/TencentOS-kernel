@@ -515,6 +515,8 @@ static unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
 
 	/*
 	 * 计算可释放对象的数量
+	 * - super_cache_count
+	 * - ... ...
 	 */
 	freeable = shrinker->count_objects(shrinker, shrinkctl);
 	if (freeable == 0 || freeable == SHRINK_EMPTY)
@@ -602,6 +604,8 @@ static unsigned long do_shrink_slab(struct shrink_control *shrinkctl,
 		shrinkctl->nr_scanned = nr_to_scan;
 		/*
 		 * 回收内存
+		 * - super_cache_scan
+		 * - ... ...
 		 */
 		ret = shrinker->scan_objects(shrinker, shrinkctl);
 		if (ret == SHRINK_STOP)
@@ -3201,7 +3205,7 @@ retry:
 				sc->priority);
 		sc->nr_scanned = 0;
 		/*
-		 * 回收
+		 * 回收zone，其实回收是以node为粒度的
 		 */
 		shrink_zones(zonelist, sc);
 
@@ -3223,6 +3227,11 @@ retry:
 		 */
 		if (sc->priority < DEF_PRIORITY - 2)
 			sc->may_writepage = 1;
+	/*
+	 * 如果优先级被减成负数了，就跳出循环了？
+	 * - 也对，内存直接回收并不保证一定可以回收到内存。如果priority为
+	 *   负数了，还是没有回收到内存，那就OOM呗
+	 */
 	} while (--sc->priority >= 0);
 
 	last_pgdat = NULL;
@@ -3349,6 +3358,9 @@ static bool throttle_direct_reclaim(gfp_t gfp_mask, struct zonelist *zonelist,
 
 		/* Throttle based on the first usable node */
 		pgdat = zone->zone_pgdat;
+		/*
+		 * 如果不允许的话，即确认throttle，则会在内部唤醒kswapd
+		 */
 		if (allow_direct_reclaim(pgdat))
 			goto out;
 		break;

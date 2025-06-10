@@ -2770,6 +2770,7 @@ EXPORT_SYMBOL(d_hash_and_lookup);
  *
  * Turn the dentry into a negative dentry if possible, otherwise
  * remove it from the hash queues so it can be deleted later
+ * - 核心是在合适的时候调用 __d_drop() ，对比 d_invalidate()
  */
  
 void d_delete(struct dentry * dentry)
@@ -2780,6 +2781,9 @@ void d_delete(struct dentry * dentry)
 	spin_lock(&dentry->d_lock);
 	/*
 	 * Are we the only user?
+	 * - 遇到这个问题才明白这里这么做的原因：
+	 *   > 新建一个目录，cd到这个目录里，然后另一个进程删除这个目录，此时应该无法ls到这个
+	 *     目录才对
 	 */
 	if (dentry->d_lockref.count == 1) {
 	/*

@@ -362,7 +362,7 @@ struct module {
 	char name[MODULE_NAME_LEN];
 
 	/* Sysfs stuff. */
-	struct module_kobject mkobj;
+	struct module_kobject mkobj;	/* 这个目录：/sfs/module/<module name> */
 	struct module_attribute *modinfo_attrs;
 	const char *version;
 	const char *srcversion;

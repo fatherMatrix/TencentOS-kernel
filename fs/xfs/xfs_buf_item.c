@@ -1067,6 +1067,10 @@ xfs_buf_do_callbacks(
 		lip->li_cb(bp, lip);
 	}
 
+	/*
+	 * 上面是 buf log item
+	 * 这里是 inode log item、...
+	 */
 	while (!list_empty(&bp->b_li_list)) {
 		lip = list_first_entry(&bp->b_li_list, struct xfs_log_item,
 				       li_bio_list);

@@ -133,6 +133,10 @@ int arch_register_cpu(int num)
 		 */
 		for_each_active_irq(irq) {
 			if (!IO_APIC_IRQ(irq) && irq_has_action(irq)) {
+			/*
+			 * 如果不是IOAPIC的irq，则必定只能由bsp来处理，因此这
+			 * 中情况下bsp是不能热插拔的；
+			 */
 				cpu0_hotpluggable = 0;
 				break;
 			}

@@ -2931,6 +2931,10 @@ static void its_vpe_send_inv(struct irq_data *d)
 
 		rdbase = per_cpu_ptr(gic_rdists->rdist, vpe->col_idx)->rd_base;
 		gic_write_lpir(vpe->vpe_db_lpi, rdbase + GICR_INVLPIR);
+		/*
+		 * GICR_SYNCR寄存器最低位为1表示有一个INVA操作正在进行，为0表示
+		 * 没有正在进行的INVA操作（上一个操作已完成）
+		 */
 		while (gic_read_lpir(rdbase + GICR_SYNCR) & 1)
 			cpu_relax();
 	} else {

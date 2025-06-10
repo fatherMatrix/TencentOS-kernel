@@ -383,6 +383,10 @@ int simple_rmdir(struct inode *dir, struct dentry *dentry)
 	if (!simple_empty(dentry))
 		return -ENOTEMPTY;
 
+	/*
+	 * drop_nlink() 和 simple_unlink()中的drop_nlink()是不是重复？
+	 * - create侧对dir额外做了一次inc_nlink()
+	 */
 	drop_nlink(d_inode(dentry));
 	simple_unlink(dir, dentry);
 	drop_nlink(dir);

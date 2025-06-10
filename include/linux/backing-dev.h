@@ -275,6 +275,8 @@ static inline bool inode_cgwb_enabled(struct inode *inode)
  * Find the wb of @bdi which matches both the memcg and blkcg of %current.
  * Must be called under rcu_read_lock() which protects the returend wb.
  * NULL if not found.
+ *
+ * wb_get_lookup() 的快速版本
  */
 static inline struct bdi_writeback *wb_find_current(struct backing_dev_info *bdi)
 {
@@ -311,6 +313,13 @@ wb_get_create_current(struct backing_dev_info *bdi, gfp_t gfp)
 	struct bdi_writeback *wb;
 
 	rcu_read_lock();
+	/*
+	 * 这是 wb_get_lookup() 的快速版本，返回的bdi_writeback满足如下条件：
+	 * - 属于backing_dev_info
+	 * - bdi_writeback->memcg_css 对应 task_css(current, memory_cgrp_id)
+	 * - bdi_writeback->blkcg_css 对应 task_css(current, io_cgrp_id)
+	 * 如果有一个不满足，则wb返回NULL，并经过下面的wb_get_create()重建
+	 */
 	wb = wb_find_current(bdi);
 	if (wb && unlikely(!wb_tryget(wb)))
 		wb = NULL;

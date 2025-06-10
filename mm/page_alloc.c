@@ -3874,7 +3874,7 @@ retry:
 				goto try_this_zone;
 
 			/*
-			 * node_reclaim_mode受/proc/sys/vm/zone_reclaim_mode的控制
+			 * node_reclaim_mode 受 /proc/sys/vm/zone_reclaim_mode的控制
 			 * - devcloud默认为0
 			 */
 			if (node_reclaim_mode == 0 ||

@@ -63,6 +63,7 @@
 /*
  * After a CPU has dirtied this many pages, balance_dirty_pages_ratelimited
  * will look to see if it needs to force writeback or throttling.
+ * - 参见： balance_dirty_pages_ratelimited()
  */
 static long ratelimit_pages = 32;
 
@@ -378,6 +379,9 @@ static unsigned long global_dirtyable_memory(void)
 	 */
 	x -= min(x, totalreserve_pages);
 
+	/*
+	 * 文件页都可以算作available的，因为可以writeback
+	 */
 	x += global_node_page_state(NR_INACTIVE_FILE);
 	x += global_node_page_state(NR_ACTIVE_FILE);
 
@@ -2434,6 +2438,7 @@ static int __writepage(struct page *page, struct writeback_control *wbc,
 	struct address_space *mapping = data;
 	/*
 	 * 裸设备： def_blk_aops.blkdev_writepage()
+	 * ext4: ext4_writepage()
 	 */
 	int ret = mapping->a_ops->writepage(page, wbc);
 	mapping_set_error(mapping, ret);

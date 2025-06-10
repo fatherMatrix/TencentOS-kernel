@@ -913,7 +913,10 @@ int proc_kprobes_optimization_handler(struct ctl_table *table, int write,
 }
 #endif /* CONFIG_SYSCTL */
 
-/* Put a breakpoint for a probe. Must be called with text_mutex locked */
+/*
+ * Put a breakpoint for a probe. Must be called with text_mutex locked
+ * - 定义了CONFIG_OPTPROBES的版本
+ */
 static void __arm_kprobe(struct kprobe *p)
 {
 	struct kprobe *_p;
@@ -924,6 +927,10 @@ static void __arm_kprobe(struct kprobe *p)
 		/* Fallback to unoptimized kprobe */
 		unoptimize_kprobe(_p, true);
 
+	/*
+	 * 优化kprobe前也是要先poke一个0xcc，后面再进行优化
+	 * - 因为poke 0xcc是一个原子操作，只需要写1个字节
+	 */
 	arch_arm_kprobe(p);
 	optimize_kprobe(p);	/* Try to optimize (add kprobe to a list) */
 }
@@ -953,6 +960,10 @@ static void __disarm_kprobe(struct kprobe *p, bool reopt)
 #define kill_optimized_kprobe(p)		do {} while (0)
 #define prepare_optimized_kprobe(p)		do {} while (0)
 #define try_to_optimize_kprobe(p)		do {} while (0)
+/*
+ * 未定义CONFIG_OPTPROBES的版本
+ * - 直接插入0xcc
+ */
 #define __arm_kprobe(p)				arch_arm_kprobe(p)
 #define __disarm_kprobe(p, o)			arch_disarm_kprobe(p)
 #define kprobe_disarmed(p)			kprobe_disabled(p)
@@ -983,11 +994,13 @@ static struct kprobe *alloc_aggr_kprobe(struct kprobe *p)
 #endif /* CONFIG_OPTPROBES */
 
 #ifdef CONFIG_KPROBES_ON_FTRACE
+static struct ftrace_ops kprobe_ftrace_ops; // For Source Insight
 static struct ftrace_ops kprobe_ftrace_ops __read_mostly = {
 	.func = kprobe_ftrace_handler,
 	.flags = FTRACE_OPS_FL_SAVE_REGS,
 };
 
+static struct ftrace_ops kprobe_ipmodify_ops; // For Source Insight
 static struct ftrace_ops kprobe_ipmodify_ops __read_mostly = {
 	.func = kprobe_ftrace_handler,
 	.flags = FTRACE_OPS_FL_SAVE_REGS | FTRACE_OPS_FL_IPMODIFY,
@@ -1101,6 +1114,9 @@ static inline int disarm_kprobe_ftrace(struct kprobe *p)
 /* Arm a kprobe with text_mutex */
 static int arm_kprobe(struct kprobe *kp)
 {
+	/*
+	 * 如果地址刚好是ftrace地址，则装备一个ftrace call
+	 */
 	if (unlikely(kprobe_ftrace(kp)))
 		return arm_kprobe_ftrace(kp);
 
@@ -1515,6 +1531,10 @@ bool within_kprobe_blacklist(unsigned long addr)
 static kprobe_opcode_t *_kprobe_addr(kprobe_opcode_t *addr,
 			const char *symbol_name, unsigned int offset)
 {
+	/*
+	 * symbol_name 和 addr 只能指定一个
+	 * - 其实，只要地址一致也是ok的吧哈哈哈
+	 */
 	if ((symbol_name && addr) || (!symbol_name && !addr))
 		goto invalid;
 
@@ -1574,6 +1594,9 @@ int __weak arch_check_ftrace_location(struct kprobe *p)
 {
 	unsigned long ftrace_addr;
 
+	/*
+	 * 返回addr所在ftrace块的起始地址
+	 */
 	ftrace_addr = ftrace_location((unsigned long)p->addr);
 	if (ftrace_addr) {
 #ifdef CONFIG_KPROBES_ON_FTRACE
@@ -1711,7 +1734,10 @@ int register_kprobe(struct kprobe *p)
 
 	if (!kprobes_all_disarmed && !kprobe_disabled(p)) {
 		/*
-		 * 将trap指令写到被探测点处替换原始指令
+		 * 替换探测点处的指令，有多种方式：
+		 * - int3
+		 * - jump
+		 * - ftrace
 		 */
 		ret = arm_kprobe(p);
 		if (ret) {

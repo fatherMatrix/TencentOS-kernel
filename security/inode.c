@@ -127,6 +127,9 @@ static struct dentry *securityfs_create_dentry(const char *name, umode_t mode,
 
 	dir = d_inode(parent);
 
+	/*
+	 * 锁住parent inode
+	 */
 	inode_lock(dir);
 	dentry = lookup_one_len(name, parent, strlen(name));
 	if (IS_ERR(dentry))
@@ -150,6 +153,9 @@ static struct dentry *securityfs_create_dentry(const char *name, umode_t mode,
 	if (S_ISDIR(mode)) {
 		inode->i_op = &simple_dir_inode_operations;
 		inode->i_fop = &simple_dir_operations;
+		/*
+		 * 增加一次nlink
+		 */
 		inc_nlink(inode);
 		inc_nlink(dir);
 	} else if (S_ISLNK(mode)) {

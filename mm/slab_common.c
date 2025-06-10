@@ -31,6 +31,10 @@
 enum slab_state slab_state;
 LIST_HEAD(slab_caches);
 DEFINE_MUTEX(slab_mutex);
+/*
+ * kmem_cache_boot
+ * - 参见 kmem_cache_init()
+ */
 struct kmem_cache *kmem_cache;
 
 #ifdef CONFIG_HARDENED_USERCOPY
@@ -499,6 +503,9 @@ kmem_cache_create_usercopy(const char *name,
 	    WARN_ON(size < usersize || size - usersize < useroffset))
 		usersize = useroffset = 0;
 
+	/*
+	 * 如果有usercopy部分，则不允许slab alias
+	 */
 	if (!usersize)
 		s = __kmem_cache_alias(name, size, align, flags, ctor);
 	if (s)

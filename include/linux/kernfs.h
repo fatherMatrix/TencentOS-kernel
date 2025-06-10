@@ -210,6 +210,10 @@ struct kernfs_root {
 	wait_queue_head_t	deactivate_waitq;
 };
 
+/*
+ * kernfs_fop_open() 中对每个打开的kernfs file都会分配一个这个。并将其放入
+ * seq_file->private 中
+ */
 struct kernfs_open_file {
 	/* published fields */
 	struct kernfs_node	*kn;

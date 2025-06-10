@@ -74,14 +74,33 @@ struct memcg_cache_params {
 	struct kmem_cache *root_cache;
 	union {
 		struct {
+		/*
+		 * 给parent kmem_cache使用
+		 */
 			struct memcg_cache_array __rcu *memcg_caches;
+			/*
+			 * 作为链表节点链入全局链表 slab_root_caches
+			 * - 要注意CONFIG_MEMCG_KMEM
+			 */
 			struct list_head __root_caches_node;
+			/*
+			 * 链表头，链表元素是children的children_node
+			 */
 			struct list_head children;
 			bool dying;
 		};
 		struct {
+		/*
+		 * 给child kmem_cache使用
+		 */
 			struct mem_cgroup *memcg;
+			/*
+			 * 作为链表节点链入parent的children链表
+			 */
 			struct list_head children_node;
+			/*
+			 * 作为链表元素插入 mem_cgroup->kmem_caches 链表
+			 */
 			struct list_head kmem_caches_node;
 			struct percpu_ref refcnt;
 

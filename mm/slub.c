@@ -293,7 +293,20 @@ static inline void *get_freepointer_safe(struct kmem_cache *s, void *object)
 	if (!debug_pagealloc_enabled_static())
 		return get_freepointer(s, object);
 
+	/*
+	 * 计算slab对象中，空闲指针的位置：
+	 *
+	 * +----------+-------------+----------+--------------+-----+
+	 * | Red Area | Real Object | Red Area | Free pointer | ... |
+	 * +----------+-------------+----------+--------------+-----+
+	 *                                     ^
+	 *                                     |
+	 *                              freepointer_addr
+	 */
 	freepointer_addr = (unsigned long)object + s->offset;
+	/*
+	 * 读出这个位置的值
+	 */
 	probe_kernel_read(&p, (void **)freepointer_addr, sizeof(p));
 	return freelist_ptr(s, p, freepointer_addr);
 }
@@ -3023,12 +3036,15 @@ redo:
 
 	if (likely(page == c->page)) {
 	/*
-	 * 释放对象所属slab缓存是不是cpu缓存
+	 * 释放对象所属slab缓存是cpu缓存
 	 */
 		void **freelist = READ_ONCE(c->freelist);
 
 		set_freepointer(s, tail_obj, freelist);
 
+		/*
+		 * 直接插入到kmem_cache_cpu->freelist这里，即前插
+		 */
 		if (unlikely(!this_cpu_cmpxchg_double(
 				s->cpu_slab->freelist, s->cpu_slab->tid,
 				freelist, tid,
@@ -3724,6 +3740,9 @@ static int kmem_cache_open(struct kmem_cache *s, slab_flags_t flags)
 			goto error;
 	}
 
+	/*
+	 * 初始化 kmem_cache.kmem_cache_node
+	 */
 	if (!init_kmem_cache_nodes(s))
 		goto error;
 

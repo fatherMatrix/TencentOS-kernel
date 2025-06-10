@@ -181,6 +181,9 @@ xfs_imap_to_bp(
 	int			error;
 
 	buf_flags |= XBF_UNMAPPED;
+	/*
+	 * 返回时xfs_buf是处于锁定状态的
+	 */
 	error = xfs_trans_read_buf(mp, tp, mp->m_ddev_targp, imap->im_blkno,
 				   (int)imap->im_len, buf_flags, &bp,
 				   &xfs_inode_buf_ops);

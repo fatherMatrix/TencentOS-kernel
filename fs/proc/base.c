@@ -2991,6 +2991,8 @@ static int proc_stack_depth(struct seq_file *m, struct pid_namespace *ns,
 
 /*
  * Thread groups
+ * - 这个是进程的
+ *   > 线程的是 tid_base_stuff
  */
 static const struct file_operations proc_task_operations;
 static const struct inode_operations proc_task_inode_operations;
@@ -3399,6 +3401,8 @@ static const struct inode_operations proc_tid_comm_inode_operations = {
 
 /*
  * Tasks
+ * - 这个是线程的
+ *   > 进程的是 tgid_base_stuff
  */
 static const struct pid_entry tid_base_stuff[] = {
 	DIR("fd",        S_IRUSR|S_IXUSR, proc_fd_inode_operations, proc_fd_operations),

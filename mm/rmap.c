@@ -1958,8 +1958,8 @@ static void rmap_walk_anon(struct page *page, struct rmap_walk_control *rwc,
 			continue;
 
 		/*
-		 * 对于unmap操作：try_to_unmap_one()
-		 * 对于page_referenced操作：page_referenced_one()
+		 * 对于unmap操作： try_to_unmap_one()
+		 * 对于page_referenced操作： page_referenced_one()
 		 */
 		if (!rwc->rmap_one(page, vma, address, rwc->arg))
 			break;

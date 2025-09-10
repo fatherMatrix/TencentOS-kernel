@@ -2069,7 +2069,7 @@ void run_local_timers(void)
 	}
 	/*
 	 * 走到这里，说明有timer_list到期了，通过软中断来执行timer_list中的函数
-	 * - 处理函数是run_timer_softirq()
+	 * - 处理函数是 run_timer_softirq()
 	 */
 	raise_softirq(TIMER_SOFTIRQ);
 }

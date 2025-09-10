@@ -63,6 +63,10 @@ void ___pmd_free_tlb(struct mmu_gather *tlb, pmd_t *pmd)
 	tlb->need_flush_all = 1;
 #endif
 	pgtable_pmd_page_dtor(page);
+	/*
+	 * tlb_remove_table()
+	 * - 这里是配置了paravirt的
+	 */
 	paravirt_tlb_remove_table(tlb, page);
 }
 

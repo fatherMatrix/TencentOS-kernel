@@ -21,6 +21,11 @@ enum tick_device_mode {
  * - 当使用高精度时钟时，tick_device（Tick层）的工作完全屏蔽，交由tick_sched（
  *   由hrtimer模拟的tick层操作来负责
  *   > Tick层的主要工作就是tick来临时处理调度、timer_list等
+ *   > 不能说tick_device被完全屏蔽了，切换到高精度时钟后，只是把当前cpu的
+ *     tick_device->evtdev->evt_handler设置为了 hrtimer_interrupt() 而已。
+ *     o 当然，这要求当前cpu的tick_device基于的clock_event_device具备高精度
+ *       能力，因为这是处理函数的变化，而没有切换tick_device->evtdev。
+ *                                                              ———— lapic？
  */
 struct tick_device {
 	struct clock_event_device *evtdev;
@@ -74,7 +79,7 @@ struct tick_sched {
 	/*
 	 * 在高精度定时器启用情况下，用来模拟tick的hrtimer
 	 * - function是tick_sched_timer()
-	 *   > 参见：tick_setup_sched_timer()
+	 *   > 参见： tick_setup_sched_timer()
 	 */
 	struct hrtimer			sched_timer;
 	unsigned long			check_clocks;

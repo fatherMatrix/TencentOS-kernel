@@ -904,6 +904,7 @@ static struct task_struct *dup_task_struct(struct task_struct *orig, int node)
 
 	/*
 	 * 分配stack内存
+	 * - 这个是内核栈
 	 */
 	stack = alloc_thread_stack_node(tsk, node);
 	if (!stack)
@@ -2127,7 +2128,7 @@ static __latent_entropy struct task_struct *copy_process(
 	if (retval)
 		goto bad_fork_cleanup_namespaces;
 	/*
-	 * 拷贝并修改寄存器的值；
+	 * 配置内核栈、用户态栈的返回地址、寄存器值
 	 */
 	retval = copy_thread_tls(clone_flags, args->stack, args->stack_size, p,
 				 args->tls);

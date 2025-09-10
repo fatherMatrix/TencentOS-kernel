@@ -6,6 +6,7 @@
 #include <asm/percpu.h>
 #include <linux/thread_info.h>
 
+int __preempt_count; // For Source Insight
 DECLARE_PER_CPU(int, __preempt_count);
 
 /* We use the MSB mostly because its available */

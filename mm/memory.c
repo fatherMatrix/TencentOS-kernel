@@ -1198,6 +1198,9 @@ again:
 		tlb_flush_mmu(tlb);
 	}
 
+	/*
+	 * 上面批量释放了部分page，如果没有unmap完则继续
+	 */
 	if (addr != end) {
 		cond_resched();
 		goto again;
@@ -3715,6 +3718,9 @@ static vm_fault_t do_read_fault(struct vm_fault *vmf)
 		return ret;
 
 	ret |= finish_fault(vmf);
+	/*
+	 * 对应的lock page在
+	 */
 	unlock_page(vmf->page);
 	if (unlikely(ret & (VM_FAULT_ERROR | VM_FAULT_NOPAGE | VM_FAULT_RETRY)))
 		put_page(vmf->page);

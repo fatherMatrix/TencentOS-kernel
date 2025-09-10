@@ -299,7 +299,7 @@ ENTRY(__switch_to_asm)
 
 	/* switch stack */
 	movq	%rsp, TASK_threadsp(%rdi)
-	movq	TASK_threadsp(%rsi), %rsp
+	movq	TASK_threadsp(%rsi), %rsp	/* 后面进程A被再切换回来时，会再从这里开始 */
 
 #ifdef CONFIG_STACKPROTECTOR
 	movq	TASK_stack_canary(%rsi), %rbx
@@ -325,6 +325,10 @@ ENTRY(__switch_to_asm)
 	popq	%rbx
 	popq	%rbp
 
+	/*
+	 * 进程A被切换出去是从__switch_to()开始的，那么进程A被切换回来也
+	 * 要从__switch_to()结束
+	 */
 	jmp	__switch_to
 END(__switch_to_asm)
 

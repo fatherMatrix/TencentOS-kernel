@@ -154,8 +154,7 @@ struct xfs_ino_geometry {
 	/* Inode cluster sizes, adjusted to be at least 1 fsb. */
 	unsigned int	inodes_per_cluster;
 	/*
-	 * 每个fs block中包含几个inode cluster
-	 * - 非inode chunk，参见 xfs_icluster
+	 * 一个inode cluster包含多少个fsblock
 	 */
 	unsigned int	blocks_per_cluster;
 

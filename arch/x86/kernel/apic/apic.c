@@ -1124,9 +1124,9 @@ static void local_apic_timer_interrupt(void)
 	inc_irq_stat(apic_timer_irqs);
 
 	/*
-	 * TICKDEV_MODE_ONESHOT模式下，对应的是hrtimer_interrupt()
+	 * TICKDEV_MODE_ONESHOT模式下，对应的是 hrtimer_interrupt()
 	 * - crash得到的结果
-	 *   > 对应的设置点在tick_init_highres()
+	 *   > 对应的设置点在 tick_init_highres()
 	 *
 	 * TICKDEV_MODE_PERIODIC模式下，对应的是tick_handle_periodic()
 	 */

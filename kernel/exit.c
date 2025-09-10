@@ -893,6 +893,8 @@ void __noreturn do_exit(long code)
 	 *         finish_task_switch
 	 *           put_task_stack
 	 *     所以到底是父进程来回收？还是调度出去后自己回收？
+	 *     - exit_notify()中会判断是否需要autoreap：
+	 *       > 父进程没设置SIGCHLD, xxx
 	 *
 	 * 僵尸进程在哪里设置的？
 	 * - 在上面的exit_notify()

@@ -69,7 +69,13 @@
 #define EXIT_REASON_EOI_INDUCED         45
 #define EXIT_REASON_GDTR_IDTR           46
 #define EXIT_REASON_LDTR_TR             47
+/*
+ * 一般用于vm缺页处理
+ */
 #define EXIT_REASON_EPT_VIOLATION       48
+/*
+ * 一般用于IO空间的模拟
+ */
 #define EXIT_REASON_EPT_MISCONFIG       49
 #define EXIT_REASON_INVEPT              50
 #define EXIT_REASON_RDTSCP              51

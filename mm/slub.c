@@ -297,11 +297,19 @@ static inline void *get_freepointer_safe(struct kmem_cache *s, void *object)
 	 * 计算slab对象中，空闲指针的位置：
 	 *
 	 * +----------+-------------+----------+--------------+-----+
-	 * | Red Area | Real Object | Red Area | Free pointer | ... |
+	 * | Red Area | Real Object | Red Area | Free Pointer | ... |
 	 * +----------+-------------+----------+--------------+-----+
 	 *                                     ^
 	 *                                     |
 	 *                              freepointer_addr
+	 *
+	 * 但事实情况中，Free Pointer的地址可能和Real Object重合，即：
+	 *
+	 * +----------+-------------------+----------+-----+
+	 * | Red Area | Real Object       | Red Area | ... |
+	 * +----------+--------------+----+----------+-----+
+	 *            | Free Pointer |
+	 *            +--------------+
 	 */
 	freepointer_addr = (unsigned long)object + s->offset;
 	/*

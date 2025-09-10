@@ -282,6 +282,10 @@ static int __bprm_mm_init(struct linux_binprm *bprm)
 	 */
 	BUILD_BUG_ON(VM_STACK_FLAGS & VM_STACK_INCOMPLETE_SETUP);
 	vma->vm_end = STACK_TOP_MAX;
+	/*
+	 * 这里分配了一个页的虚地址空间
+	 * - 后面会标记VM_GROWDOWN，所以越界后会进行expand_stack()
+	 */
 	vma->vm_start = vma->vm_end - PAGE_SIZE;
 	vma->vm_flags = VM_SOFTDIRTY | VM_STACK_FLAGS | VM_STACK_INCOMPLETE_SETUP;
 	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
@@ -587,6 +591,9 @@ static int copy_strings(int argc, struct user_arg_ptr argv,
 			if (!kmapped_page || kpos != (pos & PAGE_MASK)) {
 				struct page *page;
 
+				/*
+				 * 这里会分配用户态栈使用的物理内存
+				 */
 				page = get_arg_page(bprm, pos, 1);
 				if (!page) {
 					ret = -E2BIG;
@@ -1748,7 +1755,8 @@ int search_binary_handler(struct linux_binprm *bprm)
 
 		bprm->recursion_depth++;
 		/*
-		 * 对于elf文件，这里是load_elf_binary()
+		 * 对于elf文件，这里是 load_elf_binary()
+		 * 对于脚本文件，这里是 load_script()
 		 */
 		retval = fmt->load_binary(bprm);
 		bprm->recursion_depth--;
@@ -1925,12 +1933,17 @@ static int __do_execve_file(int fd, struct filename *filename,
 	}
 
 	/*
-	 * 用于设置新进程的cred，并将可执行文件的内容读到缓冲区中；
+	 * 用于设置新进程的cred，并将可执行文件的header读到缓冲区中；
 	 */
 	retval = prepare_binprm(bprm);
 	if (retval < 0)
 		goto out;
 
+	/*
+	 * 前面的bprm_mm_init()中仅创建了用户态栈对应的vma，并没有分配
+	 * 物理内存，所以这里的三个copy_strings()会在拷贝前提前做好物理
+	 * 内存的分配工作；
+	 */
 	retval = copy_strings_kernel(1, &bprm->filename, bprm);
 	if (retval < 0)
 		goto out;

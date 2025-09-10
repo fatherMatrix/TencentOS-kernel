@@ -101,6 +101,7 @@ struct mount {
 	struct list_head mnt_expire;	/* link in fs-specific expiry list */
 	/*
 	 * 同一个共享传播的对等体组通过该字段链接
+	 * - 链表头是这个，链表元素是另一个mount的本字段
 	 */
 	struct list_head mnt_share;	/* circular list of shared mounts */
 	struct list_head mnt_slave_list;/* list of slave mounts */

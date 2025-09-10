@@ -2707,6 +2707,10 @@ void init_numa_balancing(unsigned long clone_flags, struct task_struct *p)
  */
 static void task_tick_numa(struct rq *rq, struct task_struct *curr)
 {
+	/*
+	 * task_numa_work()
+	 * - 参见 init_numa_balancing()
+	 */
 	struct callback_head *work = &curr->numa_work;
 	u64 period, now;
 
@@ -5308,7 +5312,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	 */
 	for_each_sched_entity(se) {
 		/*
-		 * 如果调教为真，说明se已经在cfs红黑树了，则跳过
+		 * 如果条件为真，说明se已经在cfs红黑树了，则跳过
 		 */
 		if (se->on_rq)
 			break;

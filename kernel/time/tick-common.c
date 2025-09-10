@@ -281,6 +281,9 @@ static void tick_setup_device(struct tick_device *td,
 	if (tick_device_uses_broadcast(newdev, cpu))
 		return;
 
+	/*
+	 * tick_device 更新了，因此也要更新时钟中断的处理函数
+	 */
 	if (td->mode == TICKDEV_MODE_PERIODIC)
 		tick_setup_periodic(newdev, 0);
 	else

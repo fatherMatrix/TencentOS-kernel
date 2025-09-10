@@ -23,6 +23,10 @@ static inline void prepare_switch_to(struct task_struct *next)
 	 * the new stack now so that vmalloc_fault can fix up the page
 	 * tables if needed.  This can only happen if we use a stack
 	 * in vmap space.
+	 * - 开启CONFIG_VMAP_STACK后，内核栈是在vmalloc区域分配的，虽然
+	 *   vmalloc()及其类似物调用后物理内存已经分配了，但仅主内核页表
+	 *   建立了映射，各进程还需要通过缺页异常修复自己的pgd entry（其
+	 *   他各级页表共享，因此只需要修复pgd entry）
 	 *
 	 * We assume that the stack is aligned so that it never spans
 	 * more than one top-level paging entry.

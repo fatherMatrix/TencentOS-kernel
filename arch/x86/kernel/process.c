@@ -181,6 +181,9 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 	fork_frame = container_of(childregs, struct fork_frame, regs);
 	frame = &fork_frame->frame;
 
+	/*
+	 * 设置内核栈中__switch_to_asm()压入的inactive_task_frame寄存器
+	 */
 	frame->bp = 0;
 	frame->ret_addr = (unsigned long) ret_from_fork;
 	p->thread.sp = (unsigned long) fork_frame;
@@ -225,6 +228,16 @@ int copy_thread_tls(unsigned long clone_flags, unsigned long sp,
 	frame->bx = 0;
 	*childregs = *current_pt_regs();
 	childregs->ax = 0;
+	/*
+	 * 设置新创建线程的用户态栈的地址：
+	 * - clone()创建线程时，会配置args.sp；fork()创建进程时，args.sp为NULL
+	 *   > 新的线程栈中的内容，谁来配置呢？
+	 *     o glibc来配置，设置好返回用户态后的入口函数等
+	 * - 对于进程fork()，这里不会配置新的用户态栈地址，因为fork之后，已经
+	 *   cow复制了原来的栈，一切都不需要变。
+	 *   > 1号进程第一次进入用户态时，其用户态栈是哪儿来的？
+	 *     o 执行execve时，会重新设置用户态栈，参见 setup_arg_pages()
+	 */
 	if (sp)
 		childregs->sp = sp;
 

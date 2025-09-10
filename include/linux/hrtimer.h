@@ -268,7 +268,7 @@ enum  hrtimer_base_type {
  *	 Do not dereference the pointer because it is not reliable on
  *	 cross cpu removals.
  * - 每个cpu单独管理自己的hrtimer，本结构体是percpu的
- *   > percpu变量为hrtimer_bases
+ *   > percpu变量为 hrtimer_bases
  */
 struct hrtimer_cpu_base {
 	raw_spinlock_t			lock;

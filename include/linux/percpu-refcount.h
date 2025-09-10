@@ -290,6 +290,10 @@ static inline void percpu_ref_put_many(struct percpu_ref *ref, unsigned long nr)
 	if (__ref_is_percpu(ref, &percpu_count))
 		this_cpu_sub(*percpu_count, nr);
 	else if (unlikely(atomic_long_sub_and_test(nr, &ref->count)))
+		/*
+		 * kioctx.users: free_ioctx_users()
+		 * kioctx.reqs: free_ioctx_reqs()
+		 */
 		ref->release(ref);
 
 	rcu_read_unlock_sched();

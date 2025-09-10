@@ -241,6 +241,7 @@ static DEFINE_HASHTABLE(blocked_hash, BLOCKED_HASH_BITS);
  * flc_lock.
  */
 static DEFINE_SPINLOCK(blocked_lock_lock);
+static spinlock_t blocked_lock_lock; // For Source Insight
 
 static struct kmem_cache *flctx_cache __read_mostly;
 static struct kmem_cache *filelock_cache __read_mostly;

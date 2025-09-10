@@ -1708,6 +1708,9 @@ void do_set_cpus_allowed(struct task_struct *p, const struct cpumask *new_mask)
 	if (running)
 		put_prev_task(rq, p);
 
+	/*
+	 * fair: set_cpus_allowed_common()
+	 */
 	p->sched_class->set_cpus_allowed(p, new_mask);
 
 	if (queued)
@@ -4203,6 +4206,9 @@ static void __sched notrace __schedule(bool preempt)
 
 	cpu = smp_processor_id();
 	rq = cpu_rq(cpu);
+	/*
+	 * 这里难道不是一直指向current？
+	 */
 	prev = rq->curr;
 
 	schedule_debug(prev, preempt);
@@ -6714,7 +6720,7 @@ void __init sched_init_smp(void)
 {
 	/*
 	 * 检测系统是否为NUMA，如果是则需要动态添加NUMA域
-	 * - 参见：default_topology
+	 * - 参见： default_topology
 	 */
 	sched_init_numa();
 

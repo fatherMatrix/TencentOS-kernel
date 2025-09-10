@@ -240,6 +240,8 @@ struct mmu_gather {
 	 * tkernel4: CONFIG_HAVE_RCU_TABLE_FREE=y
 	 * - 初始时为NULL
 	 *   > 参见： tlb_gather_mmu()
+	 * - 这里主要是用来收集要释放的页表页
+	 *   > 下面的 mmu_gather_batch 是用来收集要释放的目标页
 	 */
 	struct mmu_table_batch	*batch;
 #endif
@@ -301,6 +303,7 @@ struct mmu_gather {
 	struct mmu_gather_batch	local;
 	/*
 	 * unmap过程中记录下要释放的page
+	 * - 这里是为了补充mmu_gather_batch尾部的零长数组
 	 */
 	struct page		*__pages[MMU_GATHER_BUNDLE];
 

@@ -337,6 +337,10 @@ struct queue_limits {
 	unsigned long		seg_boundary_mask;
 	unsigned long		virt_boundary_mask;
 
+	/*
+	 * /sys/block/nvme1n1/queue/max_hw_sectors_kb
+	 * - queue_max_hw_sectors_show()
+	 */
 	unsigned int		max_hw_sectors;
 	unsigned int		max_dev_sectors;
 	unsigned int		chunk_sectors;
@@ -347,8 +351,8 @@ struct queue_limits {
 	 */
 	unsigned int		physical_block_size;
 	/*
-	 * 初始化：blk_set_default_limits()
-	 * 更新：blk_queue_logical_block_size()
+	 * 初始化： blk_set_default_limits()
+	 * 更新： blk_queue_logical_block_size()
 	 *
 	 * logical_block_size是不能大于physical_block_size的
 	 */

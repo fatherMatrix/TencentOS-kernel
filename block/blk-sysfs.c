@@ -245,6 +245,9 @@ queue_max_sectors_store(struct request_queue *q, const char *page, size_t count)
 
 static ssize_t queue_max_hw_sectors_show(struct request_queue *q, char *page)
 {
+	/*
+	 * queue_max_hw_sectors()返回值单位是512，再除2即转化为以1024为单位，即kb
+	 */
 	int max_hw_sectors_kb = queue_max_hw_sectors(q) >> 1;
 
 	return queue_var_show(max_hw_sectors_kb, (page));

@@ -183,6 +183,8 @@ static void tlb_flush_mmu_free(struct mmu_gather *tlb)
 #ifdef CONFIG_HAVE_RCU_TABLE_FREE
 /*
  * tkernel4: CONFIG_HAVE_RCU_TABLE_FREE=y
+ * - 这里只是释放了收集到mmu_gather中的页表页，目标页是在哪里
+ *   释放的呢？
  */
 	tlb_table_flush(tlb);
 #endif
@@ -296,6 +298,9 @@ void tlb_finish_mmu(struct mmu_gather *tlb,
 	tlb_flush_mmu(tlb);
 
 #ifndef CONFIG_HAVE_MMU_GATHER_NO_GATHER
+	/*
+	 * tkernel4 要经过这里
+	 */
 	tlb_batch_list_free(tlb);
 #endif
 	dec_tlb_flush_pending(tlb->mm);

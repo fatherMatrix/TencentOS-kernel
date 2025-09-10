@@ -144,7 +144,8 @@ struct sched_domain {
 #endif
 	union {
 		/*
-		 * 博客说指向了所属的sched_domain_topology_level.sd_data？
+		 * 指向了所属的 sched_domain_topology_level.sd_data
+		 * - 参见 sd_init()
 		 */
 		void *private;		/* used during construction */
 		struct rcu_head rcu;	/* used during destruction */
@@ -191,8 +192,17 @@ typedef int (*sched_domain_flags_f)(void);
  * - 关系初始化参见：build_sched_domain()
  */
 struct sd_data {
+	/*
+	 * 在每个层级上，每个cpu都会分配自己的sched_domain，在某个
+	 * 层级中，属于同一个调度域的cpu集合的sched_domain.span中
+	 * 的cpumask都是一致的。
+	 */
 	struct sched_domain *__percpu *sd;
 	struct sched_domain_shared *__percpu *sds;
+	/*
+	 * 在每个层级上，sched_domain.span相同的所有cpu的sched_group
+	 * 会形成一个环形链表
+	 */
 	struct sched_group *__percpu *sg;
 	struct sched_group_capacity *__percpu *sgc;
 };

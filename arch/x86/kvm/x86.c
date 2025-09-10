@@ -8485,7 +8485,7 @@ static int vcpu_enter_guest(struct kvm_vcpu *vcpu)
 
 	vcpu->arch.gpa_available = false;
 	/*
-	 * 退出处理，对应vmx_handle_exit
+	 * 退出处理，对应 vmx_handle_exit
 	 */
 	r = kvm_x86_ops->handle_exit(vcpu);
 	return r;

@@ -965,14 +965,14 @@ xfs_writepage_map(
 	     i++, file_offset += len) {
 		/*
 		 * 如果有iop，且其uptodate位为0，则跳过；
-		 * - 这个版本的内核有个bug，应该在iomap_page_create()中添加如下
+		 * - 这个版本的内核有个bug，应该在 iomap_page_create() 中添加如下
 		 *   判断及动作：
 		 *   > 如果PageUptodate(page)为真，则bitmap_fill(iop->update)
 		 *
-		 * PG_uptodate表示内存中的数据与磁盘上的一样新，如果没有这个标志
+		 * PG_uptodate表示内存中的数据至少与磁盘上的一样新，如果没有这个标志
 		 * 则说明磁盘上的更新。
 		 *
-		 * 如果iomap_page_create()中没有添加这个动作，那么这里的iop->uptodate
+		 * 如果 iomap_page_create() 中没有添加这个动作，那么这里的iop->uptodate
 		 * 标志位就全是0了，即这里会跳过，导致该写的数据没有写，最终导致数据
 		 * 丢失；
 		 */

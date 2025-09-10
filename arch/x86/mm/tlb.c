@@ -115,9 +115,11 @@ static void choose_new_asid(struct mm_struct *next, u64 next_tlb_gen,
 
 /*
  * 在x86架构中，当pcid开启时，对cr3的mov操作：
- * - 当源操作数的bit63为0时，会自动清除local tlb entry
- * - 当源操作数的bit63为1时，不会自动清除local tlb entry
+ * - 当源操作数的bit63为0时，会自动清除对应pcid的local tlb entry
+ * - 当源操作数的bit63为1时，不会自动清除对应pcid的local tlb entry
  *   > 参见sdm v3: 4.10.4.1 Operations that Invalidate TLBs and Paging-Structure Caches
+ * - 参见CR4.PCIDE=1 && S[64]=0的注释：
+ *   > 这里应该就是断定马上要切进来的进程B对应的pcid没有在前面被进程A使用过，因此不需要刷
  *
  * 什么是local tlb entry？
  * - local tlb entry：不在进程间共享的tlb，主要用于用户态地址空间

@@ -3395,7 +3395,8 @@ again:
 
 		/*
  		 * write_begin方法会为该页分配和初始化缓冲区头部
- 		 * - ext4_write_begin()
+		 * - nodelayed: ext4_write_begin()
+		 * - delayed: ext4_da_write_begin()
  		 */ 
 		status = a_ops->write_begin(file, mapping, pos, bytes, flags,
 						&page, &fsdata);

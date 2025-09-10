@@ -1467,6 +1467,11 @@ retry:
 	}
 	if (likely(vma->vm_start <= address))
 		goto good_area;
+	/*
+	 * 感觉只有进程的主线程栈有VM_GROWDOWN标记
+	 * - 因为pthread_create()传入的线程栈就是一个mmap映射出来的
+	 *   匿名区，缺页时也是正常的匿名页缺页流程
+	 */
 	if (unlikely(!(vma->vm_flags & VM_GROWSDOWN))) {
 		bad_area(regs, hw_error_code, address);
 		return;

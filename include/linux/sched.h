@@ -490,7 +490,7 @@ struct sched_entity {
 	/*
 	 * 计算调度实体vruntime的起始时间
 	 * - 每次调用update_curr()都会更新本字段，可以认为本字段是上一次调用
-	 *   update_curr()的时间
+	 *   update_curr() 的时间
 	 */
 	u64				exec_start;
 	/*
@@ -728,6 +728,9 @@ struct task_struct {
 	 */
 	randomized_struct_fields_start
 
+	/*
+	 * 这里是内核栈，不是用户态栈
+	 */
 	void				*stack;
 	refcount_t			usage;
 	/* Per task flags (PF_*), defined further below: */

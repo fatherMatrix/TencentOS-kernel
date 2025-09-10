@@ -150,11 +150,14 @@ struct kioctx {
 		spinlock_t	ctx_lock;
 		struct list_head active_reqs;	/* used for cancellation */
 	} ____cacheline_aligned_in_smp;
+	struct list_head active_reqs; // For Source Insight
+	spinlock_t ctx_lock; // For Source Insight
 
 	struct {
 		struct mutex	ring_lock;
 		wait_queue_head_t wait;
 	} ____cacheline_aligned_in_smp;
+	wait_queue_head_t wait;	// For Source Insight
 
 	struct {
 		unsigned	tail;
@@ -489,6 +492,9 @@ static int aio_setup_ring(struct kioctx *ctx, unsigned int nr_events)
 
 	ctx->ring_pages = ctx->internal_pages;
 	if (nr_pages > AIO_RING_PAGES) {
+		/*
+		 * 分配指针数组
+		 */
 		ctx->ring_pages = kcalloc(nr_pages, sizeof(struct page *),
 					  GFP_KERNEL);
 		if (!ctx->ring_pages) {
@@ -499,6 +505,9 @@ static int aio_setup_ring(struct kioctx *ctx, unsigned int nr_events)
 
 	for (i = 0; i < nr_pages; i++) {
 		struct page *page;
+		/*
+		 * 分配实际物理页
+		 */
 		page = find_or_create_page(file->f_mapping,
 					   i, GFP_HIGHUSER | __GFP_ZERO);
 		if (!page)
@@ -526,6 +535,9 @@ static int aio_setup_ring(struct kioctx *ctx, unsigned int nr_events)
 		return -EINTR;
 	}
 
+	/*
+	 * 将该伪文件中的page全部映射到用户态
+	 */
 	ctx->mmap_base = do_mmap_pgoff(ctx->aio_ring_file, 0, ctx->mmap_size,
 				       PROT_READ | PROT_WRITE,
 				       MAP_SHARED, 0, &unused, NULL);
@@ -538,6 +550,11 @@ static int aio_setup_ring(struct kioctx *ctx, unsigned int nr_events)
 
 	pr_debug("mmap address: 0x%08lx\n", ctx->mmap_base);
 
+	/*
+	 * 这个地址会直接暴露到用户态的
+	 * - 首先会作为io_submit()进入内核后查找kioctx结构体的key
+	 * - 这块内存地址暴露给用户态的目的是？
+	 */
 	ctx->user_id = ctx->mmap_base;
 	ctx->nr_events = nr_events; /* trusted copy */
 
@@ -781,6 +798,9 @@ static struct kioctx *ioctx_alloc(unsigned nr_events)
 	percpu_ref_get(&ctx->users);	/* io_setup() will drop this ref */
 	percpu_ref_get(&ctx->reqs);	/* free_ioctx_users() will drop this */
 
+	/*
+	 * 将kioctx加入到mm_struct中
+	 */
 	err = ioctx_add_table(ctx, mm);
 	if (err)
 		goto err_cleanup;

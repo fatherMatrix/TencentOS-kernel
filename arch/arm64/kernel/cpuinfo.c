@@ -335,6 +335,9 @@ static void cpuinfo_detect_icache_policy(struct cpuinfo_arm64 *info)
 	default:
 		/* Fallthrough */
 	case ICACHE_POLICY_VIPT:
+	/*
+	 * arm上的VIPT默认认为是有别名存在的
+	 */
 		/* Assume aliasing */
 		set_bit(ICACHEF_ALIASING, &__icache_flags);
 	}

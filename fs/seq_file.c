@@ -654,10 +654,16 @@ void *__seq_open_private(struct file *f, const struct seq_operations *ops,
 	if (private == NULL)
 		goto out;
 
+	/*
+	 * 分配seq_file，并设置到file->private中
+	 */
 	rc = seq_open(f, ops);
 	if (rc < 0)
 		goto out_free;
 
+	/*
+	 * 设置seq_file的私有数据，关联文件的私有信息
+	 */
 	seq = f->private_data;
 	seq->private = private;
 	return private;

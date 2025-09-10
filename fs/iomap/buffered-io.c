@@ -572,6 +572,15 @@ __iomap_write_begin(struct inode *inode, loff_t pos, unsigned len,
 		return 0;
 	ClearPageError(page);
 
+	/*
+	 * 刚刚会上说的iop->uptodate这里不论是mmap还是write都是有写放大的。write这边，
+	 * 如果需要pre read，那么所有bit都会置1。后续也不会调整。因此write也有写放大；
+	 * - 
+	 *
+	 * 高版本中，将iop的位图扩展成了两部分，uptodate和dirty，uptodate控制按需读取，
+	 * dirty控制哪些要写。分离后，不再存在读取时全部置1的情况，write时按需
+	 * set dirty部分。此时write部分不再有写放大（mmap写放大技术上无解）
+	 */
 	do {
 		iomap_adjust_read_range(inode, iop, &block_start,
 				block_end - block_start, &poff, &plen);
@@ -745,7 +754,7 @@ iomap_write_end(struct inode *inode, loff_t pos, unsigned len,
 	}
 	/*
 	 * 这里的解锁对应加锁的位置是？
-	 * - iomap_write_begin()?
+	 * - iomap_write_begin()
 	 */
 	unlock_page(page);
 
@@ -797,6 +806,9 @@ again:
 			break;
 		}
 
+		/*
+		 * 内部会锁住该目标页
+		 */
 		status = iomap_write_begin(inode, pos, bytes, flags, &page,
 				iomap);
 		if (unlikely(status))
@@ -813,6 +825,9 @@ again:
 
 		flush_dcache_page(page);
 
+		/*
+		 * 解锁目标页
+		 */
 		status = iomap_write_end(inode, pos, bytes, copied, page,
 				iomap);
 		if (unlikely(status < 0))

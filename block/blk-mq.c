@@ -1903,6 +1903,7 @@ static blk_status_t __blk_mq_issue_directly(struct blk_mq_hw_ctx *hctx,
 	 * 调用设备驱动填充的queue_rq()接口，将request放到设备驱动管理范畴里；
 	 * - nvme: nvme_queue_rq()
 	 * - scsi: scsi_queue_rq()
+	 * - virtio: virtio_queue_rq()
 	 */
 	ret = q->mq_ops->queue_rq(hctx, &bd);
 	switch (ret) {
@@ -2364,6 +2365,10 @@ int blk_mq_alloc_rqs(struct blk_mq_tag_set *set, struct blk_mq_tags *tags,
 		for (j = 0; j < to_do; j++) {
 			struct request *rq = p;
 
+			/*
+			 * 看样子这里分配的是 static_rqs
+			 * - 非static的 rqs呢？
+			 */
 			tags->static_rqs[i] = rq;
 			if (blk_mq_init_request(set, rq, hctx_idx, node)) {
 				tags->static_rqs[i] = NULL;

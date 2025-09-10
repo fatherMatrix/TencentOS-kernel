@@ -330,6 +330,9 @@ struct kiocb {
 	/*
 	 * kio完成后的回调函数
 	 * - 如果是同步的kiocb，该字段会置空；
+	 * - 如果是异步io，则会被配置为：
+	 *   > aio_complete_rw()
+	 *   >
 	 */
 	void (*ki_complete)(struct kiocb *iocb, long ret, long ret2);
 	void			*private;
@@ -807,7 +810,7 @@ struct inode {
 	spinlock_t		i_lock;	/* i_blocks, i_bytes, maybe i_size */
 	unsigned short          i_bytes;
 	/*
-	 * 参见inode_init_always()及对应来源的注释
+	 * 参见 inode_init_always() 及对应来源的注释
 	 */
 	u8			i_blkbits;
 	u8			i_write_hint;

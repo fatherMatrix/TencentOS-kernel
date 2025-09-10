@@ -205,6 +205,10 @@ static struct attribute *default_hw_ctx_attrs[] = {
 	NULL,
 };
 ATTRIBUTE_GROUPS(default_hw_ctx);
+static const struct attribute_group default_hw_ctx_group; // For Source Insight
+static const struct attribute_group *default_hw_ctx_groups; // For Source Insight
+
+
 
 static const struct sysfs_ops blk_mq_sysfs_ops = {
 	.show	= blk_mq_sysfs_show,

@@ -26,18 +26,18 @@ struct sbitmap_word {
 	/**
 	 * @word: word holding free bits
 	 */
-	unsigned long word ____cacheline_aligned_in_smp;
+	unsigned long word; // ____cacheline_aligned_in_smp;
 
 	/**
 	 * @cleared: word holding cleared bits
 	 */
-	unsigned long cleared ____cacheline_aligned_in_smp;
+	unsigned long cleared; // ____cacheline_aligned_in_smp;
 
 	/**
 	 * @swap_lock: Held while swapping word <-> cleared
 	 */
 	spinlock_t swap_lock;
-} ____cacheline_aligned_in_smp;
+}//  ____cacheline_aligned_in_smp;
 
 /**
  * struct sbitmap - Scalable bitmap.

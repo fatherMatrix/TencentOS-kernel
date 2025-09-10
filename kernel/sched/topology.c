@@ -1373,6 +1373,9 @@ sd_init(struct sched_domain_topology_level *tl,
 #endif
 	};
 
+	/*
+	 * cpu_map中有可能抠除了一些隔离的cpu
+	 */
 	cpumask_and(sched_domain_span(sd), cpu_map, tl->mask(cpu));
 	sd_id = cpumask_first(sched_domain_span(sd));
 
@@ -1589,6 +1592,11 @@ void sched_init_numa(void)
 	 *
 	 * Assumes node_distance(0,j) includes all distances in
 	 * node_distance(i,j) in order to avoid cubic time.
+	 *
+	 * 难道是为了找出有多少个numa调度层级？
+	 * - 是的，看到高的做法是建立一个NR_DISTANCE_VALUES个bit的位图，每遍历
+	 *   到一个distance就标记对应bit，最后数一下标记了多少个位。比较直观。
+	 * - 注意，这里遍历的node，而不是cpu，也就是说得到的是有多少个numa层级
 	 */
 	next_distance = curr_distance;
 	for (i = 0; i < nr_node_ids; i++) {
@@ -1798,6 +1806,8 @@ static int __sdt_alloc(const struct cpumask *cpu_map)
 		/*
 		 * 每个cpu在每个调度域层级上都有一个sched_domain、一个
 		 * sched_domain_shared、一个sched_group、一个sched_group_capacity
+		 * - 为什么同一个层级上，同一个sched_domain的cpu不能共享sched_domain
+		 *   结构体呢？
 		 */
 			struct sched_domain *sd;
 			struct sched_domain_shared *sds;
@@ -2053,6 +2063,9 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 
 			sd = build_sched_domain(tl, cpu_map, attr, sd, dflags, i);
 
+			/*
+			 * 最低层级的sched_domain
+			 */
 			if (tl == sched_domain_topology)
 				*per_cpu_ptr(d.sd, i) = sd;
 			if (tl->flags & SDTL_OVERLAP)
@@ -2192,6 +2205,9 @@ int sched_init_domains(const struct cpumask *cpu_map)
 	 * 建立调度域
 	 */
 	err = build_sched_domains(doms_cur[0], NULL);
+	/*
+	 * 高版本中没有这个了，所以没有/proc/sys/kernel/sched_domain/
+	 */
 	register_sched_domain_sysctl();
 
 	return err;

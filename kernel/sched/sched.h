@@ -996,7 +996,7 @@ struct rq {
 	/*
 	 * 用于实现就绪队列自身的时钟
 	 * - 单位是纳秒
-	 *   > 参见update_rq_clock()
+	 *   > 参见 update_rq_clock()
 	 * - 表示本rq初始化后的总运行时间
 	 */
 	u64			clock;
@@ -1004,10 +1004,10 @@ struct rq {
 	 * Ensure that all clocks are in the same cache line
 	 * - 单位是纳秒
 	 * - 该变量在每个时钟节拍到来时更新
-	 *   > 参见update_rq_clock_task()
+	 *   > 参见 update_rq_clock_task ()
 	 * - 表示当前进程的运行时间
 	 */
-	u64			clock_task ____cacheline_aligned;
+	u64			clock_task; // ____cacheline_aligned;
 	u64			clock_pelt;
 	unsigned long		lost_idle_time;
 

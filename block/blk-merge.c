@@ -263,10 +263,16 @@ static struct bio *blk_bio_segment_split(struct request_queue *q,
 		if (nsegs < max_segs &&
 		    sectors + (bv.bv_len >> 9) <= max_sectors &&
 		    bv.bv_offset + bv.bv_len <= PAGE_SIZE) {
+		/*
+		 * 这个bvec足够小，不会高于盘的限制
+		 */
 			nsegs++;
 			sectors += bv.bv_len >> 9;
 		} else if (bvec_split_segs(q, &bv, &nsegs, &sectors, max_segs,
 					 max_sectors)) {
+		/*
+		 * 这个bvec太大了，需要拆分bio
+		 */
 			goto split;
 		}
 
@@ -333,7 +339,13 @@ void __blk_queue_split(struct request_queue *q, struct bio **bio,
 
 		bio_chain(split, *bio);
 		trace_block_split(q, split, (*bio)->bi_iter.bi_sector);
+		/*
+		 * 把切分后后面的部分再次提交
+		 */
 		generic_make_request(*bio);
+		/*
+		 * 返回后继续处理前面的部分
+		 */
 		*bio = split;
 	}
 }

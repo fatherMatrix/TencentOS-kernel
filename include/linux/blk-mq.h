@@ -72,7 +72,7 @@ struct blk_mq_hw_ctx {
  	 * sched_tags用来保存硬队列所对应调度队列的blk_mq_tags
  	 *                               ^^^^^^^^
  	 *
- 	 * tags的值通过blk_mq_init_hctx()在blk_mq_tag_set结构体中拷贝过来的
+ 	 * tags的值通过blk_mq_init_hctx()在 blk_mq_tag_set 结构体中拷贝过来的
  	 */ 
 	struct blk_mq_tags	*tags;
 	struct blk_mq_tags	*sched_tags;

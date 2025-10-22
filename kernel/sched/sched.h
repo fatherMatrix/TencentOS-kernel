@@ -1530,6 +1530,8 @@ struct sched_group_capacity {
  * sched_domain可以由一个或多个sched_group组成，每个sched_group也代表一组可以共
  * 享属性和调度参数的一组cpu。属于同一个sched_domain的sched_group集合组成了
  * sched_domain代表的cpu。
+ * - sched_group就是用来形容一个调度域下每个子域的cpu位图
+ *   > 最底层调度域中只有一个包含一个smt的调度组
  *
  * sched_domain进行负载均衡的目的就是保证其内部各个sched_group之间的负载均衡
  */

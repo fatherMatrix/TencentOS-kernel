@@ -296,6 +296,7 @@ typedef struct { pgdval_t pgd; } pgd_t;
 /*
  * PAE allows Base Address, P, PWT, PCD and AVL bits to be set in PGD entries.
  * All other bits are Reserved MBZ
+ * - 请注意，这里是X86_32_PAE需要的，X86_64并不需要
  */
 #define PGD_ALLOWED_BITS	(PGD_PAE_PHYS_MASK | _PAGE_PRESENT | \
 				 _PAGE_PWT | _PAGE_PCD | \

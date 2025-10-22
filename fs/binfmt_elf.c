@@ -683,7 +683,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	unsigned long elf_entry;
 	unsigned long interp_load_addr = 0;
 	unsigned long start_code, end_code, start_data, end_data;
-	unsigned long reloc_func_desc __maybe_unused = 0;
+	unsigned long reloc_func_desc /* __maybe_unused */ = 0;
 	int executable_stack = EXSTACK_DEFAULT;
 	struct {
 		struct elfhdr elf_ex;
@@ -720,10 +720,16 @@ static int load_elf_binary(struct linux_binprm *bprm)
 		goto out;
 
 	elf_ppnt = elf_phdata;
+	/*
+	 * 这个循环主要是用来读取interpreter的信息
+	 */
 	for (i = 0; i < loc->elf_ex.e_phnum; i++, elf_ppnt++) {
 		char *elf_interpreter;
 		loff_t pos;
 
+		/*
+		 * 仅处理interpreter
+		 */
 		if (elf_ppnt->p_type != PT_INTERP)
 			continue;
 
@@ -1119,6 +1125,10 @@ out_free_interp:
 			current->mm->brk = current->mm->start_brk =
 				ELF_ET_DYN_BASE;
 
+		/*
+		 * 如果飞腾多副本，则这里增加了一个brk_offset
+		 * - brk_offset = PMD_SIZE
+		 */
 		current->mm->brk = current->mm->start_brk =
 			arch_randomize_brk(current->mm);
 #ifdef compat_brk_randomized

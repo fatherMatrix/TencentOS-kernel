@@ -904,6 +904,7 @@ static bool invalid_page_referenced_vma(struct vm_area_struct *vma, void *arg)
  *
  * 检查后会清除pte中的ACCESSED硬件标志位，其实是将pte中的ACCESSED标志位转移到
  * page结构体里了；
+ * - 没看到
  */
 int page_referenced(struct page *page,
 		    int is_locked,

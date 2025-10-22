@@ -632,6 +632,11 @@ static int __kprobes do_translation_fault(unsigned long addr,
 	if (is_ttbr0_addr(addr))
 		return do_page_fault(addr, esr, regs);
 
+	/*
+	 * 对于arm64架构，内核页表使用ttbr1与用户态页表ttbr0分离。那么
+	 * 在vmalloc()时更新主内核页表后就不需要通过内核地址缺页处理向
+	 * 每个task的pgd同步pgd entry了
+	 */
 	do_bad_area(addr, esr, regs);
 	return 0;
 }

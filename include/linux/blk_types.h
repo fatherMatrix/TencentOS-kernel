@@ -218,7 +218,7 @@ struct bio {
 	unsigned short		bi_max_vecs;	/* max bvl_vecs we can hold */
 
 	/*
-	 * 参见xfs_chain_bio()
+	 * 参见 xfs_chain_bio()
 	 */
 	atomic_t		__bi_cnt;	/* pin count */
 

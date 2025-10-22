@@ -1024,6 +1024,9 @@ retry:
 }
 EXPORT_SYMBOL_GPL(fixup_user_fault);
 
+/*
+ * 定义了 CONFIG_MMU 走这里
+ */
 static __always_inline long __get_user_pages_locked(struct task_struct *tsk,
 						struct mm_struct *mm,
 						unsigned long start,
@@ -1564,6 +1567,8 @@ static long check_and_migrate_cma_pages(struct task_struct *tsk,
 /*
  * __gup_longterm_locked() is a wrapper for __get_user_pages_locked which
  * allows us to process the FOLL_LONGTERM flag.
+ *
+ * CONFIG_FS_DAX || CONFIG_CMA 走这里
  */
 static long __gup_longterm_locked(struct task_struct *tsk,
 				  struct mm_struct *mm,

@@ -996,6 +996,9 @@ int copy_page_range(struct mm_struct *dst_mm, struct mm_struct *src_mm,
 	}
 
 	ret = 0;
+	/*
+	 * pgd不需要在这里拷贝，所以没有copy_pgd_range()
+	 */
 	dst_pgd = pgd_offset(dst_mm, addr);
 	src_pgd = pgd_offset(src_mm, addr);
 	do {
@@ -2764,6 +2767,14 @@ static vm_fault_t do_wp_page(struct vm_fault *vmf)
 		if (!trylock_page(vmf->page)) {
 			get_page(vmf->page);
 			pte_unmap_unlock(vmf->pte, vmf->ptl);
+			/*
+			 * 这里存在一次plt锁的unlock，所以下面要重新做一次
+			 * pte_offset。
+			 * - 这里是出于什么原因unlock plt呢？
+			 *   > 看下面，这里持有page lock后获取plt lock。
+			 *     o 而上面，已经持有了plt lock，try page lock
+			 *     o 所以这里肯定是有死锁可能的，因此要做死锁避免
+			 */
 			lock_page(vmf->page);
 			vmf->pte = pte_offset_map_lock(vma->vm_mm, vmf->pmd,
 					vmf->address, &vmf->ptl);
@@ -3922,6 +3933,11 @@ static vm_fault_t do_numa_page(struct vm_fault *vmf)
 	 * accessible ptes, some can allow access by kernel mode.
 	 */
 	old_pte = ptep_modify_prot_start(vma, vmf->address, vmf->pte);
+	/*
+	 * 这里的vma->vm_page_prot中都是包含present的
+	 * - 参见： __bprm_mm_init() -> vm_get_page_prot()
+	 * - 所以，这里的pte_modify()肯定会把pfn反转回正确值
+	 */
 	pte = pte_modify(old_pte, vma->vm_page_prot);
 	pte = pte_mkyoung(pte);
 	if (was_writable)
@@ -4217,7 +4233,7 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 	 */
 		ret = create_huge_pud(&vmf);
 		/*
-		 * 如果ret非0，且不是VM_FAULT_FALLBACK，则直接向上层返回该错误
+		 * ret不包含VM_FAULT_FALLBACK，则直接向上层返回该错误
 		 */
 		if (!(ret & VM_FAULT_FALLBACK))
 			return ret;
@@ -4240,6 +4256,7 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 		if (pud_trans_huge(orig_pud) || pud_devmap(orig_pud)) {
 		/*
 		 * pud_trans_huge()判断pud entry指向了1G页面还是pmd table
+		 * - 能进到这个if，说明pud entry不为空；
 		 */
 
 			/* NUMA case for anonymous PUDs would go here */
@@ -4260,6 +4277,9 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 				return 0;
 			}
 		}
+		/*
+		 * 如果pud entry为空的话，则直接走到下面去
+		 */
 	}
 
 	/*

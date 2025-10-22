@@ -400,6 +400,10 @@ static noinline int vmalloc_fault(unsigned long address)
 
 	BUILD_BUG_ON(CONFIG_PGTABLE_LEVELS < 4);
 
+	/*
+	 * 后面的几级就只需要检查不为空即可，因为后面几级肯定是和主内核页表共享
+	 * 的
+	 */
 	pud = pud_offset(p4d, address);
 	if (pud_none(*pud))
 		return -1;
@@ -1103,6 +1107,9 @@ mm_fault_error(struct pt_regs *regs, unsigned long error_code,
 	}
 }
 
+/*
+ * 返回0说明确实有问题，返回1说明是没有问题的
+ */
 static int spurious_kernel_fault_check(unsigned long error_code, pte_t *pte)
 {
 	if ((error_code & X86_PF_WRITE) && !pte_write(*pte))

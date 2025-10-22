@@ -1945,6 +1945,10 @@ static unsigned int khugepaged_scan_mm_slot(unsigned int pages,
 	__releases(&khugepaged_mm_lock)
 	__acquires(&khugepaged_mm_lock)
 {
+	/*
+	 * CONFIG_NUMA=y: 进来时，*hpage指向NULL
+	 * CONFIG_NUMA=n: 进来时，*hpage指向一个预分配的2MB巨页
+	 */
 	struct mm_slot *mm_slot;
 	struct mm_struct *mm;
 	struct vm_area_struct *vma;
@@ -1989,6 +1993,10 @@ skip:
 			progress++;
 			continue;
 		}
+		/*
+		 * hstart = vm_start向后的第一个PMD开始地址
+		 * hend = vm_end向前的第一个PMD结束
+		 */
 		hstart = (vma->vm_start + ~HPAGE_PMD_MASK) & HPAGE_PMD_MASK;
 		hend = vma->vm_end & HPAGE_PMD_MASK;
 		if (hstart >= hend)
@@ -2091,7 +2099,8 @@ static void khugepaged_do_scan(void)
 
 	while (progress < pages) {
 		/*
-		 * 预先分配一个巨型页
+		 * CONFIG_NUMA=y: 这里不需要分配，在合并时分配
+		 * CONFIG_NUMA=n: 在这里分配
 		 */
 		if (!khugepaged_prealloc_page(&hpage, &wait))
 			break;

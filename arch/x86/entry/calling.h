@@ -198,6 +198,9 @@ For 32-bit we have the following conventions - kernel is built with
 .endm
 
 .macro SWITCH_TO_KERNEL_CR3 scratch_reg:req
+	/*
+	 * 如果未启用PIT，则直接跳到结束
+	 */
 	ALTERNATIVE "jmp .Lend_\@", "", X86_FEATURE_PTI
 	mov	%cr3, \scratch_reg
 	ADJUST_KERNEL_CR3 \scratch_reg

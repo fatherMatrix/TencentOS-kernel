@@ -48,15 +48,26 @@ int page_cluster;
  * 用于缓存原来不属于lru链表，新加入进来的页
  */
 static DEFINE_PER_CPU(struct pagevec, lru_add_pvec);
+struct pagevec lru_add_pvec; 			// For Source Insight
+
 /*
  * 都是非活动页且在非活动lru链表中，将这些页移动到非活动lru链表的末尾
  */
 static DEFINE_PER_CPU(struct pagevec, lru_rotate_pvecs);
+struct pagevec lru_rotate_pvecs;		// For Souce Insight
+
 static DEFINE_PER_CPU(struct pagevec, lru_deactivate_file_pvecs);
+struct pagevec lru_deactivate_file_pvecs;	// For Source Insight
+
 static DEFINE_PER_CPU(struct pagevec, lru_deactivate_pvecs);
+struct pagevec lru_deactivate_pvecs;		// For Source Insight
+
 static DEFINE_PER_CPU(struct pagevec, lru_lazyfree_pvecs);
+struct pagevec lru_lazyfree_pvecs;		// For Source Insight
+
 #ifdef CONFIG_SMP
 static DEFINE_PER_CPU(struct pagevec, activate_page_pvecs);
+struct pagevec activate_page_pvecs;		// For Source Insight
 #endif
 
 /*
@@ -428,6 +439,11 @@ static void __lru_cache_add(struct page *page)
  */
 void lru_cache_add_anon(struct page *page)
 {
+	/*
+	 * 这里就决定了新加入的anon page都是放到inactive anon list上
+	 * - 低版本中是放入active anon list上，但有了workingset refault算法后，
+	 *   就可以放到inactive anon list上了
+	 */
 	if (PageActive(page))
 		ClearPageActive(page);
 	__lru_cache_add(page);
@@ -435,6 +451,11 @@ void lru_cache_add_anon(struct page *page)
 
 void lru_cache_add_file(struct page *page)
 {
+	/*
+	 * 这里就决定了新加入的file page都是放到inactive file list上
+	 * - 低版本中是放入active file list上，但有了workingset refault算法后，
+	 *   就可以放到inactive file list上了
+	 */
 	if (PageActive(page))
 		ClearPageActive(page);
 	__lru_cache_add(page);

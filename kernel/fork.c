@@ -1413,6 +1413,7 @@ static struct mm_struct *dup_mm(struct task_struct *tsk,
 	 *   > pgd table之所以不能共享是因为在x86架构下pgd table中包含用户态地
 	 *     址空间的页表
 	 * - 为什么不拷贝用户态的pgd呢？
+	 *   > 在下面的dup_mmap()中拷贝
 	 */
 	if (!mm_init(mm, tsk, mm->user_ns))
 		goto fail_nomem;

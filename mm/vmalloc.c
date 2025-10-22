@@ -1322,9 +1322,16 @@ static bool __purge_vmap_area_lazy(unsigned long start, unsigned long end)
 	 * 主内核页表到其他内核页表的同步
 	 * - 这里同步的是前面对页表映射的取消动作，即将非主内核页表中该清零的地
 	 *   方清零；
+	 *   > 这可是lazy操作的，在lazy期间如果其他进程访问了该地址，岂不是会出
+	 *     问题？
+	 *     o vmalloc()的内存，内核自己释放了，内核肯定是知道的，后面再访问
+	 *       就是代码的问题了。
+	 *     o 而且，我猜测只有lazy操作之后，这个虚拟地址才能再次被分配？
 	 *
 	 * x86_32：要研究一下
 	 * x86_64：空操作
+	 * - https://lore.kernel.org/lkml/20191009124418.8286-1-joro@8bytes.org/
+	 * - 看注释的说法，应该是x86_64在unmap时不会释放p4d/pud
 	 */
 	vmalloc_sync_unmappings();
 

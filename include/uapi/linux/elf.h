@@ -22,7 +22,11 @@ typedef __u32	Elf64_Word;
 typedef __u64	Elf64_Xword;
 typedef __s64	Elf64_Sxword;
 
-/* These constants are for the segment types stored in the image headers */
+/*
+ * These constants are for the segment types stored in the image headers
+ * - 这里是segments，readelf -l的结果，比section大
+ *   > sections是readelf -S
+ */
 #define PT_NULL    0
 #define PT_LOAD    1
 #define PT_DYNAMIC 2

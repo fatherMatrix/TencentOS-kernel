@@ -157,6 +157,7 @@ struct tlb_state {
 	/*
 	 * cpu_tlbstate.loaded_mm should match CR3 whenever interrupts
 	 * are on.  This means that it may not match current->active_mm,
+	 *                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * which will contain the previous user mm when we're in lazy TLB
 	 * mode even if we've already switched back to swapper_pg_dir.
 	 *
@@ -392,6 +393,14 @@ static inline void invalidate_user_asid(u16 asid)
 	if (!static_cpu_has(X86_FEATURE_PTI))
 		return;
 
+	/*
+	 * 真正的flush操作在：
+	 * - RESTORE_CR3
+	 * - SWITCH_TO_USER_CR3_NOSTACK
+	 * - ...
+	 *
+	 * 值得注意的是，操作段引用的是： THIS_CPU_user_pcid_flush_mask
+	 */
 	__set_bit(kern_pcid(asid),
 		  (unsigned long *)this_cpu_ptr(&cpu_tlbstate.user_pcid_flush_mask));
 }

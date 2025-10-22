@@ -109,12 +109,19 @@ struct vring_virtqueue {
 	/* Host publishes avail event idx */
 	bool event;
 
-	/* Head of free buffer list. */
+	/*
+	 * Head of free buffer list.
+	 * - vring.vring_desc 数组的下标
+	 */
 	unsigned int free_head;
 	/* Number we've added since last sync. */
 	unsigned int num_added;
 
-	/* Last used index we've seen. */
+	/*
+	 * Last used index we've seen.
+	 * - 看 virtqueue_get_buf_ctx_split() ，是vring.used.ring
+	 *   数组的下标
+	 */
 	u16 last_used_idx;
 
 	union {
@@ -414,6 +421,11 @@ static struct vring_desc *alloc_indirect_split(struct virtqueue *_vq,
 	if (!desc)
 		return NULL;
 
+	/*
+	 * 危险：desc[totol_sg - 1].next = total_sg，这里溢出了
+	 * - 调用者在调用本函数后的合适位置，清除了最后一个vring_desc
+	 *   flags中的next标记，此时其next字段不再有效。
+	 */
 	for (i = 0; i < total_sg; i++)
 		desc[i].next = cpu_to_virtio16(_vq->vdev, i + 1);
 	return desc;
@@ -462,12 +474,12 @@ static inline int virtqueue_add_split(struct virtqueue *_vq,
 		/* Use a single buffer which doesn't continue */
 		indirect = true;
 		/* Set up rest to use this indirect table. */
-		i = 0;
+		i = 0;		// 使用indirect desc array，从它的第一个开始
 		descs_used = 1;
 	} else {
 		indirect = false;
 		desc = vq->split.vring.desc;
-		i = head;
+		i = head;	// 使用vring desc array，从第一个空闲的开始
 		descs_used = total_sg;
 	}
 
@@ -495,6 +507,9 @@ static inline int virtqueue_add_split(struct virtqueue *_vq,
 			desc[i].addr = cpu_to_virtio64(_vq->vdev, addr);
 			desc[i].len = cpu_to_virtio32(_vq->vdev, sg->length);
 			prev = i;
+			/* 取得下一个空闲的vring_desc
+			 * - 因为所有空闲的都串联上next链表上
+			 */
 			i = virtio16_to_cpu(_vq->vdev, desc[i].next);
 		}
 	}
@@ -511,7 +526,10 @@ static inline int virtqueue_add_split(struct virtqueue *_vq,
 			i = virtio16_to_cpu(_vq->vdev, desc[i].next);
 		}
 	}
-	/* Last one doesn't continue. */
+	/*
+	 * Last one doesn't continue.
+	 * - 解决了 alloc_indirect_split() 中潜在的溢出问题
+	 */
 	desc[prev].flags &= cpu_to_virtio16(_vq->vdev, ~VRING_DESC_F_NEXT);
 
 	if (indirect) {
@@ -643,6 +661,7 @@ static void detach_buf_split(struct vring_virtqueue *vq, unsigned int head,
 	}
 
 	vring_unmap_one_split(vq, &vq->split.vring.desc[i]);
+	/* 头插法，将已完成的 vring_desc 放回空闲链表 */
 	vq->split.vring.desc[i].next = cpu_to_virtio16(vq->vq.vdev,
 						vq->free_head);
 	vq->free_head = head;
@@ -707,6 +726,12 @@ static void *virtqueue_get_buf_ctx_split(struct virtqueue *_vq,
 	/* Only get used array entries after they have been exposed by host. */
 	virtio_rmb(vq->weak_barriers);
 
+	/*
+	 * 这里是在索引 vring.vring_used.ring 数组，因此对 last_used_idx 变量
+	 * 直接递增就可以保证顺序处理已完成的entry
+	 * - vring_desc 是乱序的
+	 * - vring_used 是顺序的
+	 */
 	last_used = (vq->last_used_idx & (vq->split.vring.num - 1));
 	i = virtio32_to_cpu(_vq->vdev,
 			vq->split.vring.used->ring[last_used].id);
@@ -2058,6 +2083,7 @@ irqreturn_t vring_interrupt(int irq, void *_vq)
 	pr_debug("virtqueue callback for %p (%p)\n", vq, vq->vq.callback);
 	/*
 	 * virtscsi_req_done()
+	 * virtio_blk: virtblk_done()
 	 */
 	if (vq->vq.callback)
 		vq->vq.callback(&vq->vq);
@@ -2138,6 +2164,10 @@ struct virtqueue *__vring_new_virtqueue(unsigned int index,
 
 	/* Put everything in free lists. */
 	vq->free_head = 0;
+	/*
+	 * 所以，对于split mode来说，开始时所有vring_desc都串联到了
+	 * free list链表中
+	 */
 	for (i = 0; i < vring.num-1; i++)
 		vq->split.vring.desc[i].next = cpu_to_virtio16(vdev, i + 1);
 	memset(vq->split.desc_state, 0, vring.num *

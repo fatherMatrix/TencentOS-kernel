@@ -118,6 +118,9 @@ static inline bool __transparent_hugepage_enabled(struct vm_area_struct *vma)
 	if (test_bit(MMF_DISABLE_THP, &vma->vm_mm->flags))
 		return false;
 
+	/*
+	 * always时，直接允许
+	 */
 	if (transparent_hugepage_flags & (1 << TRANSPARENT_HUGEPAGE_FLAG))
 		return true;
 	/*
@@ -129,6 +132,9 @@ static inline bool __transparent_hugepage_enabled(struct vm_area_struct *vma)
 	if (vma_is_dax(vma))
 		return true;
 
+	/*
+	 * 非always时，要检查标记
+	 */
 	if (transparent_hugepage_flags &
 				(1 << TRANSPARENT_HUGEPAGE_REQ_MADV_FLAG))
 		return !!(vma->vm_flags & VM_HUGEPAGE);

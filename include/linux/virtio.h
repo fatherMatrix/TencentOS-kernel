@@ -127,7 +127,7 @@ struct virtio_device {
 	const struct virtio_config_ops *config;
 	const struct vringh_config_ops *vringh_config;
 	/*
-	 * 链表头，链表元素是virtqueue->list
+	 * 链表头，链表元素是 virtqueue->list
 	 */
 	struct list_head vqs;
 	u64 features;

@@ -310,7 +310,7 @@ static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned nvqs,
 	int i, err, nvectors, allocated_vectors, queue_idx = 0;
 
 	/*
-	 * 分配virtio_pci_vq_info指针数组
+	 * 分配 virtio_pci_vq_info 指针数组
 	 */
 	vp_dev->vqs = kcalloc(nvqs, sizeof(*vp_dev->vqs), GFP_KERNEL);
 	if (!vp_dev->vqs)

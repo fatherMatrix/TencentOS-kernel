@@ -228,6 +228,8 @@ native_cpuid_reg(ebx)
 native_cpuid_reg(ecx)
 native_cpuid_reg(edx)
 
+unsigned long read_cr3_pa();	// For Source Insight
+
 /*
  * Friendlier CR3 helpers.
  */

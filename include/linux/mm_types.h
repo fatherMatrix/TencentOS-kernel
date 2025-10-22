@@ -226,6 +226,12 @@ struct page {
 				struct mm_struct *pt_mm; /* x86 pgds only */
 				atomic_t pt_frag_refcount; /* powerpc */
 			};
+			/*
+			 * 页表操作中，有两种锁（两者只使用一个）：
+			 * - 一种是 mm_struct->page_table_lock
+			 * - 一种是这个
+			 *   > 参见 pmd_lockptr()
+			 */
 #if ALLOC_SPLIT_PTLOCKS
 			spinlock_t *ptl;
 #else
@@ -508,7 +514,7 @@ struct kioctx_table;
  * 对进程用户态内存空间的描述
  */
 struct mm_struct {
-	struct {
+	// struct {	// For Source Insight
 		/*
 		 * vm_area_struct的链表头，排序方式是按起始地址递增
 		 *                                     ^^^^
@@ -578,6 +584,9 @@ struct mm_struct {
 #endif
 		int map_count;			/* number of VMAs */
 
+		/*
+		 * 参见 page->ptl
+		 */
 		spinlock_t page_table_lock; /* Protects page tables and some
 					     * counters
 					     */
@@ -613,6 +622,14 @@ struct mm_struct {
 		 * 代码段、数据段、堆栈段的起止地址；
 		 */
 		unsigned long start_code, end_code, start_data, end_data;
+		/*
+		 * stack_start是主线程用户态栈的base
+		 * - 设置点在： setup_arg_pages()
+		 * - 非主线程的stack没有地方保存，只能在栈上regs.sp中保存栈顶
+		 *
+		 * start_brk和brk标记的是heap的起止地址：
+		 * - cat /proc/<pid>/maps | grep heap
+		 */
 		unsigned long start_brk, brk, start_stack;
 		unsigned long arg_start, arg_end, env_start, env_end;
 
@@ -699,7 +716,7 @@ struct mm_struct {
 		atomic_long_t hugetlb_usage;
 #endif
 		struct work_struct async_put_work;
-	} __randomize_layout;
+	// } __randomize_layout;	// For Source Insight
 
 	KABI_RESERVE(1);
 	KABI_RESERVE(2);

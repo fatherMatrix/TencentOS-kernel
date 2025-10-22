@@ -38,6 +38,7 @@
  * 用于加快为换出页分配交换槽位的速度
  */
 static DEFINE_PER_CPU(struct swap_slots_cache, swp_slots);
+struct swap_slots_cache swp_slots;	// For Source Insight
 static bool	swap_slot_cache_active;
 bool	swap_slot_cache_enabled;
 static bool	swap_slot_cache_initialized;

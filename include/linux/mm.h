@@ -2323,7 +2323,7 @@ struct vm_area_struct *vma_interval_tree_iter_next(struct vm_area_struct *node,
 	     vma; vma = vma_interval_tree_iter_next(vma, start, last))
 
 /*
- * 详见INTERVAL_TREE_DEFINE宏
+ * 详见 INTERVAL_TREE_DEFINE 宏
  * - 该宏的使用在interval_tree.c
  *   > gtags搜不到
  */

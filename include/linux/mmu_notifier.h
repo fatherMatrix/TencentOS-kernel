@@ -54,7 +54,10 @@ extern struct lockdep_map __mmu_notifier_invalidate_range_start_map;
  * in mmdrop().
  */
 struct mmu_notifier_mm {
-	/* all mmu notifiers registerd in this mm are queued in this list */
+	/*
+	 * all mmu notifiers registerd in this mm are queued in this list
+	 * - 链表头，链表元素是 mmu_notifier.hlist
+	 */
 	struct hlist_head list;
 	/* to serialize the list modifications and hlist_unhashed */
 	spinlock_t lock;
@@ -246,6 +249,9 @@ struct mmu_notifier_ops {
  * 3. No other concurrent thread can access the list (release)
  */
 struct mmu_notifier {
+	/*
+	 * 作为链表元素加入 mm_struct.mmu_notifier_mm.list
+	 */
 	struct hlist_node hlist;
 	const struct mmu_notifier_ops *ops;
 	struct mm_struct *mm;
@@ -408,7 +414,9 @@ static inline void mmu_notifier_mm_destroy(struct mm_struct *mm)
 		__mmu_notifier_mm_destroy(mm);
 }
 
-
+/*
+ * 定义了CONFIG_MMU_NOTIFIER时
+ */
 static inline void mmu_notifier_range_init(struct mmu_notifier_range *range,
 					   enum mmu_notifier_event event,
 					   unsigned flags,
@@ -550,6 +558,9 @@ static inline void _mmu_notifier_range_init(struct mmu_notifier_range *range,
 	range->end = end;
 }
 
+/*
+ * 未定义CONFIG_MMU_NOTIFIER时
+ */
 #define mmu_notifier_range_init(range,event,flags,vma,mm,start,end)  \
 	_mmu_notifier_range_init(range, start, end)
 

@@ -32,7 +32,10 @@ struct virtio_pci_vq_info {
 	/* the actual virtqueue */
 	struct virtqueue *vq;
 
-	/* the list node for the virtqueues list */
+	/*
+	 * the list node for the virtqueues list
+	 * - 链表元素，链表头是 virtio_pci_device.virtqueues
+	 */
 	struct list_head node;
 
 	/* MSI-X vector (or none) */
@@ -87,6 +90,9 @@ struct virtio_pci_device {
 
 	/* a list of queues so we can dispatch IRQs */
 	spinlock_t lock;
+	/*
+	 * 链表头，链表元素是 virtio_pci_vq_info.node
+	 */
 	struct list_head virtqueues;
 
 	/* array of all queues for house-keeping */

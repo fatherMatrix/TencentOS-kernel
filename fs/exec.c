@@ -267,6 +267,9 @@ static int __bprm_mm_init(struct linux_binprm *bprm)
 	bprm->vma = vma = vm_area_alloc(mm);
 	if (!vma)
 		return -ENOMEM;
+	/*
+	 * 从这里开始，后面可以缺页以分配内存了
+	 */
 	vma_set_anonymous(vma);
 
 	if (down_write_killable(&mm->mmap_sem)) {
@@ -284,12 +287,17 @@ static int __bprm_mm_init(struct linux_binprm *bprm)
 	vma->vm_end = STACK_TOP_MAX;
 	/*
 	 * 这里分配了一个页的虚地址空间
-	 * - 后面会标记VM_GROWDOWN，所以越界后会进行expand_stack()
+	 * - 下面会标记 VM_GROWSDOWN ，所以越界后会进行 expand_stack()
+	 *   > VM_STACK_FLAGS 中包含了 VM_GROWSDOWN
 	 */
 	vma->vm_start = vma->vm_end - PAGE_SIZE;
 	vma->vm_flags = VM_SOFTDIRTY | VM_STACK_FLAGS | VM_STACK_INCOMPLETE_SETUP;
 	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
 
+	/*
+	 * 向exec的新mm_struct中插入新的vma
+	 * - 这个vma是新进程的主线程的栈所在的vma
+	 */
 	err = insert_vm_struct(mm, vma);
 	if (err)
 		goto err;

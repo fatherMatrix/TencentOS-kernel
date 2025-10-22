@@ -207,7 +207,15 @@ struct vring {
  */
 /* We publish the used event index at the end of the available ring, and vice
  * versa. They are at the end for backwards compatibility. */
+/*
+ * vring_used_event() 中存储的是 vring_virtqueue.last_used_idx
+ * - 由driver写入，表示vring_used.ring填充到这个下标时interrupt guest
+ */
 #define vring_used_event(vr) ((vr)->avail->ring[(vr)->num])
+/*
+ * vring_avail_event() 中存储的是 vring_virtqueue.split.avail_idx_shadow
+ * - 由device写入，表示vring_avail.ring填充到这个下标时notify host
+ */
 #define vring_avail_event(vr) (*(__virtio16 *)&(vr)->used->ring[(vr)->num])
 
 static inline void vring_init(struct vring *vr, unsigned int num, void *p,

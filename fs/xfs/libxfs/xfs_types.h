@@ -175,7 +175,7 @@ struct xfs_iext_cursor {
 };
 
 /*
- * xfs的extents只有这两种状态会写到磁盘上
+ * xfs的extents只有这两种状态的extent元数据会写到磁盘上
  */
 typedef enum {
 	XFS_EXT_NORM, XFS_EXT_UNWRITTEN,

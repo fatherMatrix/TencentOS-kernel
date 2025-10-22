@@ -26,6 +26,7 @@
  * them.
  */
 static DEFINE_PER_CPU(struct task_struct *, idle_threads);
+static struct task_struct *idle_threads; // For Source Insight
 
 struct task_struct *idle_thread_get(unsigned int cpu)
 {

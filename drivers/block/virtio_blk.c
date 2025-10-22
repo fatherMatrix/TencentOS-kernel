@@ -355,6 +355,9 @@ static blk_status_t virtio_queue_rq(struct blk_mq_hw_ctx *hctx,
 			return BLK_STS_RESOURCE;
 	}
 
+	/*
+	 * 将request->bio链表中的请求映射到virtio_rq->sg数组中
+	 */
 	num = blk_rq_map_sg(hctx->queue, req, vbr->sg);
 	if (num) {
 		if (rq_data_dir(req) == WRITE)

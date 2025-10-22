@@ -74,7 +74,9 @@ static inline int virtio_id_match(const struct virtio_device *dev,
 {
 	if (id->device != dev->id.device && id->device != VIRTIO_DEV_ANY_ID)
 		return 0;
+	/* device id匹配 */
 
+		/* 是virtio设备 */				/* vendor匹配 */
 	return id->vendor == VIRTIO_DEV_ANY_ID || id->vendor == dev->id.vendor;
 }
 

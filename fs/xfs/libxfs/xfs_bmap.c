@@ -4508,7 +4508,7 @@ xfs_bmapi_allocate(
 	 *     o 这里根本没有做转换，而是将XFS_EXT_NORM或者XFS_EXT_UNWRITTEN的
 	 *       extents插入磁盘上的btree树
 	 *   > 既然这里没有做转换，那么转换是在哪里做的呢？
-	 *     o 参见xfs_bmapi_convert_unwritten() / xfs_bmapi_convert_delalloc()
+	 *     o 参见 xfs_bmapi_convert_unwritten() / xfs_bmapi_convert_delalloc()
 	 */
 	if (bma->wasdel)
 	/*

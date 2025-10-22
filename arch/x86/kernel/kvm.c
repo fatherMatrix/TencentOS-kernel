@@ -236,6 +236,10 @@ u32 kvm_read_and_reset_pf_reason(void)
 	u32 reason = 0;
 
 	if (__this_cpu_read(apf_reason.enabled)) {
+		/*
+		 * apf_reason.reason是怎么传递给host来控制的？
+		 * - 参见： kvm_guest_cpu_init()
+		 */
 		reason = __this_cpu_read(apf_reason.reason);
 		__this_cpu_write(apf_reason.reason, 0);
 	}

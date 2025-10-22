@@ -3528,20 +3528,39 @@ context_switch(struct rq *rq, struct task_struct *prev,
 	 *   user ->   user   switch
 	 */
 	if (!next->mm) {                                // to kernel
+	/*
+	 * next为内核线程时，并不涉及cr3的切换、mm的切换。
+	 * - 因为任何一个task，其内核态地址空间的页表都是共享的
+	 */
+		/*
+		 * 如果当前cpu的cpu_tlbstate.loaded_mm不是init_mm，则标记当前
+		 * cpu的cpu_tlbstate.is_lazy为true。
+		 */
 		enter_lazy_tlb(prev->active_mm, next);
 
 		/*
 		 * 如果要切换到内核线程，则将内核线程的active_mm设置为prev的
 		 * active_mm
+		 * - 其实应该设置为init_mm，但由于这是内核线程，不会访问用户
+		 *   态，出于减少cr3切换（tlb flush）的考虑，我们借用上个进程
+		 *   的mm
 		 */
 		next->active_mm = prev->active_mm;
 		if (prev->mm)                           // from user
+		/*
+		 * 借用了用户态进程的mm，防止其被释放
+		 */
 			mmgrab(prev->active_mm);
 		else
 		/*
-		 * 如果内核线程要被剥夺执行权，那么会将其active_mm设置为NULL；
+		 * 借用的是上一个内核线程的mm，但其实上一个内核线程本身也是借用
+		 * 自更前面的用户态进程，这里相当于将从最近的用户态进程借用的mm
+		 * 传递到next。
+		 * - 这里不需要mmgrab，因为这个mm的第一次借用是走了上面的mmgrab()
+		 *   的；
 		 * - 这也是为什么crash去看内核线程时其active_mm几乎都为NULL，即
 		 *   这些内核线程没有处于运行状态；
+		 * - 击鼓传花
 		 */
 			prev->active_mm = NULL;
 	} else {                                        // to user
@@ -3553,10 +3572,17 @@ context_switch(struct rq *rq, struct task_struct *prev,
 		 * The below provides this either through switch_mm(), or in
 		 * case 'prev->active_mm == next->mm' through
 		 * finish_task_switch()'s mmdrop().
+		 *
+		 * 只有切换的next进程不是内核线程时，才需要切换mm_struct，否则
+		 * 是不需要切换mm_struct的；
 		 */
 		switch_mm_irqs_off(prev->active_mm, next->mm, next);
 
 		if (!prev->mm) {                        // from kernel
+		/*
+		 * 从用户态进程借用的mm最终历经不知道几次转手传递后，最终到了
+		 * 要停止借用，即mmdrop()的时候
+		 */
 			/* will mmdrop() in finish_task_switch(). */
 			rq->prev_mm = prev->active_mm;
 			prev->active_mm = NULL;

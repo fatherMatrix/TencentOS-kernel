@@ -91,7 +91,7 @@ static void unmap_region(struct mm_struct *mm,
  *		w: (no) no	w: (no) no	w: (copy) copy	w: (no) no
  *		x: (no) no	x: (no) yes	x: (no) yes	x: (yes) yes
  */
-pgprot_t protection_map[16] __ro_after_init = {
+pgprot_t protection_map[16] /* __ro_after_init For Source Insight */ = {
 	__P000, __P001, __P010, __P011, __P100, __P101, __P110, __P111,
 	__S000, __S001, __S010, __S011, __S100, __S101, __S110, __S111
 };
@@ -118,7 +118,10 @@ static pgprot_t vm_pgprot_modify(pgprot_t oldprot, unsigned long vm_flags)
 	return pgprot_modify(oldprot, vm_get_page_prot(vm_flags));
 }
 
-/* Update vma->vm_page_prot to reflect vma->vm_flags. */
+/*
+ * Update vma->vm_page_prot to reflect vma->vm_flags.
+ * - 定义了 CONFIG_MMU 的
+ */
 void vma_set_page_prot(struct vm_area_struct *vma)
 {
 	unsigned long vm_flags = vma->vm_flags;

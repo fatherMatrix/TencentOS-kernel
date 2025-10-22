@@ -2185,6 +2185,11 @@ struct file_operations {
 } __randomize_layout;
 
 struct inode_operations {
+	/*
+	 * dentry参数是待查找的目录：
+	 * - 如果找到了对应的inode，则进行关联
+	 * - 如果没有找到，则返回一个负状态的dentry
+	 */
 	struct dentry * (*lookup) (struct inode *,struct dentry *, unsigned int);
 	const char * (*get_link) (struct dentry *, struct inode *, struct delayed_call *);
 	int (*permission) (struct inode *, int);

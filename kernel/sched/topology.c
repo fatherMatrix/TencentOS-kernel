@@ -1594,7 +1594,7 @@ void sched_init_numa(void)
 	 * node_distance(i,j) in order to avoid cubic time.
 	 *
 	 * 难道是为了找出有多少个numa调度层级？
-	 * - 是的，看到高的做法是建立一个NR_DISTANCE_VALUES个bit的位图，每遍历
+	 * - 是的，看到高版本做法是建立一个NR_DISTANCE_VALUES个bit的位图，每遍历
 	 *   到一个distance就标记对应bit，最后数一下标记了多少个位。比较直观。
 	 * - 注意，这里遍历的node，而不是cpu，也就是说得到的是有多少个numa层级
 	 */
@@ -2033,7 +2033,7 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 		goto error;
 
 	/*
-	 * 分配sched_domain
+	 * 分配 sched_domain
 	 */
 	alloc_state = __visit_domain_allocation_hell(&d, cpu_map);
 	if (alloc_state != sa_rootdomain)
@@ -2043,7 +2043,7 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 
 	/*
 	 * Set up domains for CPUs specified by the cpu_map:
-	 * - 上面__visit_domain_allocation_hell()中仅分配了众多结构体的内存，并
+	 * - 上面 __visit_domain_allocation_hell() 中仅分配了众多结构体的内存，并
 	 *   没有建立关系；
 	 */
 	for_each_cpu(i, cpu_map) {
@@ -2065,6 +2065,7 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 
 			/*
 			 * 最低层级的sched_domain
+			 * - 只有对底层的sched_domain才是每个cpu对应一个的
 			 */
 			if (tl == sched_domain_topology)
 				*per_cpu_ptr(d.sd, i) = sd;

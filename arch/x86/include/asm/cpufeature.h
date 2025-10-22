@@ -148,9 +148,9 @@ extern void clear_cpu_cap(struct cpuinfo_x86 *c, unsigned int bit);
 
 /*
  * 下面的两个位置的区别是什么？
- * - set_cpu_cap()操作的是cpuinfo_x86->x86_capability
+ * - set_cpu_cap()操作的是 cpuinfo_x86->x86_capability
  *   > 这里也是lscpu中flags的来源
- * - cpu_caps_set的作用参见apply_forced_caps()
+ * - cpu_caps_set的作用参见 apply_forced_caps()
  */
 #define setup_force_cpu_cap(bit) do { \
 	set_cpu_cap(&boot_cpu_data, bit);	\

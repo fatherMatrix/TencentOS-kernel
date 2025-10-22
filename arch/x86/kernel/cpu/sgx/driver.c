@@ -66,11 +66,11 @@ static int sgx_release(struct inode *inode, struct file *file)
 		spin_unlock(&encl->mm_lock);
 
 		/* The enclave is no longer mapped by any mm. */
-		if (!encl_mm)
+		if (!encl_mm)mmu_notifier
 			break;
 
 		synchronize_srcu(&encl->srcu);
-		mmu_notifier_unregister(&encl_mm->mmu_notifier, encl_mm->mm);
+		mmu_notifier_unregister(&encl_mm->, encl_mm->mm);
 		kfree(encl_mm);
 
 		/* 'encl_mm' is gone, put encl_mm->encl reference: */

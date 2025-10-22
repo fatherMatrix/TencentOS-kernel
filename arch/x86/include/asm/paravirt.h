@@ -64,7 +64,7 @@ static inline void __flush_tlb_global(void)
 static inline void __flush_tlb_one_user(unsigned long addr)
 {
 	/*
-	 * 可能是：native_flush_tlb_one_user()
+	 * 可能是： native_flush_tlb_one_user()
 	 */
 	PVOP_VCALL1(mmu.flush_tlb_one_user, addr);
 }
@@ -323,6 +323,9 @@ static inline void paravirt_arch_dup_mmap(struct mm_struct *oldmm,
 
 static inline int paravirt_pgd_alloc(struct mm_struct *mm)
 {
+	/*
+	 * x86: __paravirt_pgd_alloc()
+	 */
 	return PVOP_CALL1(int, mmu.pgd_alloc, mm);
 }
 

@@ -227,6 +227,8 @@ static void setup_pcid(void)
 		 *
 		 * Instead, we brute-force it and set CR4.PCIDE manually in
 		 * start_secondary().
+		 *
+		 * cr4的bit 17开启non-zero pcid
 		 */
 		cr4_set_bits(X86_CR4_PCIDE);
 
@@ -994,6 +996,7 @@ void __init zone_sizes_init(void)
 	free_area_init_nodes(max_zone_pfns);
 }
 
+struct tlb_state cpu_tlbstate; // For Source Insight
 __visible DEFINE_PER_CPU_SHARED_ALIGNED(struct tlb_state, cpu_tlbstate) = {
 	.loaded_mm = &init_mm,
 	.next_asid = 1,

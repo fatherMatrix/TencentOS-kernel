@@ -95,6 +95,9 @@ static void choose_new_asid(struct mm_struct *next, u64 next_tlb_gen,
 		    next->context.ctx_id)
 			continue;
 
+		/*
+		 * 我们当前占有一个pcid slot
+		 */
 		*new_asid = asid;
 		*need_flush = (this_cpu_read(cpu_tlbstate.ctxs[asid].tlb_gen) <
 			       next_tlb_gen);
@@ -345,6 +348,11 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		__flush_tlb_all();
 	}
 #endif
+	/*
+	 * 要进行mm的切换了，所以必然不可能是lazy了
+	 * - lazy仅发生在切换的下一个进程是内核线程的时候
+	 *   > 参见 context_switch()
+	 */
 	this_cpu_write(cpu_tlbstate.is_lazy, false);
 
 	/*
@@ -360,6 +368,11 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 	 * instruction.
 	 */
 	if (real_prev == next) {
+	/*
+	 * 如果cpu_tlbstate.loaded_mm与目标mm一致，说明是这样的：
+	 * - user task A -> kernel thread A -> kernel thread N -> user task A
+	 * - user task A (thread a) -> user task A (thread b)
+	 */
 		VM_WARN_ON(this_cpu_read(cpu_tlbstate.ctxs[prev_asid].ctx_id) !=
 			   next->context.ctx_id);
 
@@ -376,6 +389,8 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		 * If the CPU is not in lazy TLB mode, we are just switching
 		 * from one thread in a process to another thread in the same
 		 * process. No TLB flush required.
+		 * - 不是lazy的、且cpu_tlbstate.loaded_mm与目标mm一致，只有一
+		 *   种可能，就是同一个进程内的不同thread切换。
 		 */
 		if (!was_lazy)
 			return;
@@ -385,6 +400,8 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		 * If the TLB is up to date, just use it.
 		 * The barrier synchronizes with the tlb_gen increment in
 		 * the TLB shootdown code.
+		 * - 代数相同，说明当前的pcid和这个进程的绑定关系还未发生变化，
+		 *   因此可以依赖pcid机制分辨tlb，而不需要强行flush。
 		 */
 		smp_mb();
 		next_tlb_gen = atomic64_read(&next->context.tlb_gen);
@@ -411,6 +428,13 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 			 * If our current stack is in vmalloc space and isn't
 			 * mapped in the new pgd, we'll double-fault.  Forcibly
 			 * map it.
+			 * - 用户态异常 -> 进入内核栈 -> 访问内核栈又异常，double
+			 *   fault，不可恢复。
+			 *   > 如果是切换到内核线程的话，访问内核栈异常是第一次异
+			 *     常，此时可以从主内核页表同步，不会有double fault
+			 * - 这里只是切换mm到next的mm，但执行的依然是当前进程的代
+			 *   码，使用的依然是当前进程的内核栈。所以要确保当前进程
+			 *   内核栈的pgd在next.mm.pgd中存在。
 			 */
 			sync_current_stack_to_mm(next);
 		}
@@ -424,8 +448,9 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 			VM_WARN_ON_ONCE(!cpumask_test_cpu(cpu,
 						mm_cpumask(real_prev)));
 			/*
-			 * 上个mm_struct被切换走了，所以将上个mm_struct中对应本
-			 * cpu的位图清空
+			 * 上个mm_struct要被切换走了，所以将上个mm_struct中对应本
+			 * cpu的位图清空。
+			 * - 清空后，如何保证real_prev的tlb flush可以处理到本cpu呢？
 			 */
 			cpumask_clear_cpu(cpu, mm_cpumask(real_prev));
 		}
@@ -503,6 +528,10 @@ void enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk)
 	if (this_cpu_read(cpu_tlbstate.loaded_mm) == &init_mm)
 		return;
 
+	/*
+	 * 当必须发生mm切换时，会将is_lazy设置为false
+	 * - switch_mm_irqs_off()
+	 */
 	this_cpu_write(cpu_tlbstate.is_lazy, true);
 }
 

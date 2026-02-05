@@ -4103,7 +4103,7 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
 		 *   进入本if分支表明pmd entry不为空（即下一级页表————pte table
 		 *   存在），所以可以绕过alloc过程直接查找对应pte entry。
 		 *   > 为什么确信呢？
-		 *     x 因为上面的pmd_devmap_trans_unstable()
+		 *     x 因为上面的 pmd_devmap_trans_unstable()
 		 *       o understand achor B
 		 *
 		 * 找到page fault发生地址的pte指针
@@ -4152,6 +4152,7 @@ static vm_fault_t handle_pte_fault(struct vm_fault *vmf)
 		return retval;
 	}
 
+	/* numa balancing相关 */
 	if (pte_protnone(vmf->orig_pte) && vma_is_accessible(vmf->vma))
 		return do_numa_page(vmf);
 

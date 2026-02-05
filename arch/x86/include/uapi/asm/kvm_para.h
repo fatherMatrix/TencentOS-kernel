@@ -34,6 +34,7 @@
 
 /*
  * 并没有看到kvm哪里设置了这个cpuid？
+ * - 通过cpuid指令陷入到后端模拟返回的
  */
 #define KVM_HINTS_REALTIME      0
 

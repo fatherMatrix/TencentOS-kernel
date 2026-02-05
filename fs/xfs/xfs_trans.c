@@ -296,8 +296,8 @@ undo_blocks:
 int
 xfs_trans_alloc(
 	struct xfs_mount	*mp,
-	struct xfs_trans_res	*resp,		/* 元数据区 */
-	uint			blocks,		/* 数据区block */
+	struct xfs_trans_res	*resp,		/* 日志区 */
+	uint			blocks,		/* 数据区，包括各种元数据btree */
 	uint			rtextents,
 	uint			flags,
 	struct xfs_trans	**tpp)

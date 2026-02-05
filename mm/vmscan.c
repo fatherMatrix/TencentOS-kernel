@@ -1331,6 +1331,7 @@ static unsigned long shrink_page_list(struct list_head *page_list,
 
 		/*
 		 * 检查page是否应该设置到活跃列表上
+		 * - page_check_references()会rmap walk
 		 */
 		if (!ignore_references)
 			references = page_check_references(page, sc);
@@ -1818,6 +1819,9 @@ static unsigned long isolate_lru_pages(unsigned long nr_to_scan,
 
 			nr_taken += nr_pages;
 			nr_zone_taken[page_zonenum(page)] += nr_pages;
+			/*
+			 * 实际的隔离动作发生在这里
+			 */
 			list_move(&page->lru, dst);
 			break;
 
@@ -2081,6 +2085,9 @@ shrink_inactive_list(unsigned long nr_to_scan, struct lruvec *lruvec,
 	if (nr_taken == 0)
 		return 0;
 
+	/*
+	 * 内部会rmap walk确定是否被referenced
+	 */
 	nr_reclaimed = shrink_page_list(&page_list, pgdat, sc, 0,
 				&stat, false);
 
@@ -2152,6 +2159,9 @@ static void shrink_active_list(unsigned long nr_to_scan,
 
 	spin_lock_irq(&lruvec->lru_lock);
 
+	/*
+	 * 在目标lru上摘下（隔离出）合适的page，放到l_hold链表中
+	 */
 	nr_taken = isolate_lru_pages(nr_to_scan, lruvec, &l_hold,
 				     &nr_scanned, sc, lru);
 
@@ -2181,6 +2191,10 @@ static void shrink_active_list(unsigned long nr_to_scan,
 			}
 		}
 
+		/*
+		 * page_referenced()中会走rmap查找该page对应的所有pte
+		 * - 所以这里会有性能损耗
+		 */
 		if (page_referenced(page, 0, sc->target_mem_cgroup,
 				    &vm_flags)) {
 			nr_rotated += hpage_nr_pages(page);
@@ -2228,6 +2242,9 @@ static void shrink_active_list(unsigned long nr_to_scan,
 	spin_unlock_irq(&lruvec->lru_lock);
 
 	mem_cgroup_uncharge_list(&l_active);
+	/*
+	 * 走到这里时，l_inactive中的page已经挂入l_active中了，所以这里是剩下的全部page
+	 */
 	free_unref_page_list(&l_active);
 	trace_mm_vmscan_lru_shrink_active(pgdat->node_id, nr_taken, nr_activate,
 			nr_deactivate, nr_rotated, sc->priority, file);

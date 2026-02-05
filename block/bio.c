@@ -329,6 +329,15 @@ static void bio_chain_endio(struct bio *bio)
  * completed; the chained bio will also be freed when it completes.
  *
  * The caller must not set bi_private or bi_end_io in @bio.
+ *
+ * 连完之后：
+ *
+ *    old bio
+ * +------------+    /--->+------------+
+ * | bi_private |---/     | bi_private |
+ * +------------+         +------------+
+ * |  ... ...   |         |  ... ...   |
+ * +------------+         +------------+
  */
 void bio_chain(struct bio *bio, struct bio *parent)
 {
@@ -338,6 +347,9 @@ void bio_chain(struct bio *bio, struct bio *parent)
 	 * 将后提交的新的bio设置为老bio的bi_private
 	 */
 	bio->bi_private = parent;
+	/*
+	 * 最后那个bio->bi_end_io = xfs_end_bio
+	 */
 	bio->bi_end_io	= bio_chain_endio;
 	/*
 	 * 增加新的bio的__bi_remaining

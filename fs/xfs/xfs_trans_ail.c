@@ -229,7 +229,7 @@ xfs_trans_ail_cursor_first(
 	struct xfs_log_item	*lip;
 
 	/*
-	 * 将xfs_ail_cursor挂到xfs_ail->ail_cursors链表上
+	 * 将xfs_ail_cursor挂到 xfs_ail->ail_cursors 链表上
 	 */
 	xfs_trans_ail_cursor_init(ailp, cur);
 

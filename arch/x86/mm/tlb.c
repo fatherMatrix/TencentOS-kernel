@@ -380,6 +380,10 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		 * Even in lazy TLB mode, the CPU should stay set in the
 		 * mm_cpumask. The TLB shootdown code can figure out from
 		 * from cpu_tlbstate.is_lazy whether or not to send an IPI.
+		 * - 将本cpu设置进mm_struct的位图cpu_bitmap
+		 *   > 理论上讲，内核线程不需要设置（init_mm），但事实上内核
+		 *     线程并不都在使用init_mm，因此这里将不使用init_mm的内核
+		 *     线程也计算进去，在tlb shootdown时通过is_lazy来判断
 		 */
 		if (WARN_ON_ONCE(real_prev != &init_mm &&
 				 !cpumask_test_cpu(cpu, mm_cpumask(next))))
@@ -423,6 +427,7 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 		 */
 		cond_ibpb(tsk);
 
+		/* tkernel4: y */
 		if (IS_ENABLED(CONFIG_VMAP_STACK)) {
 			/*
 			 * If our current stack is in vmalloc space and isn't
@@ -451,6 +456,11 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 			 * 上个mm_struct要被切换走了，所以将上个mm_struct中对应本
 			 * cpu的位图清空。
 			 * - 清空后，如何保证real_prev的tlb flush可以处理到本cpu呢？
+			 *   > 没有pcid时，下面切换cr3时会刷掉real_prev的tlb
+			 *   > 有pcid时，每个进程切换进来时，都会根据pcid id来判断
+			 *     是不是需要flush tlb
+			 *   > 总结来讲，mm_cpumask() 主要用来解决remote flush tlb
+			 *     的问题。即，flush其他cpu上正在运行的进程的tlb
 			 */
 			cpumask_clear_cpu(cpu, mm_cpumask(real_prev));
 		}
@@ -499,6 +509,9 @@ void switch_mm_irqs_off(struct mm_struct *prev, struct mm_struct *next,
 	/* Make sure we write CR3 before loaded_mm. */
 	barrier();
 
+	/* 从现在起，使用next进程的mm_struct。但应注意，此时还是在prev
+	 * 的stack上
+	 */
 	this_cpu_write(cpu_tlbstate.loaded_mm, next);
 	this_cpu_write(cpu_tlbstate.loaded_mm_asid, new_asid);
 
@@ -775,6 +788,8 @@ void native_flush_tlb_others(const struct cpumask *cpumask,
 	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	 * at the next context switch.
 	 * ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+	 * - lazy mode的cpu上运行的必定都是内核线程。flush_tlb_xxx()其实
+	 *   关注的是用户态mm的部分。
 	 *
 	 * However, if page tables are getting freed, we need to send the
 	 * IPI everywhere, to prevent CPUs in lazy TLB mode from tripping
@@ -886,6 +901,7 @@ void flush_tlb_mm_range(struct mm_struct *mm, unsigned long start,
 
 	/*
 	 * 这里的mm_cpumask()是否是记录了该mm_struct在哪些cpu上运行的呢？
+	 * - 是的
 	 * - 最终IPI目标cpu执行的处理函数为：flush_tlb_func_remote()
 	 */
 	if (cpumask_any_but(mm_cpumask(mm), cpu) < nr_cpu_ids)

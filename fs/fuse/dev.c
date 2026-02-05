@@ -350,6 +350,7 @@ static int queue_interrupt(struct fuse_iqueue *fiq, struct fuse_req *req)
 			spin_unlock(&fiq->lock);
 			return 0;
 		}
+		/* fuse_dev_wake_and_unlock() */
 		fiq->ops->wake_interrupt_and_unlock(fiq);
 	} else {
 		spin_unlock(&fiq->lock);

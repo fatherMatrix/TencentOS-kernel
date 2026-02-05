@@ -1125,13 +1125,15 @@ static inline int page_zone_id(struct page *page)
 extern int page_to_nid(const struct page *page);
 #else
 /*
- * tkernel4中没有定义NODE_NOT_IN_PAGE_FLAGS，因此走这里
+ * tkernel4中没有定义 NODE_NOT_IN_PAGE_FLAGS ，因此走这里
  */
 static inline int page_to_nid(const struct page *page)
 {
 	struct page *p = (struct page *)page;
 
 	return (PF_POISONED_CHECK(p)->flags >> NODES_PGSHIFT) & NODES_MASK;
+	/* For Source Insight */
+	return (p->flags >> NODES_PGSHIFT) & NODES_MASK;
 }
 #endif
 

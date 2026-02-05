@@ -238,7 +238,7 @@ typedef struct xlog_in_core {
 	char			*ic_datap;	/* pointer to iclog data */
 
 	/* Callback structures need their own cacheline */
-	spinlock_t		ic_callback_lock ____cacheline_aligned_in_smp;
+	spinlock_t		ic_callback_lock; // ____cacheline_aligned_in_smp;
 	/*
 	 * 链表头，链表元素是xfs_cil_ctx->iclog_entry；
 	 * - xfs_cil_ctx被写入log buffer（iclog）后，需要将xfs_cil_ctx链接到
@@ -248,13 +248,13 @@ typedef struct xlog_in_core {
 	struct list_head	ic_callbacks;
 
 	/* reference counts need their own cacheline */
-	atomic_t		ic_refcnt ____cacheline_aligned_in_smp;
+	atomic_t		ic_refcnt; // ____cacheline_aligned_in_smp;
 	/*
 	 * log buffer的负载区域
 	 */
 	xlog_in_core_2_t	*ic_data;
 	/*
-	 * 每个log record（log buffer）都以xlog_rec_header开头
+	 * 每个log record（log buffer）都以 xlog_rec_header 开头
 	 */
 #define ic_header	ic_data->hic_header
 #ifdef DEBUG
@@ -286,7 +286,8 @@ struct xfs_cil_ctx {
 	struct xfs_cil		*cil;
 	/*
 	 * 每次新建时比上一个增加1
-	 * - 这个东西表示的本质内容与start_lsn，commit_lsn不同，相对大小无意义
+	 * - 这个东西表示的本质内容与start_lsn，commit_lsn不同，与它们的相对大小
+	 *   无意义
 	 */
 	xfs_lsn_t		sequence;	/* chkpt sequence # */
 	/*
@@ -317,7 +318,7 @@ struct xfs_cil_ctx {
 	/*
 	 * 作为链表元素加入xlog_in_core->ic_callbacks
 	 * - 当xfs_cil_ctx的内容全部经由xlog_write写入iclog后，会将xfs_cil_ctx通
-	 *   过本字段挂入事务结束标记所写入的iclog
+	 *   过本字段挂入事务结束标记（commit log）所写入的iclog
 	 */
 	struct list_head	iclog_entry;
 	/*
@@ -366,7 +367,7 @@ struct xfs_cil {
 	 * xfs_log_commit_cil()中使用了这个信号量
 	 * - 用于事务向CIL提交 与 后台push的互斥
 	 */
-	struct rw_semaphore	xc_ctx_lock ____cacheline_aligned_in_smp;
+	struct rw_semaphore	xc_ctx_lock; // For Souce Insight ____cacheline_aligned_in_smp;
 	/*
 	 * checkpoint context
 	 * - 当前接受事务提交的context，同一时刻只有一个
@@ -375,7 +376,7 @@ struct xfs_cil {
 	 */
 	struct xfs_cil_ctx	*xc_ctx;
 
-	spinlock_t		xc_push_lock ____cacheline_aligned_in_smp;
+	spinlock_t		xc_push_lock; // For Source Insight ____cacheline_aligned_in_smp;
 	/*
 	 * 要求CIL push到iclog的最新的lsn
 	 * - xc_push_work会依据这个值进行CIL push
@@ -562,7 +563,7 @@ struct xlog {
 	 * - 该字段控制AIL flush可以进行的最大lsn
 	 *   > 大于该lsn表示iclog还未写入disk log space，AIL flush不安全
 	 */
-	atomic64_t		l_last_sync_lsn ____cacheline_aligned_in_smp;
+	atomic64_t		l_last_sync_lsn; // ____cacheline_aligned_in_smp;
 	/*
 	 * lsn of 1st LR with unflushed * buffers
 	 * - 在iclog中等待写到磁盘metadata region上的（AIL中的）最小的lsn 
@@ -573,7 +574,7 @@ struct xlog {
 	 * - 因为数据被写入到metadata region中，表示disk log space中有部分数据就
 	 *   无用了，相当于disk log space的空间释放。
 	 */
-	atomic64_t		l_tail_lsn ____cacheline_aligned_in_smp;
+	atomic64_t		l_tail_lsn; // ____cacheline_aligned_in_smp;
 
 	/*
 	 * 上面的lsn和xlog_grant_head都编码了位置信息，但编码格式不同；

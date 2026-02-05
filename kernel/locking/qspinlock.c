@@ -327,9 +327,17 @@ void queued_spin_lock_slowpath(struct qspinlock *lock, u32 val)
 
 	BUILD_BUG_ON(CONFIG_NR_CPUS >= (1U << _Q_TAIL_CPU_BITS));
 
+	/* 开启CONFIG_PARAVIRT_SPINLOCKS后，直接跳到pv_queue
+	 * - 不对， native_queued_spin_lock_slowpath() 在生成时，pv_enabled()是0，所
+	 *   以不会跳过去。而调用 native_queued_spin_lock_slowpath() 还是
+	 *   __pv_queued_spin_lock_slowpath() 是系统启动时设置的
+	 */
 	if (pv_enabled())
 		goto pv_queue;
 
+	/* 对于cpu超卖的机器，可以直接这么做，因为vcpu会被调度走，在guest中，看起来
+	 * 就是在自旋了
+	 */
 	if (virt_spin_lock(lock))
 		return;
 

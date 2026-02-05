@@ -455,7 +455,9 @@ void __init bootmem_init(void)
 	 */
 	memblocks_present();
 
+	/* 映射vmemmap */
 	sparse_init();
+	/* 里面包含了初始化page结构体的动作 */
 	zone_sizes_init(min, max);
 
 	memblock_dump_all();

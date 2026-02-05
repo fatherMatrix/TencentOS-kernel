@@ -2576,6 +2576,9 @@ static void task_numa_work(struct callback_head *work)
 		return;
 
 
+	/*
+	 * 这里是获取了读锁，跟页处理异常相同的锁
+	 */
 	if (!down_read_trylock(&mm->mmap_sem))
 		return;
 	vma = find_vma(mm, start);

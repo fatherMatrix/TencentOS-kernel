@@ -727,12 +727,14 @@ int kern_addr_valid(unsigned long addr)
 }
 #ifdef CONFIG_SPARSEMEM_VMEMMAP
 #if !ARM64_SWAPPER_USES_SECTION_MAPS
+/* 非4k页走这里 */
 int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,
 		struct vmem_altmap *altmap)
 {
 	return vmemmap_populate_basepages(start, end, node);
 }
 #else	/* !ARM64_SWAPPER_USES_SECTION_MAPS */
+/* 4k页走这里 */
 int __meminit vmemmap_populate(unsigned long start, unsigned long end, int node,
 		struct vmem_altmap *altmap)
 {

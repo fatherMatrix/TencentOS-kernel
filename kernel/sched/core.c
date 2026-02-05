@@ -3402,6 +3402,7 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 	finish_arch_post_lock_switch();
 	kcov_finish_switch(current);
 
+	/* switch to numa cr3 */
 	fire_sched_in_preempt_notifiers(current);
 	/*
 	 * When switching through a kernel thread, the loop in

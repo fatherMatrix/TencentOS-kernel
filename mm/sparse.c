@@ -45,9 +45,9 @@ static u16 section_to_node_table[NR_MEM_SECTIONS] __cacheline_aligned;
 #endif
 
 /*
- * tkernel4中没有定义上面的NODE_NOT_IN_PAGE_FLAGS，所以不走这里
+ * tkernel4中没有定义上面的 NODE_NOT_IN_PAGE_FLAGS ，所以不走这里
  */
-int page_to_nid(const struct page *page)
+int  page_to_nid(const struct page *page)
 {
 	return section_to_node_table[page_to_section(page)];
 }
@@ -310,6 +310,8 @@ void __init memory_present(int nid, unsigned long start, unsigned long end)
 		 * 如果未开启NODE_NOT_IN_PAGE_FLAGS，那么page对应的node在page的
 		 * flags字段中，不需要section来过渡；下面的函数也条件编译为空操
 		 * 作；（这个是常见情况）
+		 * - 此时通过可以在后面通过 set_page_links() -> set_page_zone()
+		 *   来配置（因为无需section参与）
 		 */
 		set_section_nid(section, nid);
 
@@ -509,8 +511,8 @@ struct page __init *__populate_section_memmap(unsigned long pfn,
 }
 #endif /* !CONFIG_SPARSEMEM_VMEMMAP */
 
-static void *sparsemap_buf __meminitdata;
-static void *sparsemap_buf_end __meminitdata;
+static void *sparsemap_buf; // __meminitdata; For SI
+static void *sparsemap_buf_end; // __meminitdata; For SI
 
 static inline void __meminit sparse_buffer_free(unsigned long size)
 {

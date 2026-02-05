@@ -2184,6 +2184,8 @@ static inline void __init check_timer(void)
 	 * automatically.
 	 *
 	 * 这里会屏蔽掉LVT LINT0上的中断（即屏蔽了8259a ?）。
+	 * - 设置了MASKED位，表示LVT0被禁止了
+	 *   > 参见: sdm. v3. Local Vector Table
 	 */
 	apic_write(APIC_LVT0, APIC_LVT_MASKED | APIC_DM_EXTINT);
 	/*
@@ -2199,6 +2201,9 @@ static inline void __init check_timer(void)
 	apic_printk(APIC_QUIET, KERN_INFO "..TIMER: vector=0x%02X "
 		    "apic1=%d pin1=%d apic2=%d pin2=%d\n",
 		    cfg->vector, apic1, pin1, apic2, pin2);
+	/* bug出现时：
+	 * - ..TIMER: vector=0x30 apic1=0 pin1=2 apic2=-1 pin2=-1
+	 */
 
 	/*
 	 * Some BIOS writers are clueless and report the ExtINTA

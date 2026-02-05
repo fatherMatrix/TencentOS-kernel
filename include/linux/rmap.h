@@ -83,6 +83,8 @@ struct anon_vma {
 	/*
 	 * Interval tree of private "related" vmas
 	 * - 树根，元素是anon_vma_chain->rb，这是一棵区间树
+	 *   > 区间key是 [vm_area_struct->vm_pgoff, vm_area_struct->vm_pgoff + SIZE)
+	 *     o 参见区间树定义的宏
 	 */
 	struct rb_root_cached rb_root;
 };
@@ -311,6 +313,7 @@ struct rmap_walk_control {
 					unsigned long addr, void *arg);
 	int (*done)(struct page *page);
 	struct anon_vma *(*anon_lock)(struct page *page);
+	/* invalid_vma()返回true则会跳过这个vma的处理 */
 	bool (*invalid_vma)(struct vm_area_struct *vma, void *arg);
 };
 

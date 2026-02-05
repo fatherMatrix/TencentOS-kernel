@@ -37,6 +37,7 @@
 /*
  * Returns 0 if mmiotrace is disabled, or if the fault is not
  * handled by mmiotrace:
+ * - 用来处理设备寄存器的map
  */
 static nokprobe_inline int
 kmmio_fault(struct pt_regs *regs, unsigned long addr)
@@ -1351,7 +1352,12 @@ void do_user_addr_fault(struct pt_regs *regs,
 	tsk = current;
 	mm = tsk->mm;
 
-	/* kprobes don't want to hook the spurious faults: */
+	/*
+	 * kprobes don't want to hook the spurious faults:
+	 * - kprobe应该不是在页异常中处理吧？
+	 *   > kprobe的handler有可能产生page fault，并且kprobe
+	 *     有自己的 fault_handler
+	 */
 	if (unlikely(kprobe_page_fault(regs, X86_TRAP_PF)))
 		return;
 

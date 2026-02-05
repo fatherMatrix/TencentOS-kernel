@@ -3118,7 +3118,10 @@ xfs_btree_new_root(
 	/* initialise our start point from the cursor */
 	cur->bc_ops->init_ptr_from_cur(cur, &rptr);
 
-	/* Allocate the new block. If we can't do it, we're toast. Give up. */
+	/*
+	 * Allocate the new block. If we can't do it, we're toast. Give up.
+	 * - refcount tree: xfs_refcountbt_alloc_block()
+	 */
 	error = cur->bc_ops->alloc_block(cur, &rptr, &lptr, stat);
 	if (error)
 		goto error0;

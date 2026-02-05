@@ -472,7 +472,7 @@ xfs_reflink_allocate_cow(
 	 * - *share为false，即不共享；
 	 *
 	 * shared指的是在cow fork中找到任意类型的extents
-	 * found指的是在cow fork中找到real extents（已分配的extents）
+	 * found指的是在cow fork中找到real extents（已分配的extents，但有可能是unwritten）
 	 */
 	if (error || !*shared)
 		return error;

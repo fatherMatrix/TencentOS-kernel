@@ -45,6 +45,7 @@ xlog_cil_ticket_alloc(
 	/*
 	 * set the current reservation to zero so we know to steal the basic
 	 * transaction overhead reservation from the first transaction commit.
+	 * - 在这里将xfs_cil_ctx的ticket.t_curr_res设置为0
 	 */
 	tic->t_curr_res = 0;
 	return tic;
@@ -526,11 +527,16 @@ xlog_cil_insert_items(
 	 *
 	 * - 将本xfs_trans的xlog_ticket中的配额转移到xlog->xfs_cil_ctx的ticket
 	 *   中
-	 * - t_curr_res什么时候时0呢？
-	 *   > 参见xlog_cil_ticket_alloc()
+	 * - t_curr_res什么时候是0呢？
+	 *   > 参见 xlog_cil_ticket_alloc() ，即初始化的时候
 	 */
 	if (ctx->ticket->t_curr_res == 0) {
+		/*
+		 * t_unit_res 中包含了xlog_op_header需要的空间，但不包含iclog
+		 * header需要的空间
+		 */
 		ctx_res = ctx->ticket->t_unit_res;
+		/* t_curr_res 表示的是当前真正保留的空间 */
 		ctx->ticket->t_curr_res = ctx_res;
 		tp->t_ticket->t_curr_res -= ctx_res;
 	}
@@ -542,6 +548,10 @@ xlog_cil_insert_items(
 	iclog_space = log->l_iclog_size - log->l_iclog_hsize;
 	if (len > 0 && (ctx->space_used / iclog_space !=
 				(ctx->space_used + len) / iclog_space)) {
+	/*
+	 * len > 0：这个xfs_trans中有数据，肯定要写。进入的必要条件；
+	 * 第二个条件，说明我们还需要新的log buffer（iclog）；
+	 */
 		split_res = (len + iclog_space - 1) / iclog_space;
 		/* need to take into account split region headers, too */
 		split_res *= log->l_iclog_hsize + sizeof(struct xlog_op_header);
@@ -608,6 +618,7 @@ xlog_cil_insert_items(
 			 * 感觉已在CIL中的元素后移这个操作并无必要，因为CIL本身
 			 * 就是作为一个原子操作写入日志的
 			 * - v6.6似乎只有新元素插入了，并没有已存在元素后移了？
+			 *   > xlog_cil_push_work()中新增了list_sort()
 			 */
 			list_move_tail(&lip->li_cil, &cil->xc_cil);
 	}
@@ -813,7 +824,8 @@ xlog_cil_push(
 	 * 给新分配的xfs_cil_ctx分配xlog_ticket
 	 * - 这个ticket的作用是？
 	 *   > xfs_cil_ctx中的xlog_ticket接受来自xfs_trans中的xlog_ticket中的配
-	 *     额的转移。此处分配给xfs_cil_ctx的xlog_ticket中是0配额
+	 *     额的转移（steal）。此处分配给xfs_cil_ctx的xlog_ticket中是0配额
+	 *   > steal发生在？
 	 */
 	new_ctx->ticket = xlog_cil_ticket_alloc(log);
 
@@ -1034,6 +1046,10 @@ restart:
 		 */
 		if (new_ctx->sequence >= ctx->sequence)
 			continue;
+		/*
+		 * 当前xfs_cil->xc_committing链表上有更早的xfs_cil_ctx，要等
+		 * 它们push结束
+		 */
 		if (!new_ctx->commit_lsn) {
 			/*
 			 * It is still being pushed! Wait for the push to

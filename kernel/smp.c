@@ -37,18 +37,20 @@ struct call_function_data {
 	 * - Note: 本字段也是percpu的
 	 * - 这个percpu的指针指向的内存谁分配的？啥时候分配的？
 	 *   > smpcfd_prepare_cpu()
-	 * - 本字段中的llist作为链表元素挂入ipi目标cpu的call_single_queue链表
+	 * - 本字段中的llist作为链表元素挂入ipi目标cpu的 call_single_queue 链表
 	 */
 	call_single_data_t	__percpu *csd;
 	cpumask_var_t		cpumask;
 	cpumask_var_t		cpumask_ipi;
 };
 
+struct call_function_data cfd_data;	// For SI
 static DEFINE_PER_CPU_ALIGNED(struct call_function_data, cfd_data);
 
 /*
  * 本cpu应该执行的ipi call的链表头，链表元素是call_function_data->csd->llist
  */
+struct llist_head call_single_queue;	// For SI
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct llist_head, call_single_queue);
 
 static void flush_smp_call_function_queue(bool warn_cpu_offline);
@@ -527,8 +529,8 @@ void smp_call_function_many(const struct cpumask *mask,
 	}
 
 	/*
-	 * 每个cpu有一个call_function_data结构体，结构体内部又有一个percpu的
-	 * __call_single_data结构体；
+	 * 每个cpu有一个 call_function_data 结构体，结构体内部又有一个percpu的
+	 * __call_single_data 结构体；
 	 * - cfd_data是通过DEFINE_PER_CPU_ALIGNED()宏定义的call_function_data类
 	 *   型的percpu变量
 	 */

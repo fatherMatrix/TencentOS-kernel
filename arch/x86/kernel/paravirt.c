@@ -105,6 +105,7 @@ static unsigned paravirt_patch_jmp(void *insn_buff, const void *target,
 }
 #endif
 
+struct static_key_true virt_spin_lock_key;	// For Source Insight
 DEFINE_STATIC_KEY_TRUE(virt_spin_lock_key);
 
 void __init native_pv_lock_init(void)

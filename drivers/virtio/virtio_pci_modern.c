@@ -366,6 +366,7 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 		return ERR_PTR(-ENOMEM);
 
 	/* activate the queue */
+	/* 将vring的地址、大小信息告知后端 */
 	vp_iowrite16(virtqueue_get_vring_size(vq), &cfg->queue_size);
 	vp_iowrite64_twopart(virtqueue_get_desc_addr(vq),
 			     &cfg->queue_desc_lo, &cfg->queue_desc_hi);

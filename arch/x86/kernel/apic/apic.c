@@ -1772,6 +1772,10 @@ static void setup_local_APIC(void)
 		value = APIC_DM_EXTINT;
 		apic_printk(APIC_VERBOSE, "enabled ExtINT on CPU#%d\n", cpu);
 	} else {
+	/*
+	 * 有APIC_LVT_MASKED表示不再使用APIC_LVT0
+	 * - 参见：sdm. v3. Local Vector Table
+	 */
 		value = APIC_DM_EXTINT | APIC_LVT_MASKED;
 		apic_printk(APIC_VERBOSE, "masked ExtINT on CPU#%d\n", cpu);
 	}

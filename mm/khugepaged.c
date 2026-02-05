@@ -1435,6 +1435,7 @@ static int khugepaged_collapse_pte_mapped_thps(struct mm_slot *mm_slot)
 	if (likely(mm_slot->nr_pte_mapped_thp == 0))
 		return 0;
 
+	/* 此后缺页处理会在这把锁上阻塞，因此不会有人同步对页表修改 */
 	if (!down_write_trylock(&mm->mmap_sem))
 		return -EBUSY;
 

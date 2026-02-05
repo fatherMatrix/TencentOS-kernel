@@ -197,9 +197,20 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 	res->name = pci_name(dev);
 
 	pci_read_config_dword(dev, pos, &l);
+	/* 1. 向bar寄存器写入~0 */
 	pci_write_config_dword(dev, pos, l | mask);
+	/* 2. 读出来的就是设备指定的bar空间大小 */
 	pci_read_config_dword(dev, pos, &sz);
 	pci_write_config_dword(dev, pos, l);
+	/* 那么最上面的一次读，和最下面的一次写的作用是，
+	 * 恢复bar空间的基址。
+	 * - 其实走到这里，bar空间已经是分配好的了，bar
+	 *   基址被bios/acpi配置过了。我们在这里只是想要
+	 *   得知bar空间大小，因此当然需要恢复人家已经配
+	 *   置好的基址
+	 *   x 不对，实际的分配工作是 pcibios_assign_resources() 函数做的，
+	 *     这里的意义还需要再看一下
+	 */
 
 	/*
 	 * All bits set in sz means the device isn't working properly.

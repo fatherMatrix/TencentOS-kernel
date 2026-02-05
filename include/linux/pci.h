@@ -1127,6 +1127,11 @@ struct pci_dev *pci_get_domain_bus_and_slot(int domain, unsigned int bus,
 struct pci_dev *pci_get_class(unsigned int class, struct pci_dev *from);
 int pci_dev_present(const struct pci_device_id *ids);
 
+/*
+ * 这些都是宏生成的：
+ * - PCI_OP_READ()
+ * - PCI_OP_WRITE()
+ */
 int pci_bus_read_config_byte(struct pci_bus *bus, unsigned int devfn,
 			     int where, u8 *val);
 int pci_bus_read_config_word(struct pci_bus *bus, unsigned int devfn,

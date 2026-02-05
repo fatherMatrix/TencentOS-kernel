@@ -170,7 +170,7 @@ struct bio {
 	struct bvec_iter	bi_iter;
 
 	/*
-	 * 参见xfs_chain_bio()
+	 * 参见 xfs_chain_bio()
 	 */
 	atomic_t		__bi_remaining;
 	/*

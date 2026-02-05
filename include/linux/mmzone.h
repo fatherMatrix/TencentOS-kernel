@@ -523,7 +523,7 @@ struct zone {
 	 * 分组页块；每个分组页块在位图中占用4位，其中3位用来存放页块的迁移类
 	 * 型。参见enum pageblock_bits；
 	 * - 内核在初始化时，将所有页块初始化为可移动类型，其他迁移类型的页是通
-	 *   过盗用产生的；参见memmap_init_zone()
+	 *   过盗用产生的；参见 memmap_init_zone()
 	 */
 	unsigned long		*pageblock_flags;
 #endif /* CONFIG_SPARSEMEM */
@@ -1313,9 +1313,10 @@ struct mem_section_usage {
 	/*
 	 * See declaration of similar field in struct zone
 	 *
-	 * 对于SPARSE内存模型，pageblock_flags保存在zone结构体中；
-	 * 对于非SPARSE内存模型，pageblock_flags保存在mem_section_usage结构体中；
+	 * 对于SPARSE内存模型，pageblock_flags保存在mem_section_usage结构体中；
+	 * 对于非SPARSE内存模型，pageblock_flags保存在zone结构体中；
 	 * - 作用参见zone->pageblock_flags注释
+	 * - get_pageblock_bitmap()
 	 */
 	unsigned long pageblock_flags[0];
 };

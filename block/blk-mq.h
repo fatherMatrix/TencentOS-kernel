@@ -18,13 +18,13 @@ struct blk_mq_ctxs {
  * 在blk_mq_init_queue_data->blk_mq_init_allocated_queue时会分配
  */
 struct blk_mq_ctx {
-	struct {
+	// struct { For Source Insight
 		spinlock_t		lock;
 		/*
 		 * 作为链表头，链接request，元素是request->queuelist
 		 */
 		struct list_head	rq_lists[HCTX_MAX_TYPES];
-	} ____cacheline_aligned_in_smp;
+	// } ____cacheline_aligned_in_smp;
 
 	unsigned int		cpu;
 	unsigned short		index_hw[HCTX_MAX_TYPES];

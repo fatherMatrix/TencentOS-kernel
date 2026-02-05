@@ -68,8 +68,9 @@ struct mem_cgroup;
 
 struct page {
 	/*
-	 * - PG_slab表示页数语SLUB分配器
-	 * - set_page_zone()/page_zonenum()
+	 * - PG_slab表示页数与SLUB分配器
+	 * - set_page_zone() / page_zonenum()
+	 * - set_page_node() / page_to_nid()
 	 */
 	unsigned long flags;		/* Atomic flags, some possibly
 					 * updated asynchronously */
@@ -496,7 +497,7 @@ struct vm_area_struct {
 	KABI_RESERVE(4);
 
 	struct vm_userfaultfd_ctx vm_userfaultfd_ctx;
-} __randomize_layout;
+}/* __randomize_layout */;
 
 struct core_thread {
 	struct task_struct *task;

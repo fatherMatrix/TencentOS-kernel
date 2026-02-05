@@ -2857,6 +2857,8 @@ int clear_page_dirty_for_io(struct page *page)
 		 * We basically use the page "master dirty bit"
 		 * as a serialization point for all the different
 		 * threads doing their things.
+		 *
+		 * 清除pte/pmd中的dirty，将其转移到struct page中
 		 */
 		if (page_mkclean(page))
 			set_page_dirty(page);

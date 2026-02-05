@@ -397,7 +397,7 @@ struct task_group {
 	 * it in its own cacheline separated from the fields above which
 	 * will also be accessed at each tick.
 	 */
-	atomic_long_t		load_avg ____cacheline_aligned;
+	atomic_long_t		load_avg; // ____cacheline_aligned;
 #endif // CONFIG_SMP
 #endif // CONFIG_FAIR_GROUP_SCHED
 

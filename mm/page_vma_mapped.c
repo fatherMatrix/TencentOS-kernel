@@ -168,7 +168,7 @@ bool page_vma_mapped_walk(struct page_vma_mapped_walk *pvmw)
 		return true;
 	}
 	/*
-	 * 走到这里，说明不是巨型页
+	 * 走到这里，说明不是hugetlbfs
 	 */
 restart:
 	pgd = pgd_offset(mm, pvmw->address);

@@ -891,13 +891,16 @@ out_free_interp:
 
 		if (elf_ppnt->p_type != PT_LOAD)
 			continue;
+		/* 只有PT_LOAD这类需要加载到内存中的segment才需要在这里被处理 */
 
 		if (unlikely (elf_brk > elf_bss)) {
 			unsigned long nbyte;
 	            
 			/* There was a PT_LOAD segment with p_memsz > p_filesz
 			   before this one. Map anonymous pages, if needed,
-			   and clear the area.  */
+			   and clear the area.
+			   - 这应该主要是被bss段搞的
+			 */
 			retval = set_brk(elf_bss + load_bias,
 					 elf_brk + load_bias,
 					 bss_prot);
@@ -956,17 +959,19 @@ out_free_interp:
 			 * loader as well, since brk must be available with
 			 * the loader.
 			 *
-			 * Therefore, programs are loaded offset from
-			 * ELF_ET_DYN_BASE and loaders are loaded into the
-			 * independently randomized mmap region (0 load_bias
-			 * without MAP_FIXED).
+			 * Therefore, programs are loaded offset from         <---
+			 * ELF_ET_DYN_BASE and loaders are loaded into the    <---
+			 * independently randomized mmap region (0 load_bias  <---
+			 * without MAP_FIXED).                                <---
 			 */
 			if (interpreter) {
+			/* ET_DYN with INTERP，说明就是个普通PIE的可执行文件 */
 				load_bias = ELF_ET_DYN_BASE;
 				if (current->flags & PF_RANDOMIZE)
 					load_bias += arch_mmap_rnd();
 				elf_flags |= MAP_FIXED;
 			} else
+			/* ET_DYN without INTERP，说明是ld.so */
 				load_bias = 0;
 
 			/*
@@ -996,10 +1001,18 @@ out_free_interp:
 
 		if (!load_addr_set) {
 			load_addr_set = 1;
+			/* 加载的虚拟地址 减掉 二进制文件内的偏移 */
 			load_addr = (elf_ppnt->p_vaddr - elf_ppnt->p_offset);
 			if (loc->elf_ex.e_type == ET_DYN) {
+				/* elf_map()返回的地址 与 我们输入的地址 或许
+				 * 不同，这里更新一下，并将这个不同修正到load_bias中
+				 */
 				load_bias += error -
 				             ELF_PAGESTART(load_bias + vaddr);
+				/* 到这里，load_addr实际就表示了二进制文件中p_offset
+				 * 在内存中的地址。而load_bias表示二进制文件中p_vaddr
+				 * 和实际加载地址之间的差值。
+				 */
 				load_addr += load_bias;
 				reloc_func_desc = load_bias;
 			}
@@ -1050,6 +1063,8 @@ out_free_interp:
 	 * for the bss and break sections.  We must do this before
 	 * mapping in the interpreter, to make sure it doesn't wind
 	 * up getting placed where the bss needs to go.
+	 * - elf_bss: bss段的起点
+	 * - elf_brk: 代码走到这里，代表的是bss段的终点
 	 */
 	retval = set_brk(elf_bss, elf_brk, bss_prot);
 	if (retval)

@@ -52,6 +52,16 @@ struct xfs_log_item {
 	 *
 	 * 这个值主要是用于在AIL上对xfs_log_item进行排序，所以我觉得用start_lsn
 	 * 或者commit_lsn问题都不大；
+	 * - 看样子这里好像不对哟，upstream关于一个0-day的论述中，似乎提到了这里
+	 *   只能用start_lsn
+	 *   > https://lore.kernel.org/linux-xfs/20210810052120.41019-1-david@fromorbit.com/
+	 *     We could fix log recovery to avoid this problem, but there's a
+	 *     runtime problem as well: the AIL is ordered by start record LSN. We
+	 *     cannot order the AIL by commit LSN as we cannot allow the tail of
+	 *     the log to overwrite -any- of the log transaction until the entire
+	 *     transaction has been written. As the lowest LSN of the items in the
+	 *     AIL defines the current log tail, the same metadata writeback
+	 *     ordering issues apply as with log recovery.
 	 */
 	xfs_lsn_t			li_lsn;		/* last on-disk lsn */
 	struct xfs_mount		*li_mountp;	/* ptr to fs mount */

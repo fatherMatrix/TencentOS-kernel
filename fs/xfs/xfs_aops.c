@@ -788,6 +788,9 @@ xfs_chain_bio(
 	 * 增加prev->__bi_cnt
 	 */
 	bio_get(prev);		/* for xfs_destroy_ioend */
+	/*
+	 * 把old bio先提交了
+	 */
 	submit_bio(prev);
 	return new;
 }
